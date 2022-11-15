@@ -30,6 +30,8 @@ The application EU_HFR_NODE_NRTprocessor.py is intended for centralized processi
 
 The application local_NRTprocessor.py is intended for local processing on provider's side and operates the functions for collecting and processing HFR radial and total data for the network of the specific provider. The providers using this application have the responsibility of managing the operational synchronization of the generated netCDF in the the European standard data and metadata model towards the EU HFR Node.
 
+Usage: EU_HFR_NODE_NRTprocessor.py -m [number of days in the past when to start processing (default to 3)]
+
 The required packages are:
 - pandas
 - sqlalchemy
