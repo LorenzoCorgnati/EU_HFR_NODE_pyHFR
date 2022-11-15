@@ -1,5 +1,7 @@
 # HFR_Node_Centralized_Processing
-Python3 scripts for the operational workflow of the European HFR Node (EU HFR Node). Tools for the centralized processing at the EU HFR Node and for local processing on provider side.
+Python3 toolbox for the operational workflow of the European HFR Node (EU HFR Node). Tools for the centralized processing at the EU HFR Node and for local processing on provider side.
+
+This toolbox is based on the HFRadarPy toolbox from ROWG (https://github.com/rowg/HFRadarPy), that was refined and integrated to manage both files written in CODAR Tabular Format (CTF) and files wirtten in the WERA and LERA crad_ascii and cur_Asc native formats, and to perform wighted least square combination of radial currents into total currents as defined in "Gurgel, K-W., Shipborne measurement of surface current fields by HF radar. Proceedings of OCEANS'94. Vol. 3. IEEE, 1994".
 
 These applications are written in Python3 language and the architecture of the workflow is based on a MySQL database containing information about data and metadata. The applications are designed for High Frequency Radar (HFR) data management according to the European HFR node processing workflow, thus generating radial and total velocity files in netCDF format according to the European standard data and metadata model for near real time HFR current data.
 
