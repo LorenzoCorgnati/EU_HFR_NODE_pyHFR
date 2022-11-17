@@ -49,7 +49,7 @@ Radar node (Version 1.1). Balearic Islands Coastal Observing and Forecasting Sys
 SOCIB . https://doi.org/10.25704/9XPF-76G7
 
 Cite as:
-Lorenzo Corgnati. (2022). EU_HFR_NODE_pyHFR. Zenodo DOI to be assigned.
+Lorenzo Corgnati. (2022). EU_HFR_NODE_pyHFR. DOI to be assigned.
 
 
 Author: Lorenzo Corgnati
