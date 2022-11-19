@@ -31,6 +31,7 @@ import pandas as pd
 import xarray as xr
 import mysql.connector as sql
 from mysql.connector import errorcode
+import sqlalchemy
 from dateutil.relativedelta import relativedelta
 from radials import Radial
 from totals import Total
@@ -44,7 +45,7 @@ import math
 # PROCESSING FUNCTIONS
 ######################
 
-def inputTotals(networkID,networkData,startDate,cnx,logger):
+def inputTotals(networkID,networkData,startDate,sqlConfig,logger):
     """
     This function lists the input total files pushed by the HFR data providers 
     and inserts into the EU HFR NODE database the information needed for the 
@@ -54,7 +55,7 @@ def inputTotals(networkID,networkData,startDate,cnx,logger):
         networkID: network ID of the network to be processed
         networkData: DataFrame containing the information of the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
-        cnx: connector to the Mysql EU HFR NODE database
+        sqlConfig: parameters for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -71,6 +72,11 @@ def inputTotals(networkID,networkData,startDate,cnx,logger):
     
     # Convert starting date from string to timestamp
     mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
+    
+    # Create SQLAlchemy engine for connecting to database
+    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
+                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
+                                   sqlConfig['database'])
     
     #####
     # List totals from the network
@@ -102,38 +108,32 @@ def inputTotals(networkID,networkData,startDate,cnx,logger):
                         fileName = os.path.basename(inputFile)
                         fileExt = os.path.splitext(inputFile)[1]
                         # Check if the file is already present in the database
-                        totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
-                        totalPresenceData = pd.read_sql(totalPresenceQuery, con=cnx)
-                        numPresentTotals = totalPresenceData.shape[0]
-                        if numPresentTotals==0:    # the current file is not present in the database
-                            # Get file timestamp
-                            total = Total(inputFile)
-                            timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
-                            dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
-                            # Get file size in Kbytes
-                            fileSize = os.path.getsize(inputFile)/1024    
+                        try:
+                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
+                            totalPresenceData = pd.read_sql(totalPresenceQuery, con=eng)
+                            numPresentTotals = totalPresenceData.shape[0]
+                            if numPresentTotals==0:    # the current file is not present in the database
+                                # Get file timestamp
+                                total = Total(inputFile)
+                                timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
+                                dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
+                                # Get file size in Kbytes
+                                fileSize = os.path.getsize(inputFile)/1024    
     #####
     # Insert total information into database
     #####
-                            # Prepare data to be inserted into database
-                            addTotal = ("INSERT INTO total_input_tb "
-                                         "(filename, filepath, network_id, timestamp, datetime, "
-                                         "reception_date, filesize, extension, NRT_processed_flag) "
-                                         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)")
-                            dataTotal = (fileName, filePath, networkID, timeStamp, \
-                                          dateTime, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), \
-                                          fileSize, fileExt, 0)
-                            # Insert data into database
-                            try:                                
-                                cursor = cnx.cursor()
-                                cursor.execute(addTotal, dataTotal)
-                                cnx.commit()
-                                cursor.close()
-                            except sql.Error as err:
-                                iTerr = True
-                                logger.error('MySQL error ' + err._full_msg)
-                            else:
-                                logger.info(fileName + ' total file information inserted into database.')               
+                                # Prepare data to be inserted into database
+                                dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
+                                             'datetime': [dateTime], 'reception_date': [dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")], \
+                                              'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
+                                dfTotal = pd.DataFrame(dataTotal)
+                                
+                                # Insert data into database
+                                dfTotal.to_sql('total_input_tb', con=eng, if_exists='append', index=False, index_label=dfTotal.columns)
+                                logger.info(fileName + ' total file information inserted into database.')  
+                        except sqlalchemy.exc.DBAPIError as err:        
+                            iTerr = True
+                            logger.error('MySQL error ' + err._message())
                     except Exception as err:
                         iTerr = True
                         logger.error(err.args[0] + ' for file ' + fileName)
@@ -153,7 +153,7 @@ def inputTotals(networkID,networkData,startDate,cnx,logger):
     
     return
 
-def inputRadials(networkID,stationData,startDate,cnx,logger):
+def inputRadials(networkID,stationData,startDate,sqlConfig,logger):
     """
     This function lists the input radial files pushed by the HFR data providers 
     and inserts into the EU HFR NODE database the information needed for the 
@@ -165,7 +165,7 @@ def inputRadials(networkID,stationData,startDate,cnx,logger):
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
-        cnx: connector to the Mysql EU HFR NODE database
+        sqlConfig: parameters for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -182,6 +182,11 @@ def inputRadials(networkID,stationData,startDate,cnx,logger):
     
     # Convert starting date from string to timestamp
     mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
+    
+    # Create SQLAlchemy engine for connecting to database
+    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
+                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
+                                   sqlConfig['database'])
     
     #####
     # List radials from stations
@@ -218,39 +223,34 @@ def inputRadials(networkID,stationData,startDate,cnx,logger):
                             fileName = os.path.basename(inputFile)
                             fileExt = os.path.splitext(inputFile)[1]
                             # Check if the file is already present in the database
-                            radialPresenceQuery = 'SELECT * FROM radial_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
-                            radialPresenceData = pd.read_sql(radialPresenceQuery, con=cnx)
-                            numPresentRadials = radialPresenceData.shape[0]
-                            if numPresentRadials==0:    # the current file is not present in the database
-                                # Get file timestamp
-                                radial = Radial(inputFile)
-                                timeStamp = radial.time.strftime("%Y %m %d %H %M %S")                    
-                                dateTime = radial.time.strftime("%Y-%m-%d %H:%M:%S")  
-                                # Get file size in Kbytes
-                                fileSize = os.path.getsize(inputFile)/1024    
-        #####
-        # Insert radial information into database
-        #####
-                                # Prepare data to be inserted into database
-                                addRadial = ("INSERT INTO radial_input_tb "
-                                             "(filename, filepath, network_id, station_id, timestamp, datetime, "
-                                             "reception_date, filesize, extension, NRT_processed_flag, "
-                                             "NRT_processed_flag_integrated_network, NRT_combined_flag) "
-                                             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
-                                dataRadial = (fileName, filePath, networkID, stationID, \
-                                              timeStamp, dateTime, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), \
-                                              fileSize, fileExt, 0, 0, 0)
-                                # Insert data into database
-                                try:                                
-                                    cursor = cnx.cursor()
-                                    cursor.execute(addRadial, dataRadial)
-                                    cnx.commit()
-                                    cursor.close()
-                                except sql.Error as err:
-                                    iRerr = True
-                                    logger.error('MySQL error ' + err._full_msg)
-                                else:
-                                    logger.info(fileName + ' radial file information inserted into database.')               
+                            try:
+                                radialPresenceQuery = 'SELECT * FROM radial_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
+                                radialPresenceData = pd.read_sql(radialPresenceQuery, con=eng)
+                                numPresentRadials = radialPresenceData.shape[0]
+                                if numPresentRadials==0:    # the current file is not present in the database
+                                    # Get file timestamp
+                                    radial = Radial(inputFile)
+                                    timeStamp = radial.time.strftime("%Y %m %d %H %M %S")                    
+                                    dateTime = radial.time.strftime("%Y-%m-%d %H:%M:%S")  
+                                    # Get file size in Kbytes
+                                    fileSize = os.path.getsize(inputFile)/1024    
+    #####
+    # Insert radial information into database
+    #####
+                                    # Prepare data to be inserted into database
+                                    dataRadial = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], \
+                                                  'station_id': [stationID], 'timestamp': [timeStamp], 'datetime': [dateTime], \
+                                                  'reception_date': [dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")], \
+                                                  'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0], \
+                                                  'NRT_processed_flag_integrated_network': [0], 'NRT_combined_flag': [0]}
+                                    dfRadial = pd.DataFrame(dataRadial)
+                                    
+                                    # Insert data into database
+                                    dfRadial.to_sql('radial_input_tb', con=eng, if_exists='append', index=False, index_label=dfRadial.columns)
+                                    logger.info(fileName + ' radial file information inserted into database.')   
+                            except sqlalchemy.exc.DBAPIError as err:        
+                                iRerr = True
+                                logger.error('MySQL error ' + err._message())
                         except Exception as err:
                             iRerr = True
                             logger.error(err.args[0] + ' for file ' + fileName)
@@ -338,17 +338,15 @@ def processNetwork(networkID,memory,sqlConfig):
     # Retrieve information from database
     #####
     
-    # Connect to database
+    # Create SQLAlchemy engine for connecting to database
+    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
+                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
+                                   sqlConfig['database'])
+        
     try:
-        cnx = sql.connect(**sqlConfig)
-    except sql.Error as err:
-        pNerr = True
-        logger.error('MySQL error ' + err._full_msg)
-        return
-    else:
         # Set and execute the query and get the HFR network data
         networkSelectQuery = 'SELECT * FROM network_tb WHERE network_id=\'' + networkID + '\''
-        networkData = pd.read_sql(networkSelectQuery, con=cnx)
+        networkData = pd.read_sql(networkSelectQuery, con=eng)
         numNetworks = networkData.shape[0]
         logger.info(networkID + ' network data successfully fetched from database.')
         # Set and execute the query and get the HFR station data
@@ -356,18 +354,23 @@ def processNetwork(networkID,memory,sqlConfig):
             stationSelectQuery = 'SELECT * FROM station_tb WHERE network_id=\'HFR-TirLig\' OR network_id=\'HFR-LaMMA\' OR network_id=\'HFR-ARPAS\''
         else:
             stationSelectQuery = 'SELECT * FROM station_tb WHERE network_id=\'' + networkID + '\''
-        stationData = pd.read_sql(stationSelectQuery, con=cnx)
+        stationData = pd.read_sql(stationSelectQuery, con=eng)
         numStations = stationData.shape[0]
         logger.info(networkID + ' station data successfully fetched from database.')
+    except sqlalchemy.exc.DBAPIError as err:        
+        pNerr = True
+        logger.error('MySQL error ' + err._message())
+        logger.info('Exited with errors.')
+        return
         
     #####
     # Input HFR data
     #####
     
     # Input radial data
-    pNerr = inputRadials(networkID, stationData, startDate, cnx, logger)
+    pNerr = inputRadials(networkID, stationData, startDate, sqlConfig, logger)
     # Input total data
-    pNerr = inputTotals(networkID, networkData, startDate, cnx, logger)
+    pNerr = inputTotals(networkID, networkData, startDate, sqlConfig, logger)
     
     #####
     # Process HFR data
@@ -394,9 +397,7 @@ def processNetwork(networkID,memory,sqlConfig):
     pd.set_option('mode.chained_assignment', 'Warn')    # enable SettingWithCopyWarning
     
     # Total data conversion to standard format (netCDF)
-        
-    # Close connection to database
-    cnx.close()
+    
     
     ####################
         
@@ -472,30 +473,29 @@ def main(argv):
 # Network data collection
 #####
     
-    # Connect to database
+    # Create SQLAlchemy engine for connecting to database
+    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
+                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
+                                   sqlConfig['database'])
+        
+    # Set and execute the query and get the HFR network IDs to be processed
     try:
-        cnx = sql.connect(**sqlConfig)
-    except sql.Error as err:
-        EHNerr = True
-        logger.error('MySQL error ' + err._full_msg)
-        logger.info('Exited with errors.')
-        sys.exit()
-    else:
-        # Set and execute the query and get the HFR network IDs to be processed
         networkSelectQuery = 'SELECT network_id FROM network_tb WHERE EU_HFR_processing_flag=1'
-        networkIDs = pd.read_sql(networkSelectQuery, con=cnx)
+        networkIDs = pd.read_sql(networkSelectQuery, con=eng)
         numNetworks = networkIDs.shape[0]
         logger.info('Network IDs successfully fetched from database.')
-        
-    # Close connection to database
-    cnx.close()
+    except sqlalchemy.exc.DBAPIError as err:        
+        EHNerr = True
+        logger.error('MySQL error ' + err._message())
+        logger.info('Exited with errors.')
+        sys.exit()
     
 #####
 # Process launch and monitor
 #####
 
 # TO BE DONE USING MULTIPROCESSING
-    i = 14
+    i = 0
     processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
     # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
     
