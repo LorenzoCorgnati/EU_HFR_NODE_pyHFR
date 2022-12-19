@@ -186,7 +186,7 @@ class Radial(fileParser):
         land = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
         # land = land[land['continent'] == 'North America']
 
-        # Build the GeoDataFRame containing radial points
+        # Build the GeoDataFrame containing radial points
         geodata = gpd.GeoDataFrame(
             self.data[['LOND', 'LATD']],
             crs=land.crs.srs.upper(),
@@ -194,7 +194,7 @@ class Radial(fileParser):
                 Point(xy) for xy in zip(self.data.LOND.values, self.data.LATD.values)
             ]
         )
-        # Join the GeoDataFRame containing radial points with geodataframe containing leasing areas
+        # Join the GeoDataFrame containing radial points with GeoDataFrame containing leasing areas
         geodata = gpd.tools.sjoin(geodata, land, how='left', predicate='intersects')
 
         # All data in the continent column that lies over water should be nan.
@@ -439,88 +439,6 @@ class Radial(fileParser):
                     ds[t] = ds[t]*0.01
 
         return ds
-
-    # def to_xarray_multidimensional(self, range_min=None, range_max=None, enhance=False):
-    #     """
-    #     Adapted from MATLAB code from Mark Otero
-    #     http://cordc.ucsd.edu/projects/mapping/documents/HFRNet_Radial_NetCDF.pdf
-    #     :param range_min:
-    #     :param range_max:
-    #     :return:
-    #     """
-    #     logging.info('Converting radial matrix to multidimensional dataset')
-    #     # Clean radial header
-    #     # self.clean_header()
-
-    #     # CF Standard: T, Z, Y, X
-    #     coords = ('time', 'range', 'bearing')
-
-    #     # Intitialize empty xarray dataset
-    #     ds = xr.Dataset()
-
-    #     if range_min is None:
-    #         range_min = self.data.RNGE.min()
-    #     if range_max is None:
-    #         range_max = self.data.RNGE.max()
-
-    #     range_step = float(self.metadata['RangeResolutionKMeters'].split()[0])
-    #     range_dim = np.arange(
-    #         range_min,
-    #         np.round(range_max + range_step, 4),
-    #         range_step
-    #     )
-    #     bearing_dim = np.arange(1, 361, 1).astype(np.float)  # Complete 360 degree bearing coordinate allows for better aggregation
-
-    #     # create radial grid from bearing and range
-    #     [bearing, ranges] = np.meshgrid(bearing_dim, range_dim)
-
-    #     # calculate lat/lons from origin, bearing, and ranges
-    #     latlon = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", self.metadata['Origin'])]
-    #     latd, lond = reckon(latlon[0], latlon[1], bearing, ranges)
-
-    #     # create dictionary containing variables from dataframe in the shape of radial grid
-    #     d = {key: np.tile(np.nan, bearing.shape) for key in self.data.keys()}
-
-    #     # find grid indices from radial grid (bearing, ranges)
-    #     range_map_idx = np.tile(np.nan, self.data['RNGE'].shape)
-    #     bearing_map_idx = np.tile(np.nan, self.data['BEAR'].shape)
-
-    #     for i, line in enumerate(self.data['RNGE']):
-    #         range_map_idx[i] = np.argmin(np.abs(range_dim - self.data.RNGE[i]))
-    #         bearing_map_idx[i] = np.argmin(np.abs(bearing_dim - self.data.BEAR[i]))
-
-    #     for k, v in d.items():
-    #         v[range_map_idx.astype(int), bearing_map_idx.astype(int)] = self.data[k]
-    #         d[k] = v
-
-    #     # Add extra dimension for time
-    #     d = {k: np.expand_dims(np.float32(v), axis=0) for (k, v) in d.items()}
-
-    #     # Add coordinate variables to dataset
-    #     timestamp = dt.datetime(*[int(s) for s in self.metadata['TimeStamp'].split()])
-    #     ds.coords['bearing'] = bearing_dim
-    #     ds.coords['range'] = range_dim
-    #     ds.coords['time'] = pd.date_range(timestamp, periods=1)
-    #     ds.coords['lon'] = (('range', 'bearing'), lond.round(4))
-    #     ds.coords['lat'] = (('range', 'bearing'), latd.round(4))
-
-    #     # Add all variables to dataset
-    #     for k, v in d.items():
-    #         ds[k] = (coords, v)
-
-    #     # Check if calculated longitudes and latitudes align with given longitudes and latitudes
-    #     # plt.plot(ds.lon, ds.lat, 'bo', ds.LOND.squeeze(), ds.LATD.squeeze(), 'rx')
-
-    #     # Drop extraneous variables
-    #     ds = ds.drop_vars(['LOND', 'LATD', 'BEAR', 'RNGE'])
-
-    #     # Flip sign so positive velocities are away from the radar as per cf conventions
-    #     flips = ['MINV', 'MAXV', 'VELO']
-    #     for f in flips:
-    #         if f in ds:
-    #             ds[f] = -ds[f]
-
-    #     return ds
 
     # def to_xarray_tabular(self, range_min=None, range_max=None, enhance=False):
     #     """
@@ -1174,7 +1092,7 @@ class Radial(fileParser):
             f'minimum number of radial vectors={radMinCount}]'
         ))
         
-    def qc_ehn_maximum_velocity(self, radMaxSpeed=250):
+    def qc_ehn_maximum_velocity(self, radMaxSpeed=1.2):
         """
         This test labels radial velocity vectors whose module is smaller than a maximum velocity threshold 
         with a “good data” flag. Otherwise the vector is labeled with a “bad data” flag.
@@ -1315,7 +1233,7 @@ class Radial(fileParser):
         # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
         self.data.loc[:,testName] = 1
     
-        # set bad flag for variances not passing the test
+        # Set bad flag for variances not passing the test
         if self.is_wera:
             self.data.loc[(self.data['HCSS'] > radMaxVar), testName] = 4           # HCSS is the temporal variance for WERA data
         else:
@@ -1325,6 +1243,54 @@ class Radial(fileParser):
             f'Variance Threshold QC Test - Test applies to each vector. Threshold='
             '[ '
             f'maximum variance={radMaxVar} (m2/s2)]'
+        ))
+        
+    def qc_ehn_temporal_derivative(self, r0, tempDerThr=1):
+        """
+        This test compares the velocity of each radial vector with the velocity of the radial vector 
+        measured in the previous timestamp at the same location.
+        Each vector for which the velocity difference is smaller than the specified threshold for normal 
+        operations (tempDerThr), is labeled with a "good data" flag.
+        Otherwise the vector is labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team based on the 
+        Temporal Gradient test (QC206) from the Integrated Ocean Observing System (IOOS) Quality 
+        Assurance of Real-Time Oceanographic Data (QARTOD).
+        
+        INPUTS:
+            r0: Radial object of the previous timestamp
+            tempDerThr: velocity difference threshold in m/s for normal opertions
+        """
+        # Set the test name
+        testName = 'VART_QC'
+        
+        # Check if the previous timestamp radial file exists
+        if not r0 is None:
+            # Merge the data DataFrame of the two Radials and evaluate velocity differences at each location
+            mergedDF = self.data.merge(r0.data, on=['LOND', 'LATD'], how='left', suffixes=(None, '_x'), indicator='Exist')
+            velDiff = (mergedDF['VELO'] - mergedDF['VELO_x']).abs()
+
+            # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+            self.data.loc[:,testName] = 1
+
+            # Set rows of the DataFrame for QC data as not evaluated (flag = 0) for locations existing in the current radial but not in the previous one
+            self.data.loc[mergedDF['Exist'] == 'left_only', testName] = 0
+
+            # Set bad flag for vectors not passing the test
+            if self.is_wera:
+                self.data.loc[(velDiff > tempDerThr), testName] = 4             # velocity in m/s (CRAD)
+            else:
+                self.data.loc[(velDiff > tempDerThr*100), testName] = 4         # velocity in cm/s (LLUV)
+
+        else:
+            # Add new column to the DataFrame for QC data by setting every row as not evaluated (flag = 0)
+            self.data.loc[:,testName] = 0
+        
+        self.metadata['QCTest'].append((
+            f'Temporal Derivative QC Test - Test applies to each vector. Threshold='
+            '[ '
+            f'velocity difference threshold={str(tempDerThr)} (m/s)]'
         ))
             
         
@@ -1575,174 +1541,174 @@ class Radial(fileParser):
     #     ))
     #     self.append_to_tableheader(test_str, '(flag)')
 
-    def qc_qartod_syntax(self):
-        """
-        Integrated Ocean Observing System (IOOS) Quality Assurance of Real-Time Oceanographic Data (QARTOD)
-        Syntax (Test 201)
+    # def qc_qartod_syntax(self):
+    #     """
+    #     Integrated Ocean Observing System (IOOS) Quality Assurance of Real-Time Oceanographic Data (QARTOD)
+    #     Syntax (Test 201)
 
-        This test is required to be QARTOD compliant.
+    #     This test is required to be QARTOD compliant.
 
-        A collection of tests ensuring proper formatting and existence of fields within a radial file.
+    #     A collection of tests ensuring proper formatting and existence of fields within a radial file.
 
-        The radial file may be tested for proper parsing and content, for file format (hfrweralluv1.0, for example),
-        site code, appropriate time stamp, site coordinates, antenna pattern type (measured or ideal, for DF
-        systems), and internally consistent row/column specifications.
+    #     The radial file may be tested for proper parsing and content, for file format (hfrweralluv1.0, for example),
+    #     site code, appropriate time stamp, site coordinates, antenna pattern type (measured or ideal, for DF
+    #     systems), and internally consistent row/column specifications.
 
-        ----------------------------------------------------------------------------------------------------------------------
-        Fail: One or more fields are corrupt or contain invalid data, If “File Format” ≠ “hfrweralluv1.0”, flag = 4
+    #     ----------------------------------------------------------------------------------------------------------------------
+    #     Fail: One or more fields are corrupt or contain invalid data, If “File Format” ≠ “hfrweralluv1.0”, flag = 4
 
-        Pass: Applies for test pass condition.
-        ----------------------------------------------------------------------------------------------------------------------
-        Link: https://ioos.noaa.gov/ioos-in-action/manual-real-time-quality-control-high-frequency-radar-surface-current-data/
-        :param threshold: Maximum Radial Speed (cm/s)
-        :return:
-        """
-        test_str = 'QC201'
+    #     Pass: Applies for test pass condition.
+    #     ----------------------------------------------------------------------------------------------------------------------
+    #     Link: https://ioos.noaa.gov/ioos-in-action/manual-real-time-quality-control-high-frequency-radar-surface-current-data/
+    #     :param threshold: Maximum Radial Speed (cm/s)
+    #     :return:
+    #     """
+    #     test_str = 'QC201'
 
-        i = 0
+    #     i = 0
 
-        # check for timestamp in filename
-        result = re.search('\d{4}_\d{2}_\d{2}_\d{4}', self.file_name)
-        if result:
-            timestr = dt.datetime.strptime(result.group(), '%Y_%m_%d_%H%M')
-            i = i + 1
+    #     # check for timestamp in filename
+    #     result = re.search('\d{4}_\d{2}_\d{2}_\d{4}', self.file_name)
+    #     if result:
+    #         timestr = dt.datetime.strptime(result.group(), '%Y_%m_%d_%H%M')
+    #         i = i + 1
 
-        # Radial tables must not be empty
-        if self.is_valid():
-            i = i + 1
+    #     # Radial tables must not be empty
+    #     if self.is_valid():
+    #         i = i + 1
 
-        # The following metadata must be defined.
-        if self.metadata['FileType'] and self.metadata['Site'] and self.metadata['TimeStamp'] and self.metadata['Origin'] and self.metadata['PatternType'] and self.metadata['TimeZone']:
-            filetime = dt.datetime(*map(int, self.metadata['TimeStamp'].split()))
-            i = i + 1
+    #     # The following metadata must be defined.
+    #     if self.metadata['FileType'] and self.metadata['Site'] and self.metadata['TimeStamp'] and self.metadata['Origin'] and self.metadata['PatternType'] and self.metadata['TimeZone']:
+    #         filetime = dt.datetime(*map(int, self.metadata['TimeStamp'].split()))
+    #         i = i + 1
 
-        # Filename timestamp must match the timestamp reported within the file.
-        if timestr == filetime:
-            i = i + 1
+    #     # Filename timestamp must match the timestamp reported within the file.
+    #     if timestr == filetime:
+    #         i = i + 1
 
-        # Radial data table columns stated must match the number of columns reported for each row
-        if len(self._tables['1']['TableColumnTypes'].split()) == self.data.shape[1]:
-            i = i + 1
+    #     # Radial data table columns stated must match the number of columns reported for each row
+    #     if len(self._tables['1']['TableColumnTypes'].split()) == self.data.shape[1]:
+    #         i = i + 1
 
-        # Make sure site location is within range: -180 <= lon <= 180 & -90 <= lat <= 90
-        latlon = re.findall(r"[-+]?\d*\.\d+|\d+", self.metadata['Origin'])
-        if (-180 <= float(latlon[1]) <= 180) & (-90 <= float(latlon[0]) <= 90):
-            i = i + 1
+    #     # Make sure site location is within range: -180 <= lon <= 180 & -90 <= lat <= 90
+    #     latlon = re.findall(r"[-+]?\d*\.\d+|\d+", self.metadata['Origin'])
+    #     if (-180 <= float(latlon[1]) <= 180) & (-90 <= float(latlon[0]) <= 90):
+    #         i = i + 1
 
-        if i == 6:
-            syntax = 1
-        else:
-            syntax = 4
+    #     if i == 6:
+    #         syntax = 1
+    #     else:
+    #         syntax = 4
 
-        self.data[test_str] = syntax
-        self.metadata['QCTest'].append(f'qc_qartod_syntax ({test_str}) - Test applies to entire file. Thresholds=[N/A]: See results in column {test_str} below')
-        self.append_to_tableheader(test_str, '(flag)')
+    #     self.data[test_str] = syntax
+    #     self.metadata['QCTest'].append(f'qc_qartod_syntax ({test_str}) - Test applies to entire file. Thresholds=[N/A]: See results in column {test_str} below')
+    #     self.append_to_tableheader(test_str, '(flag)')
 
-    def qc_qartod_temporal_gradient(self, r0, gradient_temp_fail=54, gradient_temp_warn=36):
-        """
-        Integrated Ocean Observing System (IOOS) Quality Assurance of Real-Time Oceanographic Data (QARTOD)
-        Temporal Gradient (Test 206)
-        Checks for satisfactory temporal rate of change of radial components
+    # def qc_qartod_temporal_gradient(self, r0, gradient_temp_fail=54, gradient_temp_warn=36):
+    #     """
+    #     Integrated Ocean Observing System (IOOS) Quality Assurance of Real-Time Oceanographic Data (QARTOD)
+    #     Temporal Gradient (Test 206)
+    #     Checks for satisfactory temporal rate of change of radial components
 
-        Test determines whether changes between successive radial velocity measurements at a particular range
-        and bearing cell are within an acceptable range. GRADIENT_TEMP = |Rt-1 - Rt|
+    #     Test determines whether changes between successive radial velocity measurements at a particular range
+    #     and bearing cell are within an acceptable range. GRADIENT_TEMP = |Rt-1 - Rt|
 
-        Flags Condition Codable Instructions
-        Fail = 4 The temporal change between successive radial velocities exceeds the gradient failure threshold.
+    #     Flags Condition Codable Instructions
+    #     Fail = 4 The temporal change between successive radial velocities exceeds the gradient failure threshold.
 
-        If GRADIENT_TEMP ≥ GRADIENT_TEMP_FAIL,
-        flag = 4
+    #     If GRADIENT_TEMP ≥ GRADIENT_TEMP_FAIL,
+    #     flag = 4
 
-        Suspect = 3 The temporal change between successive radial velocities is less than the gradient failure threshold but exceeds the gradient warn threshold.
+    #     Suspect = 3 The temporal change between successive radial velocities is less than the gradient failure threshold but exceeds the gradient warn threshold.
         
-        If GRADIENT_TEMP < GRADIENT_TEMP_FAIL & GRADIENT_TEMP ≥ GRADIENT_TEMP_WARN,
-        flag = 3
+    #     If GRADIENT_TEMP < GRADIENT_TEMP_FAIL & GRADIENT_TEMP ≥ GRADIENT_TEMP_WARN,
+    #     flag = 3
 
-        Pass = 1 The temporal change between successive radial velocities is less than the gradient warn threshold.
+    #     Pass = 1 The temporal change between successive radial velocities is less than the gradient warn threshold.
 
-        If GRADIENT_TEMP < GRADIENT_TEMP_WARN,
-        flag = 1
+    #     If GRADIENT_TEMP < GRADIENT_TEMP_WARN,
+    #     flag = 1
 
-        Link: https://ioos.noaa.gov/ioos-in-action/manual-real-time-quality-control-high-frequency-radar-surface-current-data/
-        :param r0: Full path to the filename of the previous hourly radial.
-        :param gradient_temp_fail: Maximum Radial Speed (cm/s)
-        :param gradient_temp_warn: Warning Radial Speed (cm/s)
-        :return:
-        """
-        test_str = 'QC206'
-        # self.data[test_str] = data
-        self.metadata['QCTest'].append((
-            f'qc_qartod_temporal_gradient ({test_str}) - Test applies to each row. Thresholds='
-            '[ '
-            f'gradient_temp_warn={str(gradient_temp_warn)} (cm/s*hr) '
-            f'gradient_temp_fail={str(gradient_temp_fail)} (cm/s*hr) '
-            f']: See results in column {test_str} below'
-        ))
-        self.append_to_tableheader(test_str, '(flag)')
+    #     Link: https://ioos.noaa.gov/ioos-in-action/manual-real-time-quality-control-high-frequency-radar-surface-current-data/
+    #     :param r0: Full path to the filename of the previous hourly radial.
+    #     :param gradient_temp_fail: Maximum Radial Speed (cm/s)
+    #     :param gradient_temp_warn: Warning Radial Speed (cm/s)
+    #     :return:
+    #     """
+    #     test_str = 'QC206'
+    #     # self.data[test_str] = data
+    #     self.metadata['QCTest'].append((
+    #         f'qc_qartod_temporal_gradient ({test_str}) - Test applies to each row. Thresholds='
+    #         '[ '
+    #         f'gradient_temp_warn={str(gradient_temp_warn)} (cm/s*hr) '
+    #         f'gradient_temp_fail={str(gradient_temp_fail)} (cm/s*hr) '
+    #         f']: See results in column {test_str} below'
+    #     ))
+    #     self.append_to_tableheader(test_str, '(flag)')
 
-        if os.path.exists(r0):
-            r0 = Radial(r0)
+    #     if os.path.exists(r0):
+    #         r0 = Radial(r0)
 
-            merged = self.data.merge(r0.data, on=['LOND', 'LATD'], how='left', suffixes=(None, '_x'), indicator='Exist')
-            difference = (merged['VELO'] - merged['VELO_x']).abs()
+    #         merged = self.data.merge(r0.data, on=['LOND', 'LATD'], how='left', suffixes=(None, '_x'), indicator='Exist')
+    #         difference = (merged['VELO'] - merged['VELO_x']).abs()
 
-            # Add new column to dataframe for test, and set every row as passing, 1, flag
-            self.data[test_str] = 1
+    #         # Add new column to dataframe for test, and set every row as passing, 1, flag
+    #         self.data[test_str] = 1
 
-            # If any point in the recent radial does not exist in the previous radial, set row as a not evaluated, 2, flag
-            self.data.loc[merged['Exist'] == 'left_only', test_str] = 2
+    #         # If any point in the recent radial does not exist in the previous radial, set row as a not evaluated, 2, flag
+    #         self.data.loc[merged['Exist'] == 'left_only', test_str] = 2
 
-            # velocity is less than radial_max_speed but greater than radial_high_speed, set row as a warning, 3, flag
-            self.data.loc[(difference < gradient_temp_fail) & (difference > gradient_temp_warn), test_str] = 3
+    #         # velocity is less than radial_max_speed but greater than radial_high_speed, set row as a warning, 3, flag
+    #         self.data.loc[(difference < gradient_temp_fail) & (difference > gradient_temp_warn), test_str] = 3
 
-            # if velocity is greater than radial_max_speed, set that row as a fail, 4, flag
-            self.data.loc[(difference > gradient_temp_fail), test_str] = 4
+    #         # if velocity is greater than radial_max_speed, set that row as a fail, 4, flag
+    #         self.data.loc[(difference > gradient_temp_fail), test_str] = 4
 
-        else:
-            # Add new column to dataframe for test, and set every row as not_evaluated, 2, flag
-            self.data[test_str] = 2
-            logging.warning('{} does not exist at specified location. Setting column {} to not_evaluated flag'.format(r0, test_str))
+    #     else:
+    #         # Add new column to dataframe for test, and set every row as not_evaluated, 2, flag
+    #         self.data[test_str] = 2
+    #         logging.warning('{} does not exist at specified location. Setting column {} to not_evaluated flag'.format(r0, test_str))
 
-    def qc_qartod_primary_flag(self, include=None):
-        """
-         A primary flag is a single flag set to the worst case of all QC flags within the data record.
-        :param include: list of quality control tests which should be included in the primary flag
-        :return:
-        """
-        test_str = 'PRIM'
+    # def qc_qartod_primary_flag(self, include=None):
+    #     """
+    #      A primary flag is a single flag set to the worst case of all QC flags within the data record.
+    #     :param include: list of quality control tests which should be included in the primary flag
+    #     :return:
+    #     """
+    #     test_str = 'PRIM'
 
-        # Set summary flag column all equal to 1
-        self.data[test_str] = 1
+    #     # Set summary flag column all equal to 1
+    #     self.data[test_str] = 1
 
-        # generate dictionary of executed qc tests found in the header
-        executed = dict()
-        for b in [x.split('-')[0].strip() for x in self.metadata['QCTest']]:
-            i = b.split(' ')
-            executed[i[0]] = re.sub(r'[()]', '', i[1])
+    #     # generate dictionary of executed qc tests found in the header
+    #     executed = dict()
+    #     for b in [x.split('-')[0].strip() for x in self.metadata['QCTest']]:
+    #         i = b.split(' ')
+    #         executed[i[0]] = re.sub(r'[()]', '', i[1])
 
-        if include:
-            # only add qartod tests which were set by user to executed dictionary
-            included_tests = list({key: value for key, value in executed.items() if key in include}.values())
-        else:
-            included_tests = list(executed.values())
+    #     if include:
+    #         # only add qartod tests which were set by user to executed dictionary
+    #         included_tests = list({key: value for key, value in executed.items() if key in include}.values())
+    #     else:
+    #         included_tests = list(executed.values())
 
-        equals_3 = self.data[included_tests].eq(3).any(axis=1)
-        self.data[test_str] = self.data[test_str].where(~equals_3, other=3)
+    #     equals_3 = self.data[included_tests].eq(3).any(axis=1)
+    #     self.data[test_str] = self.data[test_str].where(~equals_3, other=3)
 
-        equals_4 = self.data[included_tests].eq(4).any(axis=1)
-        self.data[test_str] = self.data[test_str].where(~equals_4, other=4)
+    #     equals_4 = self.data[included_tests].eq(4).any(axis=1)
+    #     self.data[test_str] = self.data[test_str].where(~equals_4, other=4)
 
-        included_test_strs = ', '.join(included_tests)
-        self.metadata['QCTest'].append((f'qc_qartod_primary_flag ({test_str}) - Primary Flag - Highest flag value of {included_test_strs} ("not_evaluated" flag results ignored)'))
-        self.append_to_tableheader(test_str, '(flag)')
-        # %QCFlagDefinitions: 1=pass 2=not_evaluated 3=suspect 4=fail 9=missing_data
+    #     included_test_strs = ', '.join(included_tests)
+    #     self.metadata['QCTest'].append((f'qc_qartod_primary_flag ({test_str}) - Primary Flag - Highest flag value of {included_test_strs} ("not_evaluated" flag results ignored)'))
+    #     self.append_to_tableheader(test_str, '(flag)')
+    #     # %QCFlagDefinitions: 1=pass 2=not_evaluated 3=suspect 4=fail 9=missing_data
 
-    def append_to_tableheader(self, test_string, test_unit):
-        self._tables['1']['_TableHeader'][0].append(test_string)
-        self._tables['1']['_TableHeader'][1].append(test_unit)
+    # def append_to_tableheader(self, test_string, test_unit):
+    #     self._tables['1']['_TableHeader'][0].append(test_string)
+    #     self._tables['1']['_TableHeader'][1].append(test_unit)
 
-    def reset(self):
-        logging.info('Resetting instance data variable to original dataset')
-        self._tables['1']
-        self.data = self._data_backup
+    # def reset(self):
+    #     logging.info('Resetting instance data variable to original dataset')
+    #     self._tables['1']
+    #     self.data = self._data_backup
         

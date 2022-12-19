@@ -5,7 +5,7 @@ import xarray as xr
 import pandas as pd
 from pyproj import Geod
 from shapely.geometry import Point
-from geopandas import GeoSeries
+import geopandas as gpd
 import re
 import io
 from common import fileParser
@@ -96,6 +96,10 @@ def totalLeastSquare(VelHeadStd):
     # Evaluate the covariance matrix Cgdop for GDOP evaluation (i.e. setting all radial std to 1)
     Cgdop = np.linalg.inv(np.matmul(Agdop.T, Agdop))
     
+    # ONLY FOR DEBUG PURPOSE
+    if pd.isna(u):
+        print('SOMETHING WENT WRONG')
+    
     return u, v, C, Cgdop
 
 
@@ -127,11 +131,11 @@ def makeTotalVector(rBins,rDF):
         # loop over contributing radial indices for collecting velocities and angles
         contributions = pd.DataFrame()
         for idx in contrRad.index:
-            contrVel = rDF.loc[idx]['Radial'].data.VELO[contrRad[idx]]                                  # pandas Series
-            contrHead = rDF.loc[idx]['Radial'].data.HEAD[contrRad[idx]]                                 # pandas Series
-            contrStd = rDF.loc[idx]['Radial'].data.ETMP[contrRad[idx]]                                  # pandas Series
-            contributions = contributions.append(pd.concat([contrVel,contrHead,contrStd], axis=1))      # pandas DataFrame
-        
+            contrVel = rDF.loc[idx]['Radial'].data.VELO[contrRad[idx]]                                      # pandas Series
+            contrHead = rDF.loc[idx]['Radial'].data.HEAD[contrRad[idx]]                                     # pandas Series
+            contrStd = rDF.loc[idx]['Radial'].data.ETMP[contrRad[idx]]                                      # pandas Series
+            contributions = pd.concat([contributions, pd.concat([contrVel,contrHead,contrStd], axis=1)])    # pandas DataFrame
+                    
         # Rename ETMP column to STD (Codar radial case)
         if 'ETMP' in contributions.columns:
             contributions = contributions.rename(columns={"ETMP": "STD"})
@@ -146,13 +150,15 @@ def makeTotalVector(rBins,rDF):
             u, v, C, Cgdop = totalLeastSquare(contributions)
             
             # populate Total Series
-            totalData.loc[0] = u                            # VELU
-            totalData.loc[1] = v                            # VELV
-            totalData.loc[2] = math.sqrt(C[0,0])            # UQAL
-            totalData.loc[3] = math.sqrt(C[1,1])            # VQAL
-            totalData.loc[4] = C[0,1]                       # CQAL
-            totalData.loc[5] = math.sqrt(Cgdop.trace())     # GDOP
-            totalData.loc[6] = len(contributions.index)     # NRAD
+            totalData.loc[0] = u                                            # VELU
+            totalData.loc[1] = v                                            # VELV
+            totalData.loc[2] = np.sqrt(u**2 + v**2)                         # VELO
+            totalData.loc[3] = (360 + np.arctan2(u,v) * 180/np.pi) % 360    # HEAD
+            totalData.loc[4] = math.sqrt(C[0,0])                            # UQAL
+            totalData.loc[5] = math.sqrt(C[1,1])                            # VQAL
+            totalData.loc[6] = C[0,1]                                       # CQAL
+            totalData.loc[7] = math.sqrt(Cgdop.trace())                     # GDOP
+            totalData.loc[8] = len(contributions.index)                     # NRAD
             
     return totalData
 
@@ -164,7 +170,7 @@ class Total(fileParser):
     This class should be used when loading CODAR (.tuv) and WERA (.cur_asc) total files.
     This class utilizes the generic LLUV and CUR classes.
     """
-    def __init__(self, fname='', replace_invalid=True, grid=GeoSeries(), empty_total=False):
+    def __init__(self, fname='', replace_invalid=True, grid=gpd.GeoSeries(), empty_total=False):
 
         if not fname:
             empty_total = True
@@ -271,7 +277,7 @@ class Total(fileParser):
         """
         
         # initialize data DataFrame with column names
-        self.data = pd.DataFrame(columns=['LOND', 'LATD', 'VELU', 'VELV', 'UQAL', 'VQAL', 'CQAL', 'GDOP', 'NRAD'])
+        self.data = pd.DataFrame(columns=['LOND', 'LATD', 'VELU', 'VELV', 'VELO', 'HEAD', 'UQAL', 'VQAL', 'CQAL', 'GDOP', 'NRAD'])
         
         # extract longitudes and latitude from grid GeoSeries and insert them into data DataFrame
         self.data['LOND'] = gridGS.x
@@ -282,18 +288,45 @@ class Total(fileParser):
         self.metadata['GreatCircle'] = ''.join(gridGS.crs.ellipsoid.name.split()) + ' ' + str(gridGS.crs.ellipsoid.semi_major_metre) + '  ' + str(gridGS.crs.ellipsoid.inverse_flattening)
 
     
-    # def mask_over_land(self):
-    #     land = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    #     land = land[land['continent'] == 'North America']
-    #     # ocean = gpd.read_file('/Users/mikesmith/Downloads/ne_10m_ocean')
-    #     self.data = gpd.GeoDataFrame(self.data, crs={'init': 'epsg:4326'}, geometry=[Point(xy) for xy in zip(self.data.LOND.values, self.data.LATD.values)])
-    
-    #     # Join the geodataframe containing radial points with geodataframe containing leasing areas
-    #     self.data = gpd.tools.sjoin(self.data, land, how='left')
-    
-    #     # All data in the continent column that lies over water should be nan.
-    #     self.data = self.data[keep][self.data['continent'].isna()]
-    #     self.data = self.data.reset_index()
+    def mask_over_land(self, subset=True):
+        """
+        This function masks the total vectors lying on land.        
+        Total vector coordinates are checked against a reference file containing information 
+        about which locations are over land or in an unmeasurable area (for example, behind an 
+        island or point of land). 
+        The GeoPandas "naturalearth_lowres" is used as reference.        
+        The native CRS of the Total is used for distance calculations.
+        If "subset"  option is set to True, the total vectors lying on land are removed.
+        
+        INPUT:
+            subset: option enabling the removal of total vectors on land (if set to True)
+            
+        OUTPUT:
+            waterIndex: list containing the indices of total vectors lying on water.
+        """
+        # Load the reference file (GeoPandas "naturalearth_lowres")
+        land = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+        # land = land[land['continent'] == 'North America']
+
+        # Build the GeoDataFrame containing total points
+        geodata = gpd.GeoDataFrame(
+            self.data[['LOND', 'LATD']],
+            crs=land.crs.srs.upper(),
+            geometry=[
+                Point(xy) for xy in zip(self.data.LOND.values, self.data.LATD.values)
+            ]
+        )
+        # Join the GeoDataFrame containing total points with GeoDataFrame containing leasing areas
+        geodata = gpd.tools.sjoin(geodata, land, how='left', predicate='intersects')
+
+        # All data in the continent column that lies over water should be nan.
+        waterIndex = geodata['continent'].isna()
+
+        if subset:
+            # Subset the data to water only
+            self.data = self.data.loc[waterIndex].reset_index()
+        else:
+            return waterIndex
 
     
     # def to_multi_dimensional(self, grid_file):
@@ -318,6 +351,49 @@ class Total(fileParser):
 
     #     # Intitialize empty xarray dataset
     #     ds = xr.Dataset()
+    
+    
+    def initialize_qc(self):
+        """
+        Initialize dictionary entry for QC metadata.
+        """
+        # Initialize dictionary entry for QC metadta
+        self.metadata['QCTest'] = []
+        
+        
+    def qc_ehn_maximum_velocity(self, totMaxSpeed=1.2):
+        """
+        This test labels total velocity vectors whose module is smaller than a maximum velocity threshold 
+        with a “good data” flag. Otherwise the vector is labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team based on the
+        Max Speed Threshold test (QC303) from the Integrated Ocean Observing System (IOOS) Quality Assurance of 
+        Real-Time Oceanographic Data (QARTOD).
+        
+        INPUTS:
+            totMaxSpeed: maximum velocity in m/s for normal operations                     
+        """
+        # Set the test name
+        testName = 'CSPD_QC'
+        
+        # Evaluate velocity module from U and V components and add it to the data DataFrame
+        self.data['VELO'] = np.sqrt(self.data['VELU']**2 + self.data['VELV']**2)
+    
+        # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+        self.data.loc[:,testName] = 1
+    
+        # set bad flag for velocities not passing the test
+        if self.is_wera:
+            self.data.loc[(self.data['VELO'].abs() > totMaxSpeed), testName] = 4          # velocity in m/s (CRAD)
+        else:
+            self.data.loc[(self.data['VELO'].abs() > totMaxSpeed*100), testName] = 4      # velocity in cm/s (LLUV)
+    
+        self.metadata['QCTest'].append((
+            f'Velocity Threshold QC Test - Test applies to each vector. Threshold='
+            '[ '
+            f'maximum velocity={totMaxSpeed} (m/s)]'
+        ))
 
 
     def file_type(self):

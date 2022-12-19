@@ -411,7 +411,7 @@ class fileParser(object):
         # Parse data content
         totalData = tdf.apply(lambda x: self._parse_cur_data(x,lonVec,latVec,siteLon,siteLat,g), axis=1)
         # Assign column names to the combination DataFrame
-        totalData.columns = ['LOND','LATD','VELU','VELV','UACC','VACC','GDOP']   
+        totalData.columns = ['LOND','LATD','VELU','VELV','VELO','HEAD','UACC','VACC','GDOP']   
         table = True  # we found a table
         table_count = table_count + 1  # this is the nth table
         table_data = u''
@@ -680,9 +680,11 @@ class fileParser(object):
         totalData.loc[1] = latVec[int(cellData['IY']-1)]
         totalData.loc[2] = cellData['U']
         totalData.loc[3] = cellData['V']
-        totalData.loc[4] = cellData['Acc_U']
-        totalData.loc[5] = cellData['Acc_V']
-        totalData.loc[6] = evaluateGDOP(totalData.loc[0], totalData.loc[1], siteLon, siteLat, g)
+        totalData.loc[4] = np.sqrt(cellData['U']**2 + cellData['V']**2)
+        totalData.loc[5] = (360 + np.arctan2(cellData['U'],cellData['V']) *180 / np.pi) % 360
+        totalData.loc[6] = cellData['Acc_U']
+        totalData.loc[7] = cellData['Acc_V']
+        totalData.loc[8] = evaluateGDOP(totalData.loc[0], totalData.loc[1], siteLon, siteLat, g)
         
         return totalData
 

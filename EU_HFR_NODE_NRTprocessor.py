@@ -45,7 +45,7 @@ import math
 # PROCESSING FUNCTIONS
 ######################
 
-def inputTotals(networkID,networkData,startDate,sqlConfig,logger):
+def inputTotals(networkID,networkData,startDate,eng,logger):
     """
     This function lists the input total files pushed by the HFR data providers 
     and inserts into the EU HFR NODE database the information needed for the 
@@ -55,7 +55,7 @@ def inputTotals(networkID,networkData,startDate,sqlConfig,logger):
         networkID: network ID of the network to be processed
         networkData: DataFrame containing the information of the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
-        sqlConfig: parameters for connecting to the Mysql EU HFR NODE database
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -72,11 +72,6 @@ def inputTotals(networkID,networkData,startDate,sqlConfig,logger):
     
     # Convert starting date from string to timestamp
     mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
-    
-    # Create SQLAlchemy engine for connecting to database
-    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
-                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
-                                   sqlConfig['database'])
     
     #####
     # List totals from the network
@@ -153,7 +148,7 @@ def inputTotals(networkID,networkData,startDate,sqlConfig,logger):
     
     return
 
-def inputRadials(networkID,stationData,startDate,sqlConfig,logger):
+def inputRadials(networkID,stationData,startDate,eng,logger):
     """
     This function lists the input radial files pushed by the HFR data providers 
     and inserts into the EU HFR NODE database the information needed for the 
@@ -165,7 +160,7 @@ def inputRadials(networkID,stationData,startDate,sqlConfig,logger):
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
-        sqlConfig: parameters for connecting to the Mysql EU HFR NODE database
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -182,11 +177,6 @@ def inputRadials(networkID,stationData,startDate,sqlConfig,logger):
     
     # Convert starting date from string to timestamp
     mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
-    
-    # Create SQLAlchemy engine for connecting to database
-    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
-                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
-                                   sqlConfig['database'])
     
     #####
     # List radials from stations
@@ -368,9 +358,9 @@ def processNetwork(networkID,memory,sqlConfig):
     #####
     
     # Input radial data
-    pNerr = inputRadials(networkID, stationData, startDate, sqlConfig, logger)
+    pNerr = inputRadials(networkID, stationData, startDate, eng, logger)
     # Input total data
-    pNerr = inputTotals(networkID, networkData, startDate, sqlConfig, logger)
+    pNerr = inputTotals(networkID, networkData, startDate, eng, logger)
     
     #####
     # Process HFR data
@@ -392,7 +382,7 @@ def processNetwork(networkID,memory,sqlConfig):
     # Total data QC
     pd.set_option('mode.chained_assignment', None)      # disable SettingWithCopyWarning
     
-    # radial QC code
+    # total QC code
     
     pd.set_option('mode.chained_assignment', 'Warn')    # enable SettingWithCopyWarning
     
