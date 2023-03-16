@@ -237,14 +237,13 @@ def dms2dd(dms):
     return dd
 
 
-def evaluateGDOP(cellLon, cellLat, siteLon, siteLat, g):
+def evaluateGDOP(cell, siteLon, siteLat, g):
     """
     This function evaluates the GDOP value of a grid cell based on its coordinates 
     and on the coordinates of the radial sites.
     
     INPUT:
-        cellLon: longitude of the grid cell for which the GDOP is evaluated
-        cellLat: latitude of the grid cell for which the GDOP is evaluated
+        cell: Series containing longitude and latitude of the grid cell for which the GDOP is evaluated
         siteLon: list containing the longitudes of the radial sites
         siteLat: list containing the latitudes of the radial sites
         g: Geod object with CRS.
@@ -252,6 +251,11 @@ def evaluateGDOP(cellLon, cellLat, siteLon, siteLat, g):
     OUTPUT:
         gdop: GDOP value
     """
+    # Convert grid cell Series to numpy arrays
+    cell = cell.to_numpy()
+    cellLon = cell[0]
+    cellLat = cell[1]
+    
     # Evaluate the radial angles from the radial sites to the grid cell
     radialAngles,az21,dist = g.inv(siteLon,siteLat,len(siteLon)*[cellLon],len(siteLat)*[cellLat])
     

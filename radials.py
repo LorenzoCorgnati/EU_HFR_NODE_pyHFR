@@ -88,7 +88,7 @@ class Radial(fileParser):
     This class should be used when loading CODAR (.ruv) or WERA (.crad_ascii) radial files.
     This class utilizes the generic LLUV and CRAD classes.
     """
-    def __init__(self, fname, replace_invalid=True, mask_over_land=False, empty_radial = False):
+    def __init__(self, fname, replace_invalid=True, mask_over_land=False, empty_radial=False):
         logging.info('Loading radial file: {}'.format(fname))
         super().__init__(fname)
 
@@ -1054,7 +1054,7 @@ class Radial(fileParser):
 
         self.metadata['QCTest'].append((
             f'Average Radial Bearing QC Test - Test applies to entire file. Thresholds='
-            '[ '
+            '['
             f'minimum bearing={minBear} (degrees) - '
             f'maximum bearing={maxBear} (degrees)]'
         ))
@@ -1088,7 +1088,7 @@ class Radial(fileParser):
 
         self.metadata['QCTest'].append((
             f'Radial Count QC Test - Test applies to entire file. Threshold='
-            '[ '
+            '['
             f'minimum number of radial vectors={radMinCount}]'
         ))
         
@@ -1119,7 +1119,7 @@ class Radial(fileParser):
     
         self.metadata['QCTest'].append((
             f'Velocity Threshold QC Test - Test applies to each vector. Threshold='
-            '[ '
+            '['
             f'maximum velocity={radMaxSpeed} (m/s)]'
         ))
         
@@ -1164,7 +1164,7 @@ class Radial(fileParser):
         
         self.metadata['QCTest'].append((
             f'Median Filter QC Test - Test applies to each vector. Thresholds='
-            '[ '
+            '['
             f'distance limit={str(dLim)} (km) '
             f'velocity-median difference threshold={str(curLim)} (m/s)]'
         ))
@@ -1220,7 +1220,7 @@ class Radial(fileParser):
         Integrated Ocean Observing System (IOOS) Quality Assurance of Real-Time Oceanographic 
         Data (QARTOD).
         
-        This test is NOT RECOMMEMDED for CODAR data because the parameter defining the variance
+        This test is NOT RECOMMENDED for CODAR data because the parameter defining the variance
         is computed at each time step, and therefore considered not statistically solid 
         (as documented in the fall 2013 CODAR Currents Newsletter).
         
@@ -1241,7 +1241,7 @@ class Radial(fileParser):
     
         self.metadata['QCTest'].append((
             f'Variance Threshold QC Test - Test applies to each vector. Threshold='
-            '[ '
+            '['
             f'maximum variance={radMaxVar} (m2/s2)]'
         ))
         
@@ -1289,7 +1289,7 @@ class Radial(fileParser):
         
         self.metadata['QCTest'].append((
             f'Temporal Derivative QC Test - Test applies to each vector. Threshold='
-            '[ '
+            '['
             f'velocity difference threshold={str(tempDerThr)} (m/s)]'
         ))
             

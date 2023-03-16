@@ -7,7 +7,7 @@ import pprint
 import re
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
-from calc import dms2dd, evaluateGDOP, createLonLatGridFromTopLeftPointWera, createLonLatGridFromBB
+from calc import dms2dd, createLonLatGridFromTopLeftPointWera, createLonLatGridFromBB
 from pyproj import Geod
 import math
 
@@ -399,26 +399,22 @@ class fileParser(object):
         latVec = np.flipud(np.unique(gridGS.y.to_numpy()))
         # manage antimeridian crossing
         lonVec = np.concatenate((lonVec[lonVec>=0],lonVec[lonVec<0]))
-        
-        # Get the site coordinates
-        siteLon = self.site_source['Lon'].values.tolist()
-        siteLat = self.site_source['Lat'].values.tolist()
                 
         # Use WGS84 ellipsoid
         g = Geod(ellps='WGS84')
         self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
             
         # Parse data content
-        totalData = tdf.apply(lambda x: self._parse_cur_data(x,lonVec,latVec,siteLon,siteLat,g), axis=1)
+        totalData = tdf.apply(lambda x: self._parse_cur_data(x,lonVec,latVec), axis=1)
         # Assign column names to the combination DataFrame
-        totalData.columns = ['LOND','LATD','VELU','VELV','VELO','HEAD','UACC','VACC','GDOP']   
+        totalData.columns = ['LOND','LATD','VELU','VELV','VELO','HEAD','UACC','VACC']   
         table = True  # we found a table
         table_count = table_count + 1  # this is the nth table
         table_data = u''
         self._tables[str(table_count)] = OrderedDict()
         self._tables[str(table_count)]['TableType'] = 'LLUV'
-        self._tables[str(table_count)]['_TableHeader'] = ['Longitude', 'Latitude', 'U comp', 'V comp', 'U accuracy', 'V accuracy', 'GDOP']
-        self._tables[str(table_count)]['TableColumnTypes'] = 'LOND','LATD','VELU','VELV','UACC','VACC','GDOP'
+        self._tables[str(table_count)]['_TableHeader'] = ['Longitude', 'Latitude', 'U comp', 'V comp', 'Velocity', 'Heading', 'U accuracy', 'V accuracy']
+        self._tables[str(table_count)]['TableColumnTypes'] = 'LOND','LATD','VELU','VELV','VELO','HEAD','UACC','VACC'
         self._tables[str(table_count)]['data'] = totalData
         
         self._iscorrupt = False
@@ -656,7 +652,7 @@ class fileParser(object):
         return metadataDict, site_source
     
     @staticmethod
-    def _parse_cur_data(cellData,lonVec,latVec,siteLon,siteLat,g):
+    def _parse_cur_data(cellData,lonVec,latVec):
         """
         Parse cur data content into Total parameters (i.e. CTF-like)
         
@@ -664,9 +660,6 @@ class fileParser(object):
             cellData: Series containing the cell data
             lonVec: array containing the longitudes of the geographical grid
             latVec: array containing the latitudes of the geographical grid
-            siteLon: list containing longitudes of the radar sites
-            siteLat: list latitudes of the radar sites
-            g: Geod object with CRS
             
         OUTPUT:
             totalData: Series containing the Total parameters (i.e. CTF-like)
@@ -684,7 +677,6 @@ class fileParser(object):
         totalData.loc[5] = (360 + np.arctan2(cellData['U'],cellData['V']) *180 / np.pi) % 360
         totalData.loc[6] = cellData['Acc_U']
         totalData.loc[7] = cellData['Acc_V']
-        totalData.loc[8] = evaluateGDOP(totalData.loc[0], totalData.loc[1], siteLon, siteLat, g)
         
         return totalData
 

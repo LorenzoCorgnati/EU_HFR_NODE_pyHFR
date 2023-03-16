@@ -10,7 +10,8 @@ import re
 import io
 from common import fileParser
 from collections import OrderedDict
-from calc import gridded_index, true2mathAngle
+from calc import gridded_index, true2mathAngle, evaluateGDOP
+
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +97,6 @@ def totalLeastSquare(VelHeadStd):
     # Evaluate the covariance matrix Cgdop for GDOP evaluation (i.e. setting all radial std to 1)
     Cgdop = np.linalg.inv(np.matmul(Agdop.T, Agdop))
     
-    # ONLY FOR DEBUG PURPOSE
-    if pd.isna(u):
-        print('SOMETHING WENT WRONG')
-    
     return u, v, C, Cgdop
 
 
@@ -133,8 +130,11 @@ def makeTotalVector(rBins,rDF):
         for idx in contrRad.index:
             contrVel = rDF.loc[idx]['Radial'].data.VELO[contrRad[idx]]                                      # pandas Series
             contrHead = rDF.loc[idx]['Radial'].data.HEAD[contrRad[idx]]                                     # pandas Series
-            contrStd = rDF.loc[idx]['Radial'].data.ETMP[contrRad[idx]]                                      # pandas Series
-            contributions = pd.concat([contributions, pd.concat([contrVel,contrHead,contrStd], axis=1)])    # pandas DataFrame
+            if 'ETMP' in rDF.loc[idx]['Radial'].data.columns:
+                contrStd = rDF.loc[idx]['Radial'].data.ETMP[contrRad[idx]]                                  # pandas Series
+            elif 'HCSS' in rDF.loc[idx]['Radial'].data.columns:
+                contrStd = rDF.loc[idx]['Radial'].data.HCSS[contrRad[idx]]                                  # pandas Series   
+            contributions = pd.concat([contributions, pd.concat([contrVel,contrHead,contrStd], axis=1)])    # pandas DataFrame        
                     
         # Rename ETMP column to STD (Codar radial case)
         if 'ETMP' in contributions.columns:
@@ -143,6 +143,10 @@ def makeTotalVector(rBins,rDF):
         elif 'HCSS' in contributions.columns:
             contributions = contributions.rename(columns={"HCSS": "STD"})
             contributions['STD'] = contributions['STD'].apply(math.sqrt())
+            
+        # Only keep contributing radials with valid standard deviation values (i.e. different from NaN and 0)
+        contributions = contributions[contributions.STD.notnull()]
+        contributions = contributions[contributions.STD != 0]
         
         # check if there are at least three contributing radial vectors
         if len(contributions.index) >= minContrRads:
@@ -180,7 +184,7 @@ class Total(fileParser):
         for key in self._tables.keys():
             table = self._tables[key]
             if 'LLUV' in table['TableType']:
-                self.data = table['data']
+                self.data = table['data']                
             elif 'src' in table['TableType']:
                 self.diagnostics_source = table['data']
             elif 'CUR' in table['TableType']:
@@ -208,6 +212,27 @@ class Total(fileParser):
                     skipinitialspace=True
                 )
                 self.site_source = tdf
+                
+        # Evaluate GDOP for total files
+        if hasattr(self, 'site_source'):
+            # Get the site coordinates
+            siteLon = self.site_source['Lon'].values.tolist()
+            siteLat = self.site_source['Lat'].values.tolist()  
+            # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
+            if self.metadata['GreatCircle']:
+                g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
+            else:
+                g = Geod(ellps='WGS84')
+                self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
+            self.data['GDOP'] = self.data.loc[:,['LOND','LATD']].apply(lambda x: evaluateGDOP(x,siteLon, siteLat, g),axis=1)                
+        elif hasattr(self, 'data'):
+            self.data['GDOP'] = np.nan
+            
+        # Evaluate the number of contributing radials (NRAD) for CODAR total files
+        if not self.is_wera:
+            if hasattr(self, 'data'):
+                self.data['NRAD'] = self.data.loc[:, self.data.columns.str.contains('S.*CN')].sum(axis=1)
+            
 
         if replace_invalid:
             self.replace_invalid_values()
@@ -377,9 +402,6 @@ class Total(fileParser):
         # Set the test name
         testName = 'CSPD_QC'
         
-        # Evaluate velocity module from U and V components and add it to the data DataFrame
-        self.data['VELO'] = np.sqrt(self.data['VELU']**2 + self.data['VELV']**2)
-    
         # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
         self.data.loc[:,testName] = 1
     
@@ -391,8 +413,108 @@ class Total(fileParser):
     
         self.metadata['QCTest'].append((
             f'Velocity Threshold QC Test - Test applies to each vector. Threshold='
-            '[ '
+            '['
             f'maximum velocity={totMaxSpeed} (m/s)]'
+        ))
+        
+    def qc_ehn_maximum_variance(self, totMaxVar=1):
+        """
+        This test labels total velocity vectors whose temporal variances for both U and V
+        components are smaller than a maximum variance threshold with a “good data” flag. 
+        Otherwise the vector is labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team based on the
+        U Component Uncertainty and V Component Uncertainty tests (QC306 and QC307) from the
+        Integrated Ocean Observing System (IOOS) Quality Assurance of Real-Time Oceanographic 
+        Data (QARTOD).
+        
+        This test is NOT RECOMMENDED for CODAR data because the parameter defining the variance
+        is computed at each time step, and therefore considered not statistically solid 
+        (as documented in the fall 2013 CODAR Currents Newsletter).
+        
+        INPUTS:
+            totMaxVar: maximum variance in m2/s2 for normal operations                     
+        """
+        # Set the test name
+        testName = 'VART_QC'
+    
+        # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+        self.data.loc[:,testName] = 1
+    
+        # Set bad flag for variances not passing the test
+        if self.is_wera:
+            self.data.loc[(self.data['UACC']**2 > totMaxVar), testName] = 4             # UACC is the temporal standard deviation of U component in m/s for WERA data
+            self.data.loc[(self.data['VACC']**2 > totMaxVar), testName] = 4             # VACC is the temporal standard deviation of V component in m/s for WERA data
+        else:
+            self.data.loc[((self.data['UQAL']/100)**2 > totMaxVar), testName] = 4       # UQAL is the temporal standard deviation of U component in cm/s for CODAR data
+            self.data.loc[((self.data['VQAL']/100)**2 > totMaxVar), testName] = 4       # VQAL is the temporal standard deviation of V component in cm/s for CODAR data
+    
+        self.metadata['QCTest'].append((
+            f'Variance Threshold QC Test - Test applies to each vector. Threshold='
+            '['
+            f'maximum variance={totMaxVar} (m2/s2)]'
+        ))
+        
+    def qc_ehn_gdop_threshold(self, maxGDOP=2):
+        """
+        This test labels total velocity vectors whose GDOP is smaller than a maximum GDOP threshold 
+        with a “good data” flag. Otherwise the vector is labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team based on the
+        GDOP Threshold test (QC302) from the Integrated Ocean Observing System (IOOS) Quality Assurance of 
+        Real-Time Oceanographic Data (QARTOD).
+        
+        INPUTS:
+            maxGDOP: maximum allowed GDOP for normal operations                     
+        """
+        # Set the test name
+        testName = 'GDOP_QC'
+        
+        # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+        self.data.loc[:,testName] = 1
+    
+        # set bad flag for velocities not passing the test
+        self.data.loc[(self.data['GDOP'] > maxGDOP), testName] = 4
+    
+        self.metadata['QCTest'].append((
+            f'GDOP Threshold QC Test - Test applies to each vector. Threshold='
+            '['
+            f'GDOP threshold={maxGDOP}]'
+        ))
+        
+    def qc_ehn_data_density_threshold(self, minContrRad=2):
+        """
+        This test labels total velocity vectors with a number of contributing radial velocities smaller 
+        than the minimum number defined for normal operations with a “good data” flag. 
+        Otherwise the vector is labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team based on the
+        Data Density Threshold test (QC301) from the Integrated Ocean Observing System (IOOS) Quality Assurance of 
+        Real-Time Oceanographic Data (QARTOD).
+        
+        INPUTS:
+            minContrRad: minimum number of contributing radial velocities for normal operations                     
+        """
+        # Set the test name
+        testName = 'DDNS_QC'
+        
+        # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+        self.data.loc[:,testName] = 1
+    
+        # set bad flag for velocities not passing the test
+        if not self.is_wera:
+            if 'NRAD' in self.data.columns:
+                self.data.loc[(self.data['NRAD'] < minContrRad), testName] =4
+            else:
+                self.data.loc[:,testName] = 0
+    
+        self.metadata['QCTest'].append((
+            f'Data Density Threshold QC Test - Test applies to each vector. Threshold='
+            '['
+            f'minimum number of contributing radial velocities={minContrRad}]'
         ))
 
 
