@@ -389,7 +389,7 @@ class Total(fileParser):
     def qc_ehn_maximum_velocity(self, totMaxSpeed=1.2):
         """
         This test labels total velocity vectors whose module is smaller than a maximum velocity threshold 
-        with a “good data” flag. Otherwise the vector is labeled with a “bad data” flag.
+        with a “good data” flag. Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         This test was defined in the framework of the EuroGOOS HFR Task Team based on the
@@ -421,7 +421,7 @@ class Total(fileParser):
         """
         This test labels total velocity vectors whose temporal variances for both U and V
         components are smaller than a maximum variance threshold with a “good data” flag. 
-        Otherwise the vector is labeled with a “bad data” flag.
+        Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         This test was defined in the framework of the EuroGOOS HFR Task Team based on the
@@ -459,7 +459,7 @@ class Total(fileParser):
     def qc_ehn_gdop_threshold(self, maxGDOP=2):
         """
         This test labels total velocity vectors whose GDOP is smaller than a maximum GDOP threshold 
-        with a “good data” flag. Otherwise the vector is labeled with a “bad data” flag.
+        with a “good data” flag. Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         This test was defined in the framework of the EuroGOOS HFR Task Team based on the
@@ -488,7 +488,7 @@ class Total(fileParser):
         """
         This test labels total velocity vectors with a number of contributing radial velocities smaller 
         than the minimum number defined for normal operations with a “good data” flag. 
-        Otherwise the vector is labeled with a “bad data” flag.
+        Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         This test was defined in the framework of the EuroGOOS HFR Task Team based on the
@@ -515,6 +515,30 @@ class Total(fileParser):
             f'Data Density Threshold QC Test - Test applies to each vector. Threshold='
             '['
             f'minimum number of contributing radial velocities={minContrRad}]'
+        ))
+        
+    def qc_ehn_overall_qc_flag(self):
+        """
+        
+        This QC test labels total velocity vectors with a ‘good_data” flag if all QC tests are passed.
+        Otherwise, the vectors are labeled with a “bad_data” flag.
+        The ARGO QC flagging scale is used.
+        
+        INPUTS:
+            
+        
+        """
+        # Set the test name
+        testName = 'QCflag'
+        
+        # Add new column to the DataFrame for QC data by setting every row as not passing the test (flag = 4)
+        self.data.loc[:,testName] = 4
+        
+        # Set good flags for vectors passing all QC tests
+        self.data.loc[self.data.loc[:, self.data.columns.str.contains('_QC')].eq(1).all(axis=1), testName] = 1
+
+        self.metadata['QCTest'].append((
+            'Overall QC Flag - Test applies to each vector. Test checks if all QC tests are passed.'
         ))
 
 

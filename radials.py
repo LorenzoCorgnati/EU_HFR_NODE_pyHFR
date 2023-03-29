@@ -1020,9 +1020,9 @@ class Radial(fileParser):
     def qc_ehn_avg_radial_bearing(self, minBear=0, maxBear=360):
         """
         
-        This QC test labels the radial with a ‘good_data” flag if the average radial bearing 
+        This QC test labels radial velocity vectors with a ‘good_data” flag if the average radial bearing 
         of all the vectors contained in the radial lie within the specified range for normal operations.
-        Otherwise, the radial is labeled with a “bad_data” flag.
+        Otherwise, the vectors are labeled with a “bad_data” flag.
         The ARGO QC flagging scale is used.
         
         This test is applicable only to DF systems. 
@@ -1062,9 +1062,9 @@ class Radial(fileParser):
     def qc_ehn_radial_count(self, radMinCount=150):
         """
         
-        This test labels the radial with a “good data” flag if the number of velocity vectors contained
+        This test labels radial velocity vectors with a “good data” flag if the number of velocity vectors contained
         in the radial is bigger than the minimum count specified for normal operations.
-        Otherwise the radial is labeled with a “bad data” flag.
+        Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         This test was defined in the framework of the EuroGOOS HFR Task Team based on the
@@ -1095,7 +1095,7 @@ class Radial(fileParser):
     def qc_ehn_maximum_velocity(self, radMaxSpeed=1.2):
         """
         This test labels radial velocity vectors whose module is smaller than a maximum velocity threshold 
-        with a “good data” flag. Otherwise the vector is labeled with a “bad data” flag.
+        with a “good data” flag. Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         This test was defined in the framework of the EuroGOOS HFR Task Team based on the
@@ -1172,7 +1172,7 @@ class Radial(fileParser):
     def qc_ehn_over_water(self):
         """
         This test labels radial velocity vectors that lie on water with a good data” flag.
-        Otherwise the vector is labeled with a “bad data” flag.
+        Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         Radial vector coordinates are checked against a reference file containing information 
@@ -1212,7 +1212,7 @@ class Radial(fileParser):
         """
         This test labels radial velocity vectors whose temporal variance is smaller than
         a maximum variance threshold with a “good data” flag. 
-        Otherwise the vector is labeled with a “bad data” flag.
+        Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
         This test was defined in the framework of the EuroGOOS HFR Task Team based on the
@@ -1291,6 +1291,30 @@ class Radial(fileParser):
             f'Temporal Derivative QC Test - Test applies to each vector. Threshold='
             '['
             f'velocity difference threshold={str(tempDerThr)} (m/s)]'
+        ))
+        
+    def qc_ehn_overall_qc_flag(self):
+        """
+        
+        This QC test labels radial velocity vectors with a ‘good_data” flag if all QC tests are passed.
+        Otherwise, the vectors are labeled with a “bad_data” flag.
+        The ARGO QC flagging scale is used.
+        
+        INPUTS:
+            
+        
+        """
+        # Set the test name
+        testName = 'QCflag'
+        
+        # Add new column to the DataFrame for QC data by setting every row as not passing the test (flag = 4)
+        self.data.loc[:,testName] = 4
+        
+        # Set good flags for vectors passing all QC tests
+        self.data.loc[self.data.loc[:, self.data.columns.str.contains('_QC')].eq(1).all(axis=1), testName] = 1
+
+        self.metadata['QCTest'].append((
+            'Overall QC Flag - Test applies to each vector. Test checks if all QC tests are passed.'
         ))
             
         

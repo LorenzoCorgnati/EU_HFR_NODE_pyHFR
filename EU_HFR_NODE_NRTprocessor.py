@@ -368,24 +368,22 @@ def processNetwork(networkID,memory,sqlConfig):
     
     # TO BE DONE
     
+    # Selection of radials to be converted and/or combined based on timestamp
+    
     # Radial data QC    
-    pd.set_option('mode.chained_assignment', None)      # disable SettingWithCopyWarning
-    
-    # radial QC code
-    
-    pd.set_option('mode.chained_assignment', 'Warn')    # enable SettingWithCopyWarning
     
     # Radial data conversion to standard format (netCDF)
     
     # Radial combination into totals
     
     # Total data QC
-    pd.set_option('mode.chained_assignment', None)      # disable SettingWithCopyWarning
+        
+    # Total data conversion to standard format (netCDF)
     
-    # total QC code
+    # Selection of totals to be converted based on timestamp
     
-    pd.set_option('mode.chained_assignment', 'Warn')    # enable SettingWithCopyWarning
-    
+    # Total data QC
+        
     # Total data conversion to standard format (netCDF)
     
     
