@@ -240,7 +240,7 @@ class Radial(fileParser):
         OUTPUT:
             ds: DataSet containing expanded variables
         """
-        # Intitialize empty xarray dataset
+        # Initialize empty xarray dataset
         ds = xr.Dataset()
         
         # process Codar radial
