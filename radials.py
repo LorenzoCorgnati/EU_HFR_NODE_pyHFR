@@ -250,9 +250,15 @@ class Radial(fileParser):
             
             # Check range limits   
             if range_min is None:
-                range_min = self.data.RNGE.min()
+                if 'RangeMin' in self.metadata:
+                    range_min = float(self.metadata['RangeMin'].split()[0])
+                else:
+                    range_min = self.data.RNGE.min()
             if range_max is None:
-                range_max = self.data.RNGE.max()
+                if 'RangeMax' in self.metadata:
+                    range_max = float(self.metadata['RangeMax'].split()[0])
+                else:
+                    range_min = self.data.RNGE.min()
             # Get range step
             if 'RangeResolutionKMeters' in self.metadata:
                 range_step = float(self.metadata['RangeResolutionKMeters'].split()[0])
@@ -311,7 +317,7 @@ class Radial(fileParser):
                 
             # set X and Y coordinate mappings
             X_map_idx = bearing_map_idx         # BEAR is X axis
-            Y_map_idx = range_map_idx           # RNGE is X axis
+            Y_map_idx = range_map_idx           # RNGE is Y axis
                 
             # Add coordinate variables to dataset
             timestamp = dt.datetime(*[int(s) for s in self.metadata['TimeStamp'].split()])
@@ -387,7 +393,7 @@ class Radial(fileParser):
                 
             # set X and Y coordinate mappings
             X_map_idx = lon_map_idx             # LONGITUDE is X axis
-            Y_map_idx = lat_map_idx             # LATITUDE is X axis
+            Y_map_idx = lat_map_idx             # LATITUDE is Y axis
                 
             # Add coordinate variables to dataset
             if 'TimeZone' in self.metadata:
@@ -433,8 +439,8 @@ class Radial(fileParser):
                 if f in ds:
                     ds[f] = -ds[f]
             # Scale velocities to be in m/s (only for Codar radials)
-            toKms = ['VELU', 'VELV', 'VELO', 'ESPC', 'ETMP', 'MINV', 'MAXV']
-            for t in toKms:
+            toMs = ['VELU', 'VELV', 'VELO', 'ESPC', 'ETMP', 'MINV', 'MAXV']
+            for t in toMs:
                 if t in ds:
                     ds[t] = ds[t]*0.01
 

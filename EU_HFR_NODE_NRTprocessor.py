@@ -372,9 +372,22 @@ def processNetwork(networkID,memory,sqlConfig):
     
     # Radial data QC    
     
+    # INSERIRE range_min e range_max IN R.metadata per radiali Codar - CHECK NOMI METADATI
+    R.metadata['RangeMin'] = '0 km'
+    if 'RangeResolutionKMeters' in R.metadata:
+        R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(numberOfRangeCells-1)) + ' km'
+    elif 'RangeResolutionMeters' in self.metadata:
+        R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(numberOfRangeCells-1)) + ' km'
+   
     # Radial data conversion to standard format (netCDF)
     
     # Radial combination into totals
+    # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
+    T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
+    T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
+    T.metadata['BBminLatitude'] = str(latMin) + ' deg'
+    T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
+    T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
     
     # Total data QC
         
@@ -383,7 +396,13 @@ def processNetwork(networkID,memory,sqlConfig):
     # Selection of totals to be converted based on timestamp
     
     # Total data QC
-        
+    
+    # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
+    T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
+    T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
+    T.metadata['BBminLatitude'] = str(latMin) + ' deg'
+    T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
+    
     # Total data conversion to standard format (netCDF)
     
     
