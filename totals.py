@@ -773,6 +773,54 @@ class Total(fileParser):
             f'minimum number of contributing radial velocities={minContrRad}]'
         ))
         
+    def qc_ehn_temporal_derivative(self, t0, tempDerThr=1):
+        """
+        This test compares the velocity of each total vector with the velocity of the total vector 
+        measured in the previous timestamp at the same location.
+        Each vector for which the velocity difference is smaller than the specified threshold for normal 
+        operations (tempDerThr), is labeled with a "good data" flag.
+        Otherwise the vector is labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team based on the 
+        Temporal Gradient test (QC206) from the Integrated Ocean Observing System (IOOS) Quality 
+        Assurance of Real-Time Oceanographic Data (QARTOD).
+        
+        INPUTS:
+            t0: Total object of the previous timestamp
+            tempDerThr: velocity difference threshold in m/s for normal operations
+        """
+        # Set the test name
+        testName = 'VART_QC'
+        
+        # Check if the previous timestamp total file exists
+        if not t0 is None:
+            # Merge the data DataFrame of the two Totals and evaluate velocity differences at each location
+            mergedDF = self.data.merge(t0.data, on=['LOND', 'LATD'], how='left', suffixes=(None, '_x'), indicator='Exist')
+            velDiff = (mergedDF['VELO'] - mergedDF['VELO_x']).abs()
+
+            # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+            self.data.loc[:,testName] = 1
+
+            # Set rows of the DataFrame for QC data as not evaluated (flag = 0) for locations existing in the current total but not in the previous one
+            self.data.loc[mergedDF['Exist'] == 'left_only', testName] = 0
+
+            # Set bad flag for vectors not passing the test
+            if self.is_wera:
+                self.data.loc[(velDiff > tempDerThr), testName] = 4             # velocity in m/s (CUR)
+            else:
+                self.data.loc[(velDiff > tempDerThr*100), testName] = 4         # velocity in cm/s (LLUV)
+
+        else:
+            # Add new column to the DataFrame for QC data by setting every row as not evaluated (flag = 0)
+            self.data.loc[:,testName] = 0
+        
+        self.metadata['QCTest'].append((
+            f'Temporal Derivative QC Test - Test applies to each vector. Threshold='
+            '['
+            f'velocity difference threshold={str(tempDerThr)} (m/s)]'
+        ))
+        
     def qc_ehn_overall_qc_flag(self):
         """
         

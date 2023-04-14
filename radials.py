@@ -234,8 +234,8 @@ class Radial(fileParser):
         for positive velocities and to have velocities in m/s.
         
         INPUT:
-            range_min: minimum range value in km (if None the minimum value in RNGE variable is taken)
-            range_max: maximum range value in km (if None the maximum value in RNGE variable is taken)
+            range_min: minimum range value in km (if None it is taken from Radial metadata)
+            range_max: maximum range value in km (if None it is taken from Radial metadata)
             
         OUTPUT:
             ds: DataSet containing expanded variables
@@ -1266,7 +1266,7 @@ class Radial(fileParser):
         
         INPUTS:
             r0: Radial object of the previous timestamp
-            tempDerThr: velocity difference threshold in m/s for normal opertions
+            tempDerThr: velocity difference threshold in m/s for normal operations
         """
         # Set the test name
         testName = 'VART_QC'

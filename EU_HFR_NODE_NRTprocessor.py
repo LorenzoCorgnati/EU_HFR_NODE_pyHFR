@@ -40,6 +40,7 @@ from pyproj import Geod
 import latlon
 import time
 import math
+import pickle
 
 ######################
 # PROCESSING FUNCTIONS
@@ -379,6 +380,10 @@ def processNetwork(networkID,memory,sqlConfig):
     elif 'RangeResolutionMeters' in self.metadata:
         R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(numberOfRangeCells-1)) + ' km'
    
+    # OPTIONAL: save Radial object as .rdl file with pickle
+    with open('filename.rdl', 'wb') as rdlFile:
+        pickle.dump(R, rdlFile)
+   
     # Radial data conversion to standard format (netCDF)
     
     # Radial combination into totals
@@ -388,8 +393,17 @@ def processNetwork(networkID,memory,sqlConfig):
     T.metadata['BBminLatitude'] = str(latMin) + ' deg'
     T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
     T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
+    # INSERIRE ATTRIBUTO is_wera
+    if weraGrid:
+        T.is_wera = True
+    else:
+        T.is_wera = False
     
     # Total data QC
+    
+    # Save Total object as .ttl file with pickle
+    with open('filename.ttl', 'wb') as ttlFile:
+        pickle.dump(T, ttlFile)
         
     # Total data conversion to standard format (netCDF)
     
@@ -402,6 +416,10 @@ def processNetwork(networkID,memory,sqlConfig):
     T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
     T.metadata['BBminLatitude'] = str(latMin) + ' deg'
     T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
+    
+    # Save Total object as .ttl file with pickle
+    with open('filename.ttl', 'wb') as ttlFile:
+        pickle.dump(T, ttlFile)
     
     # Total data conversion to standard format (netCDF)
     
