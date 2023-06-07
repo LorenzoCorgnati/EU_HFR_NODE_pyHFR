@@ -46,6 +46,196 @@ import pickle
 # PROCESSING FUNCTIONS
 ######################
 
+def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,logger):
+    """
+    This function processes the input radial files pushed by the HFR data providers 
+    according to the workflow of the EU HFR NODE.
+    QC is applied to radials and they are then converted into the European standard 
+    data model.
+    If the radial combination is enabled, radials are combined into totals, 
+    QC is applied to the resulting totals and these are then converted into the European 
+    standard data model.
+    Information about radial and total processing is inserted into the EU HFR NODE database.
+    
+    INPUTS:
+        groupedRad: DataFrame containing the radials to be processed grouped by timestamp
+                    for the input network with the related information
+        networkID: network ID of the network to be processed
+        networkData: DataFrame containing the information of the network to be processed
+        stationData: DataFrame containing the information of the stations belonging 
+                     to the network to be processed
+        startDate: string containing the datetime of the starting date of the processing period
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        pRerr = boolean flag expressing the execution error (True = error, False = no error)
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    pRerr = False
+    
+    # Retrieve the number of operational stations
+    numActiveStations = stationData['operational_to'].isna().sum() 
+    
+    try:
+        logger.info('Radial processing started for ' + networkID + ' network.') 
+
+        #####
+        # Enhance the radial DataFrame
+        #####
+        
+        # Add Radial objects to the DataFrame
+        groupedRad['Radial'] = (groupedRad.filepath + '/' + groupedRad.filename).apply(lambda x: Radial(x))
+        
+        # Rename indices with site codes
+        indexMapper = dict(zip(groupedRad.index.values.tolist(),groupedRad['station_id'].to_list()))
+        groupedRad.rename(index=indexMapper,inplace=True)        
+        
+        #####        
+        # Radial data QC    
+        #####
+        
+        # TO BE DONE - da fare solo per radiali con NRT_processed_flag=0
+        
+        #####        
+        # Radial data conversion to standard format (netCDF)
+        #####
+        
+        # TO BE DONE - da fare solo per radiali con NRT_processed_flag=0
+        
+        # # INSERIRE range_min e range_max IN R.metadata per radiali Codar - CHECK NOMI METADATI
+        # R.metadata['RangeMin'] = '0 km'
+        # if 'RangeResolutionKMeters' in R.metadata:
+        #     R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(numberOfRangeCells-1)) + ' km'
+        # elif 'RangeResolutionMeters' in self.metadata:
+        #     R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(numberOfRangeCells-1)) + ' km'
+       
+        # # OPTIONAL: save Radial object as .rdl file with pickle
+        # with open('filename.rdl', 'wb') as rdlFile:
+        #     pickle.dump(R, rdlFile)
+        
+        
+        #####        
+        # Insert information into database    
+        #####
+        
+        # TO BE DONE
+        
+        #####
+        # Radial combination into totals
+        #####
+        
+        # TO BE DONE - da fare solo per radiali con NRT_combined_flag=0
+        # # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
+        # T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
+        # T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
+        # T.metadata['BBminLatitude'] = str(latMin) + ' deg'
+        # T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
+        # T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
+        # # INSERIRE ATTRIBUTO is_wera
+        # if weraGrid:
+        #     T.is_wera = True
+        # else:
+        #     T.is_wera = False
+        
+        # # Total data QC
+        
+        # # Save Total object as .ttl file with pickle
+        # with open('filename.ttl', 'wb') as ttlFile:
+        #     pickle.dump(T, ttlFile)
+            
+        #####
+        # Total data conversion to standard format (netCDF)
+        #####
+        
+        # TO BE DONE
+        
+        #####        
+        # Insert information into database    
+        #####
+        
+        # TO BE DONE
+        
+    except Exception as err:
+        pRerr = True
+        logger.error(err.args[0])    
+    
+    ####################
+        
+    if(not pRerr):
+        logger.info('Successfully executed for ' + networkID + ' network.')
+    else:
+        logger.info('Exited with errors for ' + networkID + ' network.')
+                
+    ####################    
+    
+    return pRerr
+
+def selectRadials(networkID,startDate,eng,logger):
+    """
+    This function selects the radials to be processed for the input network by reading
+    from the radial_input_tb table of the EU HFR NODE database.
+        
+    INPUTS:
+        networkID: network ID of the network to be processed
+        startDate: string containing the datetime of the starting date of the processing period
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        radialsToBeProcessed: DataFrame containing all the radials to be processed for the input 
+                              network with the related information
+        sRerr = boolean flag expressing the execution error (True = error, False = no error)
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    sRerr = False
+    
+    try:
+       
+        #####
+        # Select radials to be processed
+        #####
+        
+        # Set and execute the query for getting radials to be processed
+        if networkID == 'HFR-WesternItaly':
+            networkStr = '\'HFR-TirLig\' OR network_id=\'HFR-LaMMA\' OR network_id=\'HFR-ARPAS\''
+        else:
+            networkStr = '\'' + networkID + '\''
+        try:
+            radialSelectionQuery = 'SELECT * FROM radial_input_tb WHERE datetime>\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0 OR NRT_combined_flag=0) ORDER BY TIMESTAMP'
+            radialsToBeProcessed = pd.read_sql(radialSelectionQuery, con=eng)
+        except sqlalchemy.exc.DBAPIError as err:        
+            sRerr = True
+            logger.error('MySQL error ' + err._message())
+                
+    except Exception as err:
+        sRerr = True
+        logger.error(err.args[0])
+            
+    ####################
+        
+    if(not sRerr):
+        logger.info('Successfully executed for ' + networkID + ' network.')
+    else:
+        logger.info('Exited with errors for ' + networkID + ' network.')
+                
+    ####################    
+    
+    return radialsToBeProcessed, sRerr
+
+
 def inputTotals(networkID,networkData,startDate,eng,logger):
     """
     This function lists the input total files pushed by the HFR data providers 
@@ -148,6 +338,7 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
     ####################    
     
     return
+
 
 def inputRadials(networkID,stationData,startDate,eng,logger):
     """
@@ -367,45 +558,14 @@ def processNetwork(networkID,memory,sqlConfig):
     # Process HFR data
     #####
     
-    # TO BE DONE
+    # Select radials to be processed
+    radialsToBeProcessed, pNerr = selectRadials(networkID,startDate,eng,logger)
     
-    # Selection of radials to be converted and/or combined based on timestamp
-    
-    # Radial data QC    
-    
-    # INSERIRE range_min e range_max IN R.metadata per radiali Codar - CHECK NOMI METADATI
-    R.metadata['RangeMin'] = '0 km'
-    if 'RangeResolutionKMeters' in R.metadata:
-        R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(numberOfRangeCells-1)) + ' km'
-    elif 'RangeResolutionMeters' in self.metadata:
-        R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(numberOfRangeCells-1)) + ' km'
-   
-    # OPTIONAL: save Radial object as .rdl file with pickle
-    with open('filename.rdl', 'wb') as rdlFile:
-        pickle.dump(R, rdlFile)
-   
-    # Radial data conversion to standard format (netCDF)
-    
-    # Radial combination into totals
-    # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
-    T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
-    T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
-    T.metadata['BBminLatitude'] = str(latMin) + ' deg'
-    T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
-    T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
-    # INSERIRE ATTRIBUTO is_wera
-    if weraGrid:
-        T.is_wera = True
-    else:
-        T.is_wera = False
-    
-    # Total data QC
-    
-    # Save Total object as .ttl file with pickle
-    with open('filename.ttl', 'wb') as ttlFile:
-        pickle.dump(T, ttlFile)
+    # Process radials
+    radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))
         
-    # Total data conversion to standard format (netCDF)
+        
+    
     
     # Selection of totals to be converted based on timestamp
     
