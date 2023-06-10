@@ -46,6 +46,98 @@ import pickle
 # PROCESSING FUNCTIONS
 ######################
 
+def applyRadialQC(qcRad,radSiteData,logger):
+    """
+    This function applies QC procedures to radial object according to the European 
+    standard data model.
+    
+    INPUTS:
+        qcRad: Series containing the radial to be processed with the related information
+        radSiteData: DataFrame containing the information of the radial site that produced the radial
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        qcErr = boolean flag expressing the execution error (True = error, False = no error)
+        qcRad = Series containing the processed radial with the related information
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    qcErr = False
+    
+    #####        
+    # Apply QC    
+    #####
+    
+    try:
+        # Check if the Radial was already processed
+        if qcRad['NRT_processed_flag'] == 0:
+            # Get the radial object
+            R = qcRad['Radial']
+            
+            # Initialize QC metadata
+            R.initialize_qc()
+            
+            # OWTR
+            R.qc_ehn_over_water()
+            
+            # CSPD
+            R.qc_ehn_maximum_velocity(2)
+            
+            # # Temporal Gradient
+            # prevHourRadFile = '../test/test_HFRadarPy/data/radials/ruv/TINO/RDLm_TINO_2021_01_08_0900.ruv'
+            # if os.path.exists(prevHourRadFile):
+            #     r0 = Radial(prevHourRadFile)
+            # else:
+            #     r0 = None
+            # R.qc_ehn_temporal_derivative(r0,0.5)
+            # prevHourRadFile = '../test/test_HFRadarPy/data/radials/crad/SYLT/2022314073139_syl.CUR.crad_ascii'
+            # if os.path.exists(prevHourRadFile):
+            #     r0 = Radial(prevHourRadFile)
+            # else:
+            #     r0 = None
+            # RW.qc_ehn_temporal_derivative(r0,0.5)
+
+            # # VART
+            # RW.qc_ehn_maximum_variance(1)
+            # RL.qc_ehn_maximum_variance(1)
+            # R.qc_ehn_maximum_variance(1)
+
+            
+
+            # # AVRB
+            # R.qc_ehn_avg_radial_bearing(175,210)
+            # RW.qc_ehn_avg_radial_bearing(175,210)
+            # RL.qc_ehn_avg_radial_bearing(175,210)
+
+            # # RDCT
+            # R.qc_ehn_radial_count(175)
+            # RW.qc_ehn_radial_count(210)
+            # RL.qc_ehn_radial_count(175)
+
+            
+
+            # # MDFL
+            # R.qc_ehn_median_filter(10,0.5)
+            # RW.qc_ehn_median_filter(10,0.5)
+            # RL.qc_ehn_median_filter(10,0.5)
+
+            # # Overall QC
+            # R.qc_ehn_overall_qc_flag()
+            # RW.qc_ehn_overall_qc_flag()
+            # RL.qc_ehn_overall_qc_flag()
+        
+    except Exception as err:
+        qcErr = True
+        logger.error(err.args[0])     
+    
+    return qcErr, qcRad
+    
+    
 def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,logger):
     """
     This function processes the input radial files pushed by the HFR data providers 
@@ -101,13 +193,14 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         # Radial data QC    
         #####
         
-        # TO BE DONE - da fare solo per radiali con NRT_processed_flag=0
+        qcErr, groupedRad = groupedRad.apply(lambda x: applyRadialQC(x,stationData.loc[stationData['station_id'] == x.station_id],logger),axis=1)
         
+       
         #####        
         # Radial data conversion to standard format (netCDF)
         #####
         
-        # TO BE DONE - da fare solo per radiali con NRT_processed_flag=0
+        # TO BE DONE - da fare solo per radiali con NRT_processed_flag=0 e SOLO SE qcErr=False
         
         # # INSERIRE range_min e range_max IN R.metadata per radiali Codar - CHECK NOMI METADATI
         # R.metadata['RangeMin'] = '0 km'
