@@ -32,6 +32,51 @@ logger = logging.getLogger(__name__)
 #     ds = xr.concat(totals_dict.values(), 'time')
 #     return ds
 
+def buildEHNtotalFilename(networkID,ts,ext):
+    """
+    This function builds the filename for total files according to 
+    the structure used by the European HFR Node, i.e. networkID-Total_YYYY_MM_DD_hhmm.
+    
+    INPUT:
+        networkID: ID of the HFR network
+        ts: timestamp as datetime object
+        ext: file extension
+        
+    OUTPUT:
+        totFilename: filename for total file.
+    """
+    # Get the time related part of the filename
+    timeStr = ts.strftime("_%Y_%m_%d_%M%H")
+    
+    # Build the filename
+    totFilename = networkID + '-Total' + timeStr + ext
+    
+    return totFilename
+
+def buildEHNtotalFolder(basePath,ts,vers):
+    """
+    This function builds the folder structure for storing total files according to 
+    the structure used by the European HFR Node, i.e. YYYY/YYYY_MM/YYYY_MM_DD/.
+    
+    INPUT:
+        basePath: base path
+        ts: timestamp as datetime object
+        vers: version of the data model
+        
+    OUTPUT:
+        totFolder: folder path for storing total files.
+    """
+    # Strip trailing slash character
+    basePath = basePath.rstrip('/')
+    
+    # Get the time related part of the path
+    timeStr = ts.strftime("/%Y/%Y_%m/%Y_%m_%d/")
+    
+    # Build the folder path
+    totFolder = basePath + '/' + vers + timeStr
+    
+    return totFolder
+
 def radBinsInSearchRadius(cell,radial,sR,g):
     """
     This function finds out which radial bins are within the spatthresh of the
@@ -453,13 +498,14 @@ class Total(fileParser):
         
     def to_xarray_multidimensional(self, lon_min=None, lon_max=None, lat_min=None, lat_max=None, grid_res=None):
         """
-        This function creates an xarray DataSet containing the variables of the total
-        object bidimensionally expanded along the coordinate axes. 
-        The coordinate axes are chosen based as (TIME, DEPTH, LATITUDE, LONGITUDE).
+        This function creates a dictionary of xarray DataArrays containing the variables
+        of the Total object multidimensionally expanded along the coordinate axes (T,Z,Y,X).  
+        The coordinate axes are set as (TIME, DEPTH, LATITUDE, LONGITUDE).
         The coordinate limits and steps are taken from total metadata when possible.
         Only longitude and latitude limits and grid resolution can be specified by the user.
         Some refinements are performed on Codar data in order to comply CF convention
         for positive velocities and to have velocities in m/s.
+        The generated dictionary is attached to the Total object, named as xdr.
         
         INPUT:
             lon_min: minimum longitude value in decimal degrees (if None it is taken from Total metadata)
@@ -469,14 +515,10 @@ class Total(fileParser):
             grid_res: grid resolution in meters (if None it is taken from Total metadata)
             
         OUTPUT:
-            ds: DataSet containing expanded variables
 
         """
-        # Initialize empty xarray dataset
-        ds = xr.Dataset()
-        
-        # CF Standard: T, Z, Y, X
-        coords = ('TIME', 'DEPTH', 'LATITUDE', 'LONGITUDE')
+        # Initialize empty dictionary
+        xdr = OrderedDict()
         
         # process Codar radial
         if not self.is_wera:
@@ -574,13 +616,6 @@ class Total(fileParser):
         X_map_idx = lon_map_idx             # LONGITUDE is X axis
         Y_map_idx = lat_map_idx             # LATITUDE is Y axis
             
-        # Add coordinate variables to dataset
-        timestamp = self.time
-        ds.coords['LONGITUDE'] = lon_dim
-        ds.coords['LATITUDE'] = lat_dim
-        ds.coords['TIME'] = pd.date_range(timestamp, periods=1)
-        ds.coords['DEPTH'] = np.zeros(1)
-
         # create dictionary containing variables from dataframe in the shape of radial grid
         d = {key: np.tile(np.nan, longitudes.shape) for key in self.data.keys()}       
             
@@ -592,22 +627,45 @@ class Total(fileParser):
         # Add extra dimensions for time (T) and depth (Z) - CF Standard: T, Z, Y, X -> T=axis0, Z=axis1
         d = {k: np.expand_dims(np.float32(v), axis=(0,1)) for (k, v) in d.items()}            
 
-        # Add all variables to dataset
-        for k, v in d.items():
-            ds[k] = (coords, v)
-
         # Drop LOND and LATD variables (they are set as coordinates of the DataSet)
-        ds = ds.drop_vars(['LOND', 'LATD'])
+        d.pop('LOND')
+        d.pop('LATD')
 
         # Refine Codar and combined data
         if not self.is_wera:
             # Scale velocities to be in m/s (only for Codar or combined totals)
             toMs = ['VELU', 'VELV', 'VELO', 'UQAL', 'VQAL','CQAL']
             for t in toMs:
-                if t in ds:
-                    ds[t] = ds[t]*0.01
+                if t in d:
+                    d[t] = d[t]*0.01
 
-        return ds
+        # Add all variables as xarray
+        for k, v in d.items():
+            xdr[k] = xr.DataArray(v,
+                                  dims={'TIME': v.shape[0], 'DEPTH': v.shape[1], 'LATITUDE': v.shape[2], 'LONGITUDE': v.shape[3]},
+                                  coords={'TIME': pd.date_range(self.time, periods=1),
+                                          'DEPTH': [0],
+                                          'LATITUDE': lat_dim,
+                                          'LONGITUDE': lon_dim})
+        
+        # Add DataArray for coordinate variables
+        xdr['TIME'] = xr.DataArray(pd.date_range(self.time, periods=1),
+                                 dims={'TIME': len(pd.date_range(self.time, periods=1))},
+                                 coords={'TIME': pd.date_range(self.time, periods=1)})
+        xdr['DEPTH'] = xr.DataArray(0,
+                                 dims={'DEPTH': 1},
+                                 coords={'DEPTH': [0]})
+        xdr['LATITUDE'] = xr.DataArray(lat_dim,
+                                       dims={'LATITUDE': lat_dim},
+                                       coords={'LATITUDE': lat_dim})
+        xdr['LONGITUDE'] = xr.DataArray(lon_dim,
+                                        dims={'LONGITUDE': lon_dim},
+                                        coords={'LONGITUDE': lon_dim})  
+        
+        # Attach the DataSet to the Total object
+        self.xdr = xdr
+        
+        return
 
     
     # def to_multi_dimensional(self, grid_file):

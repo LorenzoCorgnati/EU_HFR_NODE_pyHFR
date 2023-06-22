@@ -5,10 +5,12 @@ import numpy as np
 import os
 import pandas as pd
 from pyproj import Geod, CRS
+from collections import OrderedDict
 import re
 import copy
 from shapely.geometry import Point
 import xarray as xr
+import netCDF4
 from common import fileParser, create_dir, make_encoding
 from calc import reckon, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 
@@ -43,6 +45,53 @@ from calc import reckon, createLonLatGridFromBB, createLonLatGridFromBBwera, cre
 
 #     ds = xr.concat(radial_dict.values(), 'time')
 #     return ds.sortby('time')
+
+def buildEHNradialFilename(networkID,siteCode,ts,ext):
+    """
+    This function builds the filename for radial files according to 
+    the structure used by the European HFR Node, i.e. networkID-stationID_YYYY_MM_DD_hhmm.
+    
+    INPUT:
+        networkID: ID of the HFR network
+        siteCode: code of the radial site
+        ts: timestamp as datetime object
+        ext: file extension
+        
+    OUTPUT:
+        radFilename: filename for radial file.
+    """
+    # Get the time related part of the filename
+    timeStr = ts.strftime("_%Y_%m_%d_%M%H")
+    
+    # Build the filename
+    radFilename = networkID + '-' + siteCode + timeStr + ext
+    
+    return radFilename
+
+def buildEHNradialFolder(basePath,siteCode,ts,vers):
+    """
+    This function builds the folder structure for storing  radial files according to 
+    the structure used by the European HFR Node, i.e. YYYY/YYYY_MM/YYYY_MM_DD/.
+    
+    INPUT:
+        basePath: base path
+        siteCode: code of the radial site
+        ts: timestamp as datetime object
+        vers: version of the data model
+        
+    OUTPUT:
+        radFolder: folder path for storing radial files.
+    """
+    # Strip trailing slash character
+    basePath = basePath.rstrip('/')
+    
+    # Get the time related part of the path
+    timeStr = ts.strftime("/%Y/%Y_%m/%Y_%m_%d/")
+    
+    # Build the folder path
+    radFolder = basePath + '/' + vers + '/' + siteCode + timeStr
+    
+    return radFolder
 
 def velocityMedianInDistLimits(cell,radData,distLim,g):
     """
@@ -225,29 +274,26 @@ class Radial(fileParser):
     
     def to_xarray_multidimensional(self, range_min=None, range_max=None, enhance=False):
         """
-        This function creates an xarray DataSet containing the variables of the radial
-        object bidimensionally expanded along the coordinate axes. 
-        The coordinate axes are chosen based on the file type: (RNGE,BEAR) for Codar
-        radials and (LOND,LATD) for WERA radials. The coordinate limits and steps are
-        taken from radial metadata. Only RNGE limits can be specified by the user.
+        This function creates a dictionary of xarray DataArrays containing the variables
+        of the Radial object multidimensionally expanded along the coordinate axes (T,Z,Y,X). 
+        The spatial coordinate axes are chosen based on the file type: (RNGE,BEAR) for 
+        Codar radials and (LOND,LATD) for WERA radials. The coordinate limits and steps 
+        are taken from radial metadata. Only RNGE limits can be specified by the user.
         Some refinements are performed on Codar data in order to comply CF convention
         for positive velocities and to have velocities in m/s.
+        The generated dictionary is attached to the Radial object, named as xdr.
         
         INPUT:
             range_min: minimum range value in km (if None it is taken from Radial metadata)
             range_max: maximum range value in km (if None it is taken from Radial metadata)
             
         OUTPUT:
-            ds: DataSet containing expanded variables
         """
-        # Initialize empty xarray dataset
-        ds = xr.Dataset()
+        # Initialize empty dictionary
+        xdr = OrderedDict()
         
         # process Codar radial
         if not self.is_wera:
-            # CF Standard: T, Z, Y, X
-            coords = ('TIME', 'DEPTH', 'rnge', 'bear')  # not using BEAR and RNGE for avoiding conflicts with the existing variable
-            
             # Check range limits   
             if range_min is None:
                 if 'RangeMin' in self.metadata:
@@ -258,7 +304,7 @@ class Radial(fileParser):
                 if 'RangeMax' in self.metadata:
                     range_max = float(self.metadata['RangeMax'].split()[0])
                 else:
-                    range_min = self.data.RNGE.min()
+                    range_max = self.data.RNGE.max()
             # Get range step
             if 'RangeResolutionKMeters' in self.metadata:
                 range_step = float(self.metadata['RangeResolutionKMeters'].split()[0])
@@ -319,23 +365,11 @@ class Radial(fileParser):
             X_map_idx = bearing_map_idx         # BEAR is X axis
             Y_map_idx = range_map_idx           # RNGE is Y axis
                 
-            # Add coordinate variables to dataset
-            timestamp = dt.datetime(*[int(s) for s in self.metadata['TimeStamp'].split()])
-            ds.coords['bear'] = bearing_dim
-            ds.coords['rnge'] = range_dim
-            ds.coords['TIME'] = pd.date_range(timestamp, periods=1)
-            ds.coords['DEPTH'] = np.zeros(1)
-            # ds.coords['lon'] = (('range', 'bearing'), lond.round(4))
-            # ds.coords['lat'] = (('range', 'bearing'), latd.round(4))
-    
             # create dictionary containing variables from dataframe in the shape of radial grid
             d = {key: np.tile(np.nan, bearing.shape) for key in self.data.keys()}
         
         # process WERA radials
         else:
-            # CF Standard: T, Z, Y, X
-            coords = ('TIME', 'DEPTH', 'LATITUDE', 'LONGITUDE')
-            
             # Get longitude limits and step
             if 'TopLeftLongitude' in self.metadata:
                 topLeftLon = float(self.metadata['TopLeftLongitude'].split()[0])
@@ -395,16 +429,6 @@ class Radial(fileParser):
             X_map_idx = lon_map_idx             # LONGITUDE is X axis
             Y_map_idx = lat_map_idx             # LATITUDE is Y axis
                 
-            # Add coordinate variables to dataset
-            if 'TimeZone' in self.metadata:
-                timestamp = dt.datetime.strptime(self.metadata['DateOfMeasurement'].replace(self.metadata['TimeZone'],'').strip(),"%d-%b-%y %H:%M")
-            else:
-                timestamp = dt.datetime.strptime(self.metadata['DateOfMeasurement'].replace('UTC','').strip(),"%d-%b-%y %H:%M")
-            ds.coords['LONGITUDE'] = lon_dim
-            ds.coords['LATITUDE'] = lat_dim
-            ds.coords['TIME'] = pd.date_range(timestamp, periods=1)
-            ds.coords['DEPTH'] = np.zeros(1)
-    
             # create dictionary containing variables from dataframe in the shape of radial grid
             d = {key: np.tile(np.nan, longitudes.shape) for key in self.data.keys()}        
             
@@ -416,35 +440,257 @@ class Radial(fileParser):
         # Add extra dimensions for time (T) and depth (Z) - CF Standard: T, Z, Y, X -> T=axis0, Z=axis1
         d = {k: np.expand_dims(np.float32(v), axis=(0,1)) for (k, v) in d.items()}            
 
-        # Add all variables to dataset
-        for k, v in d.items():
-            ds[k] = (coords, v)
-
         # Drop LOND, LATD, BEAR and RNGE variables (they are set as coordinates of the DataSet)
         if self.is_wera:
-            ds = ds.drop_vars(['LOND', 'LATD'])
+            d.pop('LOND')
+            d.pop('LATD') 
         else:
-            ds = ds.drop_vars(['BEAR', 'RNGE', 'LOND', 'LATD'])
-            ds = ds.rename(dict(bear='BEAR', rnge='RNGE'))  # rename coordinates to BEAR, RNGE   
+            d.pop('BEAR')
+            d.pop('RNGE')
+            d.pop('LOND')
+            d.pop('LATD') 
 
         # Refine Codar data
         if not self.is_wera:
-            # Add longitudes and latitudes evaluated from bearing/range grid to the dataset
-            coords = ('TIME', 'DEPTH', 'RNGE', 'BEAR')  # now BEAR and RNGE are coordinates of the dataset (bear and rnge were dropped)
-            ds['LONGITUDE'] = (coords, np.expand_dims(np.float32(lond), axis=(0,1)))
-            ds['LATITUDE'] = (coords, np.expand_dims(np.float32(latd), axis=(0,1)))
+            # Add longitudes and latitudes evaluated from bearing/range grid to the dictionary (BEAR and RNGE are coordinates)
+            d['LONGITUDE'] = np.expand_dims(np.float32(lond), axis=(0,1))
+            d['LATITUDE'] = np.expand_dims(np.float32(latd), axis=(0,1))
             # Flip sign so positive velocities are away from the radar as per CF conventions (only for Codar radials)
             flips = ['MINV', 'MAXV', 'VELO']
             for f in flips:
-                if f in ds:
-                    ds[f] = -ds[f]
+                if f in d:
+                    d[f] = -d[f]
             # Scale velocities to be in m/s (only for Codar radials)
             toMs = ['VELU', 'VELV', 'VELO', 'ESPC', 'ETMP', 'MINV', 'MAXV']
             for t in toMs:
-                if t in ds:
-                    ds[t] = ds[t]*0.01
+                if t in d:
+                    d[t] = d[t]*0.01
 
-        return ds
+        # Add all variables as xarray
+        if not self.is_wera:
+            for k, v in d.items():
+                xdr[k] = xr.DataArray(v,
+                                         dims={'TIME': v.shape[0], 'DEPTH': v.shape[1], 'RNGE': v.shape[2], 'BEAR': v.shape[3]},
+                                         coords={'TIME': pd.date_range(self.time, periods=1),
+                                                 'DEPTH': [0],
+                                                 'RNGE': range_dim,
+                                                 'BEAR': bearing_dim})
+        else:
+            for k, v in d.items():
+                xdr[k] = xr.DataArray(v,
+                                         dims={'TIME': v.shape[0], 'DEPTH': v.shape[1], 'LATITUDE': v.shape[2], 'LONGITUDE': v.shape[3]},
+                                         coords={'TIME': pd.date_range(self.time, periods=1),
+                                                 'DEPTH': [0],
+                                                 'LATITUDE': lat_dim,
+                                                 'LONGITUDE': lon_dim})
+            
+        # Add DataArray for coordinate variables
+        xdr['TIME'] = xr.DataArray(pd.date_range(self.time, periods=1),
+                                 dims={'TIME': len(pd.date_range(self.time, periods=1))},
+                                 coords={'TIME': pd.date_range(self.time, periods=1)})
+        xdr['DEPTH'] = xr.DataArray(0,
+                                 dims={'DEPTH': 1},
+                                 coords={'DEPTH': [0]})
+        if not self.is_wera:
+            xdr['RNGE'] = xr.DataArray(range_dim,
+                                 dims={'RNGE': range_dim},
+                                 coords={'RNGE': range_dim})
+            xdr['BEAR'] = xr.DataArray(bearing_dim,
+                                     dims={'BEAR': bearing_dim},
+                                     coords={'BEAR': bearing_dim})
+        else:
+            xdr['LATITUDE'] = xr.DataArray(lat_dim,
+                                 dims={'LATITUDE': lat_dim},
+                                 coords={'LATITUDE': lat_dim})
+            xdr['LONGITUDE'] = xr.DataArray(lon_dim,
+                                     dims={'LONGITUDE': lon_dim},
+                                     coords={'LONGITUDE': lon_dim})              
+        
+        # Attach the DataSet to the Radial object
+        self.xdr = xdr
+        
+        return
+    
+    def apply_ehn_datamodel(self, network_data, station_data, version):
+        """
+        This function applies the European standard data model developed in the
+        framework of the EuroGOOS HFR Task Team to the xarray DataSet containing  
+        the Radial objectdata and metadata. The xarray DataSet is created by the 
+        Radial object method to_xarray_multidimensional.
+        Global attributes are created starting from Radial object metadata and from 
+        DataFrames containing the information about HFR network and radial station
+        read from the EU HFR NODE database.
+        
+        INPUT:
+            network_data: DataFrame containing the information of the network to which the radial site belongs
+            station_data: DataFrame containing the information of the radial site that produced the radial
+            version: version of the data model
+            
+            
+        OUTPUT:
+        """
+        # Expand Radial object variables along the coordinate axes
+        self.to_xarray_multidimensional()
+        
+        # Set variables and their data types
+        dtypes = {"TIME": 'float64',
+          "DEPH": 'float32',
+          "BEAR": 'float32',
+          "RNGE": 'float32',
+          "LONGITUDE": 'float32',
+          "LATITUDE": 'float32',
+          "XDST": 'int32',
+          "YDST": 'int32',
+          "RDVA": 'int16',
+          "DRVA": 'int32',
+          "EWCT": 'int16',
+          "NSCT": 'int16',
+          "MAXV": 'int16',
+          "MINV": 'int16',
+          "ESPC": 'int16',
+          "ETMP": 'int16',
+          "HCSS": 'int32',
+          "EACC": 'int16',
+          "ERSC": 'int16',
+          "ERTC": 'int16',
+          "SPRC": 'int16',
+          "NARX": 'int8',
+          "NATX": 'int8',
+          "SLTR": 'int32',
+          "SLNR": 'int32',
+          "SLTT": 'int32',
+          "SLNT": 'int32',
+          "TIME_QC": 'int8',
+          "POSITION_QC": 'int8',
+          "DEPH_QC": 'int8',
+          "QCflag": 'int8',
+          "OWTR_QC": 'int8',
+          "MDFL_QC": 'int8',
+          "VART_QC": 'int8',
+          "CSPD_QC": 'int8',
+          "AVRB_QC": 'int8',
+          "RDCT_QC": 'int8',
+          "crs": 'int16',
+          "SCDR": 'char',
+          "SCDT": 'char',
+          "SDN_CRUISE": 'char',
+          "SDN_STATION": 'char',
+          "SDN_LOCAL_CDI_ID": 'char',
+          "SDN_EDMO_CODE": 'int16',
+          "SDN_REFERENCES": 'char',
+          "SDN_XLINK": 'char',
+          }
+
+        # Define variable scale_factor and add_offset attributes (not for coordinates according to CF conventions)
+        scale_factors = {"XDST": 0.001,
+                         "YDST": 0.001,
+                         "RDVA": 0.001,
+                         "DRVA": 0.001,
+                         "EWCT": 0.001,
+                         "NSCT": 0.001,
+                         "ESPC": 0.001,
+                         "ETMP": 0.001,
+                         "HCSS": 0.001**2,
+                         "EACC": 0.001,
+                         "MAXV": 0.001,
+                         "MINV": 0.001,
+                         "ERSC": 1,
+                         "ERTC": 1,
+                         "SPRC": 1,
+                         "NARX": 1,
+                         "NATX": 1,
+                         "SLTR": 0.001,
+                         "SLNR": 0.001,
+                         "SLTT": 0.001,
+                         "SLNT": 0.001,
+                         "TIME_QC": 1,
+                         "POSITION_QC": 1,
+                         "DEPH_QC": 1,
+                         "QCflag": 1,
+                         "OWTR_QC": 1,
+                         "MDFL_QC": 1,
+                         "VART_QC": 1,
+                         "CSPD_QC": 1,
+                         "AVRB_QC": 1,
+                         "RDCT_QC": 1}
+        
+        add_offsets = {key: np.int_(0).astype(dtypes[key]) for key in scale_factors.keys()}  
+        
+        # !!!!!!!!!!!!!!! CHECK IF NECESSARY TO CHANGE DATA TYPES TO scale_factors !!!!!!!!!!!
+        # add_offsets = {}        
+        # for key, value in scale_factors.items():
+        #     if isinstance(value, float):
+        
+        #         scale_factors[key] = np.float32(scale_factors[key])
+        #         add_offsets[key] = np.float32(0)
+        
+        #     else:
+        
+        #         # Generamos un conversor de tipo a partir del tipo de la variable:
+        #         conversor = np.dtype(dtypes[key])
+        
+        #         # Utilizamos el conversor para recodificar un tipo nativo de python a un escalar tipo numpy:
+        #         scale_factors[key] = np.int_(scale_factors[key]).astype(conversor)
+        #         add_offsets[key] = np.int_(0).astype(conversor)
+        
+        # Define variable _FillValue attributes (not for coordinates according to CF conventions)
+        _FillValues = {key: netCDF4.default_fillvals[np.dtype(dtypes[key]).kind + str(np.dtype(dtypes[key]).itemsize)] for key in scale_factors.keys()}
+        
+        # Backup method for building _FillValue
+        # _FillValues = {key: np.iinfo(dtypes[key]).min + 1 for key,value in dtypes.items() if 'int' in value}
+        # _FillValues.update({key: np.finfo(dtypes[key]).min + 1 for key,value in dtypes.items() if 'float' in value})
+        
+        # Drop unnecessary DataArrays from the DataSet
+        if not self.is_wera:
+            self.xdr.pop('VFLG')
+        
+        # Rename velocity related variables
+        self.xdr['DRVA'] = self.xdr.pop('HEAD')
+        self.xdr['RDVA'] = self.xdr.pop('VELO')
+        self.xdr['EWCT'] = self.xdr.pop('VELU')
+        self.xdr['NSCT'] = self.xdr.pop('VELV')
+        
+        # Add antenna related variables to the DataSet
+        self.xdr['NARX'] = xr.DataArray([station_data.iloc[0]['number_of_receive_antennas']], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xdr['NATX'] = xr.DataArray([station_data.iloc[0]['number_of_transmit_antennas']], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        
+        
+        
+        # Add SDN namespace variables to the DataSet
+        
+        # TO BE DONE
+        self.xds.variables['crs'] = xr.DataArray(np.int(0), )
+        
+        
+        
+        # Add variable attributes
+        
+        # TO BE DONE
+        
+        # Add global attributes
+        
+        # TO BE DONE
+        
+        # Encode data types, data packing and _FillValue to the variables of the DataSet
+        for k in self.xdr.keys:
+            if k in scale_factors:
+                self.xdr[k].encoding['scale_factor'] = scale_factors[k]
+            if k in add_offsets:
+                self.xdr[k].encoding['add_offset'] = add_offsets[k]
+            if k in dtypes:
+                self.xdr[k].encoding['dtype'] = dtypes[k]
+            if k in _FillValues:
+                self.xdr[k].encoding['_FillValue'] = _FillValues[k]
+        
+            
+        # Create netCDF
+        self.xds = xr.Dataset(self.xdr)
+        
+        # TO BE DONE
+        
+        
+        
+        return
 
     # def to_xarray_tabular(self, range_min=None, range_max=None, enhance=False):
     #     """

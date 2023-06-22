@@ -21,7 +21,6 @@ desired_width = 320
 pd.set_option('display.width', desired_width)
 datetime_format = '%Y%m%dT%H%M%SZ'
 
-
 def aggregate_netcdfs(files, save_dir, save_filename=None):
     """
     This function allows you to aggregate multiple netcdf files into a single file. It will concatenate on the coordinates of the netcdf files

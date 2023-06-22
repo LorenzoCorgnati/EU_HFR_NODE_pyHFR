@@ -33,8 +33,8 @@ import mysql.connector as sql
 from mysql.connector import errorcode
 import sqlalchemy
 from dateutil.relativedelta import relativedelta
-from radials import Radial
-from totals import Total
+from radials import Radial, buildEHNradialFolder, buildEHNradialFilename
+from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename
 from calc import true2mathAngle, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from pyproj import Geod
 import latlon
@@ -46,7 +46,74 @@ import pickle
 # PROCESSING FUNCTIONS
 ######################
 
-def applyRadialQC(qcRad,radSiteData,logger):
+def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,logger):
+    """
+    This function applies the European standard data model to radial object and saves
+    the resulting netCDF file. The Radial object is also saved as .rdl file via pickle
+    binary serialization.
+    
+    INPUTS:
+        dmRad: Series containing the radial to be processed with the related information
+        networkData: DataFrame containing the information of the network to which the radial site belongs
+        radSiteData: DataFrame containing the information of the radial site that produced the radial
+        vers: version of the data model
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        dmRad = Series containing the processed Radial object with the related information
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    dmErr = False
+    
+    try:
+    
+    #####
+    # Enhance Radial object with information from database
+    #####
+    
+        # Get the radial object
+        R = dmRad['Radial']
+        
+        # Add metadata related to range limits
+        R.metadata['RangeMin'] = '0 km'
+        if 'RangeResolutionKMeters' in R.metadata:
+            R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
+        elif 'RangeResolutionMeters' in R.metadata:
+            R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
+        
+    #####        
+    # Convert to standard data format (netCDF)  
+    #####
+    
+        # Check if the Radial was already processed
+        if dmRad['NRT_processed_flag'] == 0:
+            # Apply the standard data model
+            R.apply_ehn_datamodel(networkData,radSiteData,vers)
+    
+    
+    
+    #####
+    # Save Radial object as .rdl file with pickle
+    #####
+    
+        # with open('filename.rdl', 'wb') as rdlFile:
+        #      pickle.dump(R, rdlFile)
+    
+    
+        
+    except Exception as err:
+        dmErr = True
+        logger.error(err.args[0] + ' for radial file ' + R.file_name)     
+    
+    return  dmRad
+
+def applyEHNradialQC(qcRad,radSiteData,vers,logger):
     """
     This function applies QC procedures to radial object according to the European 
     standard data model.
@@ -54,12 +121,12 @@ def applyRadialQC(qcRad,radSiteData,logger):
     INPUTS:
         qcRad: Series containing the radial to be processed with the related information
         radSiteData: DataFrame containing the information of the radial site that produced the radial
+        vers: version of the data model
         logger: logger object of the current processing
 
         
     OUTPUTS:
-        qcErr = boolean flag expressing the execution error (True = error, False = no error)
-        qcRad = Series containing the processed radial with the related information
+        R = processed Radial object
         
     """
     #####
@@ -74,11 +141,12 @@ def applyRadialQC(qcRad,radSiteData,logger):
     #####
     
     try:
+        # Get the radial object
+        R = qcRad['Radial']
+        
         # Check if the Radial was already processed
         if qcRad['NRT_processed_flag'] == 0:
-            # Get the radial object
-            R = qcRad['Radial']
-            
+                        
             # Initialize QC metadata
             R.initialize_qc()
             
@@ -86,57 +154,42 @@ def applyRadialQC(qcRad,radSiteData,logger):
             R.qc_ehn_over_water()
             
             # CSPD
-            R.qc_ehn_maximum_velocity(2)
+            R.qc_ehn_maximum_velocity(radSiteData.iloc[0]['radial_QC_velocity_threshold'])
             
-            # # Temporal Gradient
-            # prevHourRadFile = '../test/test_HFRadarPy/data/radials/ruv/TINO/RDLm_TINO_2021_01_08_0900.ruv'
-            # if os.path.exists(prevHourRadFile):
-            #     r0 = Radial(prevHourRadFile)
-            # else:
-            #     r0 = None
-            # R.qc_ehn_temporal_derivative(r0,0.5)
-            # prevHourRadFile = '../test/test_HFRadarPy/data/radials/crad/SYLT/2022314073139_syl.CUR.crad_ascii'
-            # if os.path.exists(prevHourRadFile):
-            #     r0 = Radial(prevHourRadFile)
-            # else:
-            #     r0 = None
-            # RW.qc_ehn_temporal_derivative(r0,0.5)
-
-            # # VART
-            # RW.qc_ehn_maximum_variance(1)
-            # RL.qc_ehn_maximum_variance(1)
-            # R.qc_ehn_maximum_variance(1)
-
+            if R.is_wera:
+                # VART
+                R.qc_ehn_maximum_variance(radSiteData.iloc[0]['radial_QC_variance_threshold'])
+            else:
+                # Temporal Gradient
+                prevHourTime = R.time-dt.timedelta(minutes=radSiteData.iloc[0]['temporal_resolution'])
+                prevHourBaseFolder = radSiteData.iloc[0]['radial_HFRnetCDF_folder_path'].replace('nc','rdl')
+                prevHourFolderPath = buildEHNradialFolder(prevHourBaseFolder,radSiteData.iloc[0]['station_id'],prevHourTime,vers)
+                prevHourFileName = buildEHNradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],prevHourTime,'.rdl')
+                prevHourRadFile = prevHourFolderPath + prevHourFileName     # previous hour radial file
+                if os.path.exists(prevHourRadFile):
+                    with open(prevHourRadFile, 'rb') as rdlFile:
+                        R = pickle.load(rdlFile)
+                else:
+                    r0 = None
+                R.qc_ehn_temporal_derivative(r0,radSiteData.iloc[0]['radial_QC_temporal_derivative_threshold'])
             
+            # MDFL
+            R.qc_ehn_median_filter(radSiteData.iloc[0]['radial_QC_median_filter_RCLim'],radSiteData.iloc[0]['radial_QC_median_filter_CurLim'])
 
-            # # AVRB
-            # R.qc_ehn_avg_radial_bearing(175,210)
-            # RW.qc_ehn_avg_radial_bearing(175,210)
-            # RL.qc_ehn_avg_radial_bearing(175,210)
+            # AVRB
+            R.qc_ehn_avg_radial_bearing(radSiteData.iloc[0]['radial_QC_average_radial_bearing_min'],radSiteData.iloc[0]['radial_QC_average_radial_bearing_max'])
 
-            # # RDCT
-            # R.qc_ehn_radial_count(175)
-            # RW.qc_ehn_radial_count(210)
-            # RL.qc_ehn_radial_count(175)
+            # RDCT
+            R.qc_ehn_radial_count(radSiteData.iloc[0]['radial_QC_radial_count_threshold'])           
 
-            
-
-            # # MDFL
-            # R.qc_ehn_median_filter(10,0.5)
-            # RW.qc_ehn_median_filter(10,0.5)
-            # RL.qc_ehn_median_filter(10,0.5)
-
-            # # Overall QC
-            # R.qc_ehn_overall_qc_flag()
-            # RW.qc_ehn_overall_qc_flag()
-            # RL.qc_ehn_overall_qc_flag()
+            # Overall QC
+            R.qc_ehn_overall_qc_flag()
         
     except Exception as err:
         qcErr = True
-        logger.error(err.args[0])     
+        logger.error(err.args[0] + ' for radial file ' + R.file_name)     
     
-    return qcErr, qcRad
-    
+    return  R    
     
 def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,logger):
     """
@@ -162,12 +215,14 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
 
         
     OUTPUTS:
-        pRerr = boolean flag expressing the execution error (True = error, False = no error)
         
     """
     #####
     # Setup
     #####
+    
+    # Set the version of the data model
+    vers = 'v3'
     
     # Initialize error flag
     pRerr = False
@@ -176,7 +231,7 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
     numActiveStations = stationData['operational_to'].isna().sum() 
     
     try:
-        logger.info('Radial processing started for ' + networkID + ' network.') 
+        logger.info('Radial processing started for ' + networkID + ' network ' + '(' + vers + ').') 
 
         #####
         # Enhance the radial DataFrame
@@ -190,32 +245,23 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         groupedRad.rename(index=indexMapper,inplace=True)        
         
         #####        
-        # Radial data QC    
+        # Apply radial data QC    
         #####
         
-        qcErr, groupedRad = groupedRad.apply(lambda x: applyRadialQC(x,stationData.loc[stationData['station_id'] == x.station_id],logger),axis=1)
+        groupedRad['Radial'] = groupedRad.apply(lambda x: applyEHNradialQC(x,stationData.loc[stationData['station_id'] == x.station_id],vers,logger),axis=1)
         
-       
         #####        
-        # Radial data conversion to standard format (netCDF)
+        # Radial data conversion to standard data format (netCDF)
         #####
         
-        # TO BE DONE - da fare solo per radiali con NRT_processed_flag=0 e SOLO SE qcErr=False
+        groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,logger),axis=1)
+                
         
-        # # INSERIRE range_min e range_max IN R.metadata per radiali Codar - CHECK NOMI METADATI
-        # R.metadata['RangeMin'] = '0 km'
-        # if 'RangeResolutionKMeters' in R.metadata:
-        #     R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(numberOfRangeCells-1)) + ' km'
-        # elif 'RangeResolutionMeters' in self.metadata:
-        #     R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(numberOfRangeCells-1)) + ' km'
-       
-        # # OPTIONAL: save Radial object as .rdl file with pickle
-        # with open('filename.rdl', 'wb') as rdlFile:
-        #     pickle.dump(R, rdlFile)
+        
         
         
         #####        
-        # Insert information into database    
+        # Insert radial information into database    
         #####
         
         # TO BE DONE
@@ -257,18 +303,9 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         
     except Exception as err:
         pRerr = True
-        logger.error(err.args[0])    
+        logger.error(err.strerror)    
     
-    ####################
-        
-    if(not pRerr):
-        logger.info('Successfully executed for ' + networkID + ' network.')
-    else:
-        logger.info('Exited with errors for ' + networkID + ' network.')
-                
-    ####################    
-    
-    return pRerr
+    return
 
 def selectRadials(networkID,startDate,eng,logger):
     """
@@ -285,7 +322,6 @@ def selectRadials(networkID,startDate,eng,logger):
     OUTPUTS:
         radialsToBeProcessed: DataFrame containing all the radials to be processed for the input 
                               network with the related information
-        sRerr = boolean flag expressing the execution error (True = error, False = no error)
         
     """
     #####
@@ -315,18 +351,9 @@ def selectRadials(networkID,startDate,eng,logger):
                 
     except Exception as err:
         sRerr = True
-        logger.error(err.args[0])
+        logger.error(err.strerror + ' for network ' + networkID)
             
-    ####################
-        
-    if(not sRerr):
-        logger.info('Successfully executed for ' + networkID + ' network.')
-    else:
-        logger.info('Exited with errors for ' + networkID + ' network.')
-                
-    ####################    
-    
-    return radialsToBeProcessed, sRerr
+    return radialsToBeProcessed
 
 
 def inputTotals(networkID,networkData,startDate,eng,logger):
@@ -344,7 +371,6 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
 
         
     OUTPUTS:
-        iTerr = boolean flag expressing the execution error (True = error, False = no error)
         
     """
     #####
@@ -415,20 +441,11 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
                             logger.error('MySQL error ' + err._message())
                     except Exception as err:
                         iTerr = True
-                        logger.error(err.args[0] + ' for file ' + fileName)
+                        logger.error(err.strerror + ' for file ' + fileName)
                     
     except Exception as err:
         iTerr = True
-        logger.error(err.args[0])
-    
-    ####################
-        
-    if(not iTerr):
-        logger.info('Successfully executed for ' + networkID + ' network.')
-    else:
-        logger.info('Exited with errors for ' + networkID + ' network.')
-                
-    ####################    
+        logger.error(err.strerror)
     
     return
 
@@ -450,7 +467,6 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
 
         
     OUTPUTS:
-        iRerr = boolean flag expressing the execution error (True = error, False = no error)
         
     """
     #####
@@ -528,20 +544,11 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                                 logger.error('MySQL error ' + err._message())
                         except Exception as err:
                             iRerr = True
-                            logger.error(err.args[0] + ' for file ' + fileName)
+                            logger.error(err.strerror + ' for file ' + fileName)
                         
         except Exception as err:
             iRerr = True
-            logger.error(err.args[0])
-    
-    ####################
-        
-    if(not iRerr):
-        logger.info('Successfully executed for ' + networkID + ' network.')
-    else:
-        logger.info('Exited with errors for ' + networkID + ' network.')
-                
-    ####################    
+            logger.error(err.strerror + ' for station ' + stationID)
     
     return
 
@@ -580,45 +587,52 @@ def processNetwork(networkID,memory,sqlConfig):
     # Setup
     #####
     
-    # Create the folder for the network log
-    networkLogFolder = '/var/log/EU_HFR_NODE_NRT/' + networkID
-    if not os.path.isdir(networkLogFolder):
-        os.mkdir(networkLogFolder)
-           
-    # Create logger
-    logger = logging.getLogger('EU_HFR_NODE_NRT_' + networkID)
-    logger.setLevel(logging.INFO)
-    # Create console handler and set level to DEBUG
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    # Create logfile handler
-    lfh = logging.FileHandler(networkLogFolder + '/EU_HFR_NODE_NRT_' + networkID + '.log')
-    lfh.setLevel(logging.INFO)
-    # Create formatter
-    formatter = logging.Formatter('[%(asctime)s] -- %(levelname)s -- %(module)s - %(funcName)s - %(message)s', datefmt = '%d-%m-%Y %H:%M:%S')
-    # Add formatter to lfh and ch
-    lfh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-    # Add lfh and ch to logger
-    logger.addHandler(lfh)
-    logger.addHandler(ch)
-    
-    # Initialize error flag
-    pNerr = False
-    
-    # Set datetime of the starting date of the processing period
-    startDate = (dt.datetime.now()- relativedelta(days=memory)).strftime("%Y-%m-%d")
+    try:
+        # Create the folder for the network log
+        networkLogFolder = '/var/log/EU_HFR_NODE_NRT/' + networkID
+        if not os.path.isdir(networkLogFolder):
+            os.mkdir(networkLogFolder)
+               
+        # Create logger
+        logger = logging.getLogger('EU_HFR_NODE_NRT_' + networkID)
+        logger.setLevel(logging.INFO)
+        # Create console handler and set level to DEBUG
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        # Create logfile handler
+        lfh = logging.FileHandler(networkLogFolder + '/EU_HFR_NODE_NRT_' + networkID + '.log')
+        lfh.setLevel(logging.INFO)
+        # Create formatter
+        formatter = logging.Formatter('[%(asctime)s] -- %(levelname)s -- %(module)s - %(funcName)s - %(message)s', datefmt = '%d-%m-%Y %H:%M:%S')
+        # Add formatter to lfh and ch
+        lfh.setFormatter(formatter)
+        ch.setFormatter(formatter)
+        # Add lfh and ch to logger
+        logger.addHandler(lfh)
+        logger.addHandler(ch)
+        
+        # Initialize error flag
+        pNerr = False
+        
+        # Set datetime of the starting date of the processing period
+        startDate = (dt.datetime.now()- relativedelta(days=memory)).strftime("%Y-%m-%d")
+        
+    except Exception as err:
+        pNerr = True
+        logger.error(err.strerror)
+        logger.info('Exited with errors.')
+        return
     
     #####
     # Retrieve information from database
     #####
     
-    # Create SQLAlchemy engine for connecting to database
-    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
-                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
-                                   sqlConfig['database'])
-        
     try:
+        # Create SQLAlchemy engine for connecting to database
+        eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
+                                       sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
+                                       sqlConfig['database'])
+        
         # Set and execute the query and get the HFR network data
         networkSelectQuery = 'SELECT * FROM network_tb WHERE network_id=\'' + networkID + '\''
         networkData = pd.read_sql(networkSelectQuery, con=eng)
@@ -642,49 +656,47 @@ def processNetwork(networkID,memory,sqlConfig):
     # Input HFR data
     #####
     
-    # Input radial data
-    pNerr = inputRadials(networkID, stationData, startDate, eng, logger)
-    # Input total data
-    pNerr = inputTotals(networkID, networkData, startDate, eng, logger)
-    
-    #####
-    # Process HFR data
-    #####
-    
-    # Select radials to be processed
-    radialsToBeProcessed, pNerr = selectRadials(networkID,startDate,eng,logger)
-    
-    # Process radials
-    radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))
+    try:
+        # Input radial data
+        inputRadials(networkID, stationData, startDate, eng, logger)
+        # Input total data
+        inputTotals(networkID, networkData, startDate, eng, logger)
+        
+        #####
+        # Process HFR data
+        #####
+        
+        # Select radials to be processed
+        radialsToBeProcessed = selectRadials(networkID,startDate,eng,logger)
+        
+        # Process radials
+        radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))
+            
+            
         
         
-    
-    
-    # Selection of totals to be converted based on timestamp
-    
-    # Total data QC
-    
-    # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
-    T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
-    T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
-    T.metadata['BBminLatitude'] = str(latMin) + ' deg'
-    T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
-    
-    # Save Total object as .ttl file with pickle
-    with open('filename.ttl', 'wb') as ttlFile:
-        pickle.dump(T, ttlFile)
-    
-    # Total data conversion to standard format (netCDF)
-    
-    
-    ####################
+        # Selection of totals to be converted based on timestamp
         
-    if(not pNerr):
-        logger.info('Successfully executed for ' + networkID + ' network.')
-    else:
-        logger.info('Exited with errors for ' + networkID + ' network.')
-                
-    ####################
+        # Total data QC
+        
+        # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
+        T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
+        T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
+        T.metadata['BBminLatitude'] = str(latMin) + ' deg'
+        T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
+        
+        # Save Total object as .ttl file with pickle
+        with open('filename.ttl', 'wb') as ttlFile:
+            pickle.dump(T, ttlFile)
+        
+        # Total data conversion to standard format (netCDF)
+        
+    except Exception as err:
+        pNerr = True
+        logger.error(err.strerror)
+        logger.info('Exited with errors.')
+        return
+    
     
     return
 
@@ -751,13 +763,13 @@ def main(argv):
 # Network data collection
 #####
     
-    # Create SQLAlchemy engine for connecting to database
-    eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
-                                   sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
-                                   sqlConfig['database'])
-        
-    # Set and execute the query and get the HFR network IDs to be processed
     try:
+        # Create SQLAlchemy engine for connecting to database
+        eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
+                                       sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
+                                       sqlConfig['database'])
+            
+        # Set and execute the query and get the HFR network IDs to be processed
         networkSelectQuery = 'SELECT network_id FROM network_tb WHERE EU_HFR_processing_flag=1'
         networkIDs = pd.read_sql(networkSelectQuery, con=eng)
         numNetworks = networkIDs.shape[0]
@@ -772,10 +784,15 @@ def main(argv):
 # Process launch and monitor
 #####
 
-# TO BE DONE USING MULTIPROCESSING
-    i = 0
-    processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
-    # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
+# TO BE DONE USING MULTIPROCESSING - AAGIUNGERE try except
+    try:
+        i = 0
+        processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
+        # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
+    
+    except Exception as err:
+        EHNerr = True
+        logger.error(err.strerror)
     
     
 ####################
