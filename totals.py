@@ -639,19 +639,23 @@ class Total(fileParser):
                 if t in d:
                     d[t] = d[t]*0.01
 
+        # Evaluatetimestamp as number of days since 1950-01-01T00:00:00Z
+        timeDelta = self.time - dt.datetime.strptime('1950-01-01T00:00:00Z','%Y-%m-%dT%H:%M:%SZ')
+        ncTime = timeDelta.days + timeDelta.seconds / (60*60*24)
+        
         # Add all variables as xarray
         for k, v in d.items():
             xdr[k] = xr.DataArray(v,
                                   dims={'TIME': v.shape[0], 'DEPTH': v.shape[1], 'LATITUDE': v.shape[2], 'LONGITUDE': v.shape[3]},
-                                  coords={'TIME': pd.date_range(self.time, periods=1),
+                                  coords={'TIME': [ncTime],
                                           'DEPTH': [0],
                                           'LATITUDE': lat_dim,
                                           'LONGITUDE': lon_dim})
         
         # Add DataArray for coordinate variables
-        xdr['TIME'] = xr.DataArray(pd.date_range(self.time, periods=1),
+        xdr['TIME'] = xr.DataArray(ncTime,
                                  dims={'TIME': len(pd.date_range(self.time, periods=1))},
-                                 coords={'TIME': pd.date_range(self.time, periods=1)})
+                                 coords={'TIME': [ncTime]})
         xdr['DEPTH'] = xr.DataArray(0,
                                  dims={'DEPTH': 1},
                                  coords={'DEPTH': [0]})

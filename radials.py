@@ -466,12 +466,16 @@ class Radial(fileParser):
                 if t in d:
                     d[t] = d[t]*0.01
 
+        # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
+        timeDelta = self.time - dt.datetime.strptime('1950-01-01T00:00:00Z','%Y-%m-%dT%H:%M:%SZ')
+        ncTime = timeDelta.days + timeDelta.seconds / (60*60*24)
+        
         # Add all variables as xarray
         if not self.is_wera:
             for k, v in d.items():
                 xdr[k] = xr.DataArray(v,
                                          dims={'TIME': v.shape[0], 'DEPTH': v.shape[1], 'RNGE': v.shape[2], 'BEAR': v.shape[3]},
-                                         coords={'TIME': pd.date_range(self.time, periods=1),
+                                         coords={'TIME': [ncTime],
                                                  'DEPTH': [0],
                                                  'RNGE': range_dim,
                                                  'BEAR': bearing_dim})
@@ -479,15 +483,15 @@ class Radial(fileParser):
             for k, v in d.items():
                 xdr[k] = xr.DataArray(v,
                                          dims={'TIME': v.shape[0], 'DEPTH': v.shape[1], 'LATITUDE': v.shape[2], 'LONGITUDE': v.shape[3]},
-                                         coords={'TIME': pd.date_range(self.time, periods=1),
+                                         coords={'TIME': [ncTime],
                                                  'DEPTH': [0],
                                                  'LATITUDE': lat_dim,
                                                  'LONGITUDE': lon_dim})
             
         # Add DataArray for coordinate variables
-        xdr['TIME'] = xr.DataArray(pd.date_range(self.time, periods=1),
+        xdr['TIME'] = xr.DataArray(ncTime,
                                  dims={'TIME': len(pd.date_range(self.time, periods=1))},
-                                 coords={'TIME': pd.date_range(self.time, periods=1)})
+                                 coords={'TIME': [ncTime]})
         xdr['DEPTH'] = xr.DataArray(0,
                                  dims={'DEPTH': 1},
                                  coords={'DEPTH': [0]})
@@ -532,6 +536,11 @@ class Radial(fileParser):
         # Expand Radial object variables along the coordinate axes
         self.to_xarray_multidimensional()
         
+        # Set auxiliary coordinate sizes
+        maxsiteSize = 1
+        refmaxSize = 10
+        maxinstSize = 1
+        
         # Set variables and their data types
         dtypes = {"TIME": 'float64',
           "DEPH": 'float32',
@@ -562,7 +571,7 @@ class Radial(fileParser):
           "SLNT": 'int32',
           "TIME_QC": 'int8',
           "POSITION_QC": 'int8',
-          "DEPH_QC": 'int8',
+          "DEPTH_QC": 'int8',
           "QCflag": 'int8',
           "OWTR_QC": 'int8',
           "MDFL_QC": 'int8',
@@ -571,14 +580,14 @@ class Radial(fileParser):
           "AVRB_QC": 'int8',
           "RDCT_QC": 'int8',
           "crs": 'int16',
-          "SCDR": 'char',
-          "SCDT": 'char',
-          "SDN_CRUISE": 'char',
-          "SDN_STATION": 'char',
-          "SDN_LOCAL_CDI_ID": 'char',
+          # "SCDR": 'char',
+          # "SCDT": 'char',
+          # "SDN_CRUISE": 'char',
+          # "SDN_STATION": 'char',
+          # "SDN_LOCAL_CDI_ID": 'char',
           "SDN_EDMO_CODE": 'int16',
-          "SDN_REFERENCES": 'char',
-          "SDN_XLINK": 'char',
+          # "SDN_REFERENCES": 'char',
+          # "SDN_XLINK": 'char',
           }
 
         # Define variable scale_factor and add_offset attributes (not for coordinates according to CF conventions)
@@ -605,7 +614,7 @@ class Radial(fileParser):
                          "SLNT": 0.001,
                          "TIME_QC": 1,
                          "POSITION_QC": 1,
-                         "DEPH_QC": 1,
+                         "DEPTH_QC": 1,
                          "QCflag": 1,
                          "OWTR_QC": 1,
                          "MDFL_QC": 1,
@@ -643,6 +652,9 @@ class Radial(fileParser):
         # Drop unnecessary DataArrays from the DataSet
         if not self.is_wera:
             self.xdr.pop('VFLG')
+            
+        # Add coordinate reference system to the dictionary
+        self.xdr['crs'] = xr.DataArray(np.int(0), )
         
         # Rename velocity related variables
         self.xdr['DRVA'] = self.xdr.pop('HEAD')
@@ -650,17 +662,38 @@ class Radial(fileParser):
         self.xdr['EWCT'] = self.xdr.pop('VELU')
         self.xdr['NSCT'] = self.xdr.pop('VELV')
         
-        # Add antenna related variables to the DataSet
-        self.xdr['NARX'] = xr.DataArray([station_data.iloc[0]['number_of_receive_antennas']], dims={'TIME': len(pd.date_range(self.time, periods=1))})
-        self.xdr['NATX'] = xr.DataArray([station_data.iloc[0]['number_of_transmit_antennas']], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        # Add antenna related variables to the dictionary
+        # Number of antennas
+        self.xdr['NARX'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['number_of_receive_antennas'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        self.xdr['NATX'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['number_of_transmit_antennas'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         
+        # Longitude and latitude of antennas
+        self.xdr['SLTR'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['site_lat'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        self.xdr['SLNR'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['site_lon'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        self.xdr['SLTT'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['site_lat'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        self.xdr['SLNT'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['site_lon'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         
+        # Codes of antennas
+        antCode = ('%s' % station_data.iloc[0]['station_id']).encode()
+        self.xdr['SCDR'] = xr.DataArray(np.array([[antCode]]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        self.xdr['SCDT'] = xr.DataArray(np.array([[antCode]]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+                
+        # Add SDN namespace variables to the dictionary
+        siteCode = ('%s' % station_data.iloc[0]['network_id']).encode()
+        self.xdr['SDN_CRUISE'] = xr.DataArray([siteCode], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        platformCode = ('%s' % station_data.iloc[0]['network_id'] + '-' + station_data.iloc[0]['station_id']).encode()
+        self.xdr['SDN_STATION'] = xr.DataArray([platformCode], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        ID = ('%s' % platformCode.decode() + '_' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ')).encode()
+        self.xdr['SDN_LOCAL_CDI_ID'] = xr.DataArray([ID], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xdr['SDN_EDMO_CODE'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['EDMO_code'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXINST': maxinstSize})
+        self.xdr['SDN_REFERENCES'] = xr.DataArray([network_data.iloc[0]['metadata_page']], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + network_data.iloc[0]['metadata_page'] + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
+        self.xdr['SDN_XLINK'] = xr.DataArray(np.array([[sdnXlink]]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'REFMAX': refmaxSize})
         
-        # Add SDN namespace variables to the DataSet
-        
-        # TO BE DONE
-        self.xds.variables['crs'] = xr.DataArray(np.int(0), )
-        
+        # Add spatial and temporal coordinate QC variables (set to good data due to the nature of HFR system)
+        self.xdr['TIME_QC'] = xr.DataArray([1],dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xdr['POSITION_QC'] = self.xdr['QCflag'] * 0 + 1
+        self.xdr['DEPTH_QC'] = xr.DataArray([1],dims={'TIME': len(pd.date_range(self.time, periods=1))})
         
         
         # Add variable attributes
@@ -670,9 +703,12 @@ class Radial(fileParser):
         # Add global attributes
         
         # TO BE DONE
+        siteCode.decode()
+        platformCode.decode()
+        ID.decode()
         
         # Encode data types, data packing and _FillValue to the variables of the DataSet
-        for k in self.xdr.keys:
+        for k in self.xdr.keys():
             if k in scale_factors:
                 self.xdr[k].encoding['scale_factor'] = scale_factors[k]
             if k in add_offsets:
