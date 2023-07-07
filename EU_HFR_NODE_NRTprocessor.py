@@ -172,6 +172,7 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
                 else:
                     r0 = None
                 R.qc_ehn_temporal_derivative(r0,radSiteData.iloc[0]['radial_QC_temporal_derivative_threshold'])
+                R.metadata['QCTest']['VART_QC'] = 'Variance Threshold QC Test not applicable to Direction Finding systems. ' + R.metadata['QCTest']['VART_QC']
             
             # MDFL
             R.qc_ehn_median_filter(radSiteData.iloc[0]['radial_QC_median_filter_RCLim'],radSiteData.iloc[0]['radial_QC_median_filter_CurLim'])

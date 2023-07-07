@@ -13,6 +13,7 @@ import xarray as xr
 import netCDF4
 from common import fileParser, create_dir, make_encoding
 from calc import reckon, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+import json
 
 # try:
 #     # check for local configuration file
@@ -521,6 +522,10 @@ class Radial(fileParser):
         framework of the EuroGOOS HFR Task Team to the xarray DataSet containing  
         the Radial objectdata and metadata. The xarray DataSet is created by the 
         Radial object method to_xarray_multidimensional.
+        Variable data types and data packing information are collected from
+        "Data_Models/EHN/Radials/Radial_Data_Packing.json" file.
+        Variable attribute schema is collected from 
+        "Data_Models/EHN/Radials/Radial_Variables.json" file.
         Global attributes are created starting from Radial object metadata and from 
         DataFrames containing the information about HFR network and radial station
         read from the EU HFR NODE database.
@@ -541,113 +546,15 @@ class Radial(fileParser):
         refmaxSize = 10
         maxinstSize = 1
         
-        # Set variables and their data types
-        dtypes = {"TIME": 'float64',
-          "DEPH": 'float32',
-          "BEAR": 'float32',
-          "RNGE": 'float32',
-          "LONGITUDE": 'float32',
-          "LATITUDE": 'float32',
-          "XDST": 'int32',
-          "YDST": 'int32',
-          "RDVA": 'int16',
-          "DRVA": 'int32',
-          "EWCT": 'int16',
-          "NSCT": 'int16',
-          "MAXV": 'int16',
-          "MINV": 'int16',
-          "ESPC": 'int16',
-          "ETMP": 'int16',
-          "HCSS": 'int32',
-          "EACC": 'int16',
-          "ERSC": 'int16',
-          "ERTC": 'int16',
-          "SPRC": 'int16',
-          "NARX": 'int8',
-          "NATX": 'int8',
-          "SLTR": 'int32',
-          "SLNR": 'int32',
-          "SLTT": 'int32',
-          "SLNT": 'int32',
-          "TIME_QC": 'int8',
-          "POSITION_QC": 'int8',
-          "DEPTH_QC": 'int8',
-          "QCflag": 'int8',
-          "OWTR_QC": 'int8',
-          "MDFL_QC": 'int8',
-          "VART_QC": 'int8',
-          "CSPD_QC": 'int8',
-          "AVRB_QC": 'int8',
-          "RDCT_QC": 'int8',
-          "crs": 'int16',
-          # "SCDR": 'char',
-          # "SCDT": 'char',
-          # "SDN_CRUISE": 'char',
-          # "SDN_STATION": 'char',
-          # "SDN_LOCAL_CDI_ID": 'char',
-          "SDN_EDMO_CODE": 'int16',
-          # "SDN_REFERENCES": 'char',
-          # "SDN_XLINK": 'char',
-          }
-
-        # Define variable scale_factor and add_offset attributes (not for coordinates according to CF conventions)
-        scale_factors = {"XDST": 0.001,
-                         "YDST": 0.001,
-                         "RDVA": 0.001,
-                         "DRVA": 0.001,
-                         "EWCT": 0.001,
-                         "NSCT": 0.001,
-                         "ESPC": 0.001,
-                         "ETMP": 0.001,
-                         "HCSS": 0.001**2,
-                         "EACC": 0.001,
-                         "MAXV": 0.001,
-                         "MINV": 0.001,
-                         "ERSC": 1,
-                         "ERTC": 1,
-                         "SPRC": 1,
-                         "NARX": 1,
-                         "NATX": 1,
-                         "SLTR": 0.001,
-                         "SLNR": 0.001,
-                         "SLTT": 0.001,
-                         "SLNT": 0.001,
-                         "TIME_QC": 1,
-                         "POSITION_QC": 1,
-                         "DEPTH_QC": 1,
-                         "QCflag": 1,
-                         "OWTR_QC": 1,
-                         "MDFL_QC": 1,
-                         "VART_QC": 1,
-                         "CSPD_QC": 1,
-                         "AVRB_QC": 1,
-                         "RDCT_QC": 1}
+        # Get data packing information per variable
+        f = open('Data_Models/EHN/Radials/Radial_Data_Packing.json')
+        dataPacking = json.loads(f.read())
+        f.close()
         
-        add_offsets = {key: np.int_(0).astype(dtypes[key]) for key in scale_factors.keys()}  
-        
-        # !!!!!!!!!!!!!!! CHECK IF NECESSARY TO CHANGE DATA TYPES TO scale_factors !!!!!!!!!!!
-        # add_offsets = {}        
-        # for key, value in scale_factors.items():
-        #     if isinstance(value, float):
-        
-        #         scale_factors[key] = np.float32(scale_factors[key])
-        #         add_offsets[key] = np.float32(0)
-        
-        #     else:
-        
-        #         # Generamos un conversor de tipo a partir del tipo de la variable:
-        #         conversor = np.dtype(dtypes[key])
-        
-        #         # Utilizamos el conversor para recodificar un tipo nativo de python a un escalar tipo numpy:
-        #         scale_factors[key] = np.int_(scale_factors[key]).astype(conversor)
-        #         add_offsets[key] = np.int_(0).astype(conversor)
-        
-        # Define variable _FillValue attributes (not for coordinates according to CF conventions)
-        _FillValues = {key: netCDF4.default_fillvals[np.dtype(dtypes[key]).kind + str(np.dtype(dtypes[key]).itemsize)] for key in scale_factors.keys()}
-        
-        # Backup method for building _FillValue
-        # _FillValues = {key: np.iinfo(dtypes[key]).min + 1 for key,value in dtypes.items() if 'int' in value}
-        # _FillValues.update({key: np.finfo(dtypes[key]).min + 1 for key,value in dtypes.items() if 'float' in value})
+        # Get variable attributes
+        f = open('Data_Models/EHN/Radials/Radial_Variables.json')
+        radVariables = json.loads(f.read())
+        f.close()
         
         # Drop unnecessary DataArrays from the DataSet
         if not self.is_wera:
@@ -676,53 +583,98 @@ class Radial(fileParser):
         # Codes of antennas
         antCode = ('%s' % station_data.iloc[0]['station_id']).encode()
         self.xdr['SCDR'] = xr.DataArray(np.array([[antCode]]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        self.xdr['SCDR'].encoding['char_dim_name'] = 'STRING' + str(len(antCode))
         self.xdr['SCDT'] = xr.DataArray(np.array([[antCode]]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        self.xdr['SCDT'].encoding['char_dim_name'] = 'STRING' + str(len(antCode))
                 
         # Add SDN namespace variables to the dictionary
         siteCode = ('%s' % station_data.iloc[0]['network_id']).encode()
         self.xdr['SDN_CRUISE'] = xr.DataArray([siteCode], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xdr['SDN_CRUISE'].encoding['char_dim_name'] = 'STRING' + str(len(siteCode))
         platformCode = ('%s' % station_data.iloc[0]['network_id'] + '-' + station_data.iloc[0]['station_id']).encode()
         self.xdr['SDN_STATION'] = xr.DataArray([platformCode], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xdr['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
         ID = ('%s' % platformCode.decode() + '_' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ')).encode()
         self.xdr['SDN_LOCAL_CDI_ID'] = xr.DataArray([ID], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xdr['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
         self.xdr['SDN_EDMO_CODE'] = xr.DataArray([np.expand_dims(station_data.iloc[0]['EDMO_code'],axis=0)], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXINST': maxinstSize})
-        self.xdr['SDN_REFERENCES'] = xr.DataArray([network_data.iloc[0]['metadata_page']], dims={'TIME': len(pd.date_range(self.time, periods=1))})
-        sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + network_data.iloc[0]['metadata_page'] + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
+        sdnRef = ('%s' % network_data.iloc[0]['metadata_page']).encode()
+        self.xdr['SDN_REFERENCES'] = xr.DataArray([sdnRef], dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xdr['SDN_REFERENCES'].encoding['char_dim_name'] = 'STRING' + str(len(sdnRef))
+        sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + sdnRef.decode() + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
         self.xdr['SDN_XLINK'] = xr.DataArray(np.array([[sdnXlink]]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'REFMAX': refmaxSize})
+        self.xdr['SDN_XLINK'].encoding['char_dim_name'] = 'STRING' + str(len(sdnXlink))
         
         # Add spatial and temporal coordinate QC variables (set to good data due to the nature of HFR system)
         self.xdr['TIME_QC'] = xr.DataArray([1],dims={'TIME': len(pd.date_range(self.time, periods=1))})
         self.xdr['POSITION_QC'] = self.xdr['QCflag'] * 0 + 1
         self.xdr['DEPTH_QC'] = xr.DataArray([1],dims={'TIME': len(pd.date_range(self.time, periods=1))})
+            
+        # Create DataSet from DataArrays
+        self.xds = xr.Dataset(self.xdr)
         
-        
-        # Add variable attributes
-        
-        # TO BE DONE
-        
+        # Add data variable attributes to the DataSet
+        for vv in self.xds:
+            self.xds[vv].attrs = radVariables[vv]
+            
+        # Update QC variable attribute "comment" for inserting test thresholds
+        for qcv in self.metadata['QCTest']:
+            if qcv in self.xds:
+                self.xds[qcv].attrs['comment'] = self.xds[qcv].attrs['comment'] + ' ' + self.metadata['QCTest'][qcv]
+                
+        # Add coordinate variable attributes to the DataSet
+        for cc in self.xds.coords:
+            self.xds[cc].attrs = radVariables[cc]
+            
         # Add global attributes
         
         # TO BE DONE
         siteCode.decode()
         platformCode.decode()
         ID.decode()
-        
-        # Encode data types, data packing and _FillValue to the variables of the DataSet
-        for k in self.xdr.keys():
-            if k in scale_factors:
-                self.xdr[k].encoding['scale_factor'] = scale_factors[k]
-            if k in add_offsets:
-                self.xdr[k].encoding['add_offset'] = add_offsets[k]
-            if k in dtypes:
-                self.xdr[k].encoding['dtype'] = dtypes[k]
-            if k in _FillValues:
-                self.xdr[k].encoding['_FillValue'] = _FillValues[k]
-        
             
-        # Create netCDF
-        self.xds = xr.Dataset(self.xdr)
+        # Encode data types, data packing and _FillValue for the data variables of the DataSet
+        for vv in self.xds:
+            if vv in dataPacking:
+                if 'dtype' in dataPacking[vv]:
+                    self.xds[vv].encoding['dtype'] = dataPacking[vv]['dtype']
+                if 'scale_factor' in dataPacking[vv]:
+                    self.xds[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']                
+                if 'add_offset' in dataPacking[vv]:
+                    self.xds[vv].encoding['add_offset'] = np.int_(dataPacking[vv]['add_offset']).astype(dataPacking[vv]['dtype'])                
+                if 'fill_value' in dataPacking[vv]:
+                    self.xds[vv].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[vv]['dtype']).kind + str(np.dtype(dataPacking[vv]['dtype']).itemsize)]
+                else:
+                    self.xds[vv].encoding['_FillValue'] = None
+                    
+        # Update valid_min and valid_max variable attributes according to data packing
+        for vv in self.xds:
+            if 'valid_min' in radVariables[vv]:
+                if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                    self.xds[vv].attrs['valid_min'] = np.float_(((radVariables[vv]['valid_min'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+                else:
+                    self.xds[vv].attrs['valid_min'] = np.float_(radVariables[vv]['valid_min']).astype(dataPacking[vv]['dtype'])
+            if 'valid_max' in radVariables[vv]:             
+                if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                    self.xds[vv].attrs['valid_max'] = np.float_(((radVariables[vv]['valid_max'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+                else:
+                    self.xds[vv].attrs['valid_max'] = np.float_(radVariables[vv]['valid_max']).astype(dataPacking[vv]['dtype'])
+            
+        # Encode data types and avoid data packing, valid_min, valid_max and _FillValue for the coordinate variables of the DataSet
+        for cc in self.xds.coords:
+            if cc in dataPacking:
+                if 'dtype' in dataPacking[cc]:
+                    self.xds[cc].encoding['dtype'] = dataPacking[cc]['dtype']
+                if 'valid_min' in radVariables[cc]:
+                    del self.xds[cc].attrs['valid_min']
+                if 'valid_max' in radVariables[cc]:
+                    del self.xds[cc].attrs['valid_max']
+                self.xds[cc].encoding['_FillValue'] = None
+                
+        # Create netCDF from DataSet
         
         # TO BE DONE
+        self.xds.to_netcdf('/home/lorenz/Downloads/bbb.nc')
         
         
         
@@ -1300,7 +1252,7 @@ class Radial(fileParser):
         Initialize dictionary entry for QC metadata.
         """
         # Initialize dictionary entry for QC metadta
-        self.metadata['QCTest'] = []
+        self.metadata['QCTest'] = {}
         
 
     # EUROPEAN HFR NODE (EHN) QC Tests
@@ -1340,12 +1292,8 @@ class Radial(fileParser):
             else:
                 self.data.loc[:,testName] = 4
 
-        self.metadata['QCTest'].append((
-            f'Average Radial Bearing QC Test - Test applies to entire file. Thresholds='
-            '['
-            f'minimum bearing={minBear} (degrees) - '
-            f'maximum bearing={maxBear} (degrees)]'
-        ))
+        self.metadata['QCTest'][testName] = 'Average Radial Bearing QC Test - Test applies to entire file. ' \
+            + 'Thresholds=[' + f'minimum bearing={minBear} (degrees) - ' + f'maximum bearing={maxBear} (degrees)]'
         
     def qc_ehn_radial_count(self, radMinCount=150):
         """
@@ -1374,11 +1322,8 @@ class Radial(fileParser):
         else:
             self.data.loc[:,testName] = 4
 
-        self.metadata['QCTest'].append((
-            f'Radial Count QC Test - Test applies to entire file. Threshold='
-            '['
-            f'minimum number of radial vectors={radMinCount}]'
-        ))
+        self.metadata['QCTest'][testName] = 'Radial Count QC Test - Test applies to entire file. ' \
+            + 'Threshold=[' + f'minimum number of radial vectors={radMinCount}]'
         
     def qc_ehn_maximum_velocity(self, radMaxSpeed=1.2):
         """
@@ -1405,11 +1350,8 @@ class Radial(fileParser):
         else:
             self.data.loc[(self.data['VELO'].abs() > radMaxSpeed*100), testName] = 4      # velocity in cm/s (LLUV)
     
-        self.metadata['QCTest'].append((
-            f'Velocity Threshold QC Test - Test applies to each vector. Threshold='
-            '['
-            f'maximum velocity={radMaxSpeed} (m/s)]'
-        ))
+        self.metadata['QCTest'][testName] = 'Velocity Threshold QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'maximum velocity={radMaxSpeed} (m/s)]'
         
     def qc_ehn_median_filter(self, dLim=10, curLim=0.5):
         """
@@ -1450,12 +1392,8 @@ class Radial(fileParser):
         else:
             self.data.loc[abs(self.data['VELO'] - median) > curLim*100, testName] = 4      # velocity in cm/s (LLUV)
         
-        self.metadata['QCTest'].append((
-            f'Median Filter QC Test - Test applies to each vector. Thresholds='
-            '['
-            f'distance limit={str(dLim)} (km) '
-            f'velocity-median difference threshold={str(curLim)} (m/s)]'
-        ))
+        self.metadata['QCTest'][testName] = 'Median Filter QC Test - Test applies to each vector. ' \
+            + 'Thresholds=[' + f'distance limit={str(dLim)} (km) ' + f'velocity-median difference threshold={str(curLim)} (m/s)]'
         
     def qc_ehn_over_water(self):
         """
@@ -1490,11 +1428,8 @@ class Radial(fileParser):
         # Set bad flag where land is flagged (mask_over_land method)
         self.data.loc[~self.mask_over_land(subset=False), testName] = 4
             
-        self.metadata['QCTest'].append((
-            'Over Water QC Test - Test applies to each vector. Thresholds='
-            '['
-            'GeoPandas "naturalearth_lowres"]'
-        ))
+        self.metadata['QCTest'][testName] = 'Over Water QC Test - Test applies to each vector. ' \
+            + 'Thresholds=[' + 'GeoPandas "naturalearth_lowres"]'
         
     def qc_ehn_maximum_variance(self, radMaxVar=1):
         """
@@ -1527,11 +1462,8 @@ class Radial(fileParser):
         else:
             self.data.loc[((self.data['ETMP']/100)**2 > radMaxVar), testName] = 4  # ETMP is the temporal standard deviation in cm/s for CODAR data
     
-        self.metadata['QCTest'].append((
-            f'Variance Threshold QC Test - Test applies to each vector. Threshold='
-            '['
-            f'maximum variance={radMaxVar} (m2/s2)]'
-        ))
+        self.metadata['QCTest'][testName] = 'Variance Threshold QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'maximum variance={radMaxVar} (m2/s2)]'
         
     def qc_ehn_temporal_derivative(self, r0, tempDerThr=1):
         """
@@ -1575,11 +1507,8 @@ class Radial(fileParser):
             # Add new column to the DataFrame for QC data by setting every row as not evaluated (flag = 0)
             self.data.loc[:,testName] = 0
         
-        self.metadata['QCTest'].append((
-            f'Temporal Derivative QC Test - Test applies to each vector. Threshold='
-            '['
-            f'velocity difference threshold={str(tempDerThr)} (m/s)]'
-        ))
+        self.metadata['QCTest'][testName] = 'Temporal Derivative QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'velocity difference threshold={str(tempDerThr)} (m/s)]'
         
     def qc_ehn_overall_qc_flag(self):
         """
@@ -1601,9 +1530,7 @@ class Radial(fileParser):
         # Set good flags for vectors passing all QC tests
         self.data.loc[self.data.loc[:, self.data.columns.str.contains('_QC')].eq(1).all(axis=1), testName] = 1
 
-        self.metadata['QCTest'].append((
-            'Overall QC Flag - Test applies to each vector. Test checks if all QC tests are passed.'
-        ))
+        self.metadata['QCTest'][testName] = 'Overall QC Flag - Test applies to each vector. Test checks if all QC tests are passed.'
             
         
     # QARTOD QC TESTS

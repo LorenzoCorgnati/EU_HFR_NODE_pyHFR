@@ -12,6 +12,7 @@ import io
 from common import fileParser
 from collections import OrderedDict
 from calc import gridded_index, true2mathAngle, dms2dd, evaluateGDOP, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+import json
 
 
 logger = logging.getLogger(__name__)
@@ -701,7 +702,7 @@ class Total(fileParser):
         Initialize dictionary entry for QC metadata.
         """
         # Initialize dictionary entry for QC metadta
-        self.metadata['QCTest'] = []
+        self.metadata['QCTest'] = {}
         
         
     def qc_ehn_maximum_velocity(self, totMaxSpeed=1.2):
@@ -729,12 +730,9 @@ class Total(fileParser):
         else:
             self.data.loc[(self.data['VELO'].abs() > totMaxSpeed*100), testName] = 4      # velocity in cm/s (LLUV)
     
-        self.metadata['QCTest'].append((
-            f'Velocity Threshold QC Test - Test applies to each vector. Threshold='
-            '['
-            f'maximum velocity={totMaxSpeed} (m/s)]'
-        ))
-        
+        self.metadata['QCTest'][testName] = 'Velocity Threshold QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'maximum velocity={totMaxSpeed} (m/s)]'
+            
     def qc_ehn_maximum_variance(self, totMaxVar=1):
         """
         This test labels total velocity vectors whose temporal variances for both U and V
@@ -768,11 +766,8 @@ class Total(fileParser):
             self.data.loc[((self.data['UQAL']/100)**2 > totMaxVar), testName] = 4       # UQAL is the temporal standard deviation of U component in cm/s for CODAR data
             self.data.loc[((self.data['VQAL']/100)**2 > totMaxVar), testName] = 4       # VQAL is the temporal standard deviation of V component in cm/s for CODAR data
     
-        self.metadata['QCTest'].append((
-            f'Variance Threshold QC Test - Test applies to each vector. Threshold='
-            '['
-            f'maximum variance={totMaxVar} (m2/s2)]'
-        ))
+        self.metadata['QCTest'][testName] = 'Variance Threshold QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'maximum variance={totMaxVar} (m2/s2)]'
         
     def qc_ehn_gdop_threshold(self, maxGDOP=2):
         """
@@ -796,11 +791,8 @@ class Total(fileParser):
         # set bad flag for velocities not passing the test
         self.data.loc[(self.data['GDOP'] > maxGDOP), testName] = 4
     
-        self.metadata['QCTest'].append((
-            f'GDOP Threshold QC Test - Test applies to each vector. Threshold='
-            '['
-            f'GDOP threshold={maxGDOP}]'
-        ))
+        self.metadata['QCTest'][testName] = 'GDOP Threshold QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'GDOP threshold={maxGDOP}]'
         
     def qc_ehn_data_density_threshold(self, minContrRad=2):
         """
@@ -829,11 +821,8 @@ class Total(fileParser):
             else:
                 self.data.loc[:,testName] = 0
     
-        self.metadata['QCTest'].append((
-            f'Data Density Threshold QC Test - Test applies to each vector. Threshold='
-            '['
-            f'minimum number of contributing radial velocities={minContrRad}]'
-        ))
+        self.metadata['QCTest'][testName] = 'Data Density Threshold QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'minimum number of contributing radial velocities={minContrRad}]'
         
     def qc_ehn_temporal_derivative(self, t0, tempDerThr=1):
         """
@@ -877,11 +866,8 @@ class Total(fileParser):
             # Add new column to the DataFrame for QC data by setting every row as not evaluated (flag = 0)
             self.data.loc[:,testName] = 0
         
-        self.metadata['QCTest'].append((
-            f'Temporal Derivative QC Test - Test applies to each vector. Threshold='
-            '['
-            f'velocity difference threshold={str(tempDerThr)} (m/s)]'
-        ))
+        self.metadata['QCTest'][testName] = 'Temporal Derivative QC Test - Test applies to each vector. ' \
+            + 'Threshold=[' + f'velocity difference threshold={str(tempDerThr)} (m/s)]'
         
     def qc_ehn_overall_qc_flag(self):
         """
@@ -903,9 +889,7 @@ class Total(fileParser):
         # Set good flags for vectors passing all QC tests
         self.data.loc[self.data.loc[:, self.data.columns.str.contains('_QC')].eq(1).all(axis=1), testName] = 1
 
-        self.metadata['QCTest'].append((
-            'Overall QC Flag - Test applies to each vector. Test checks if all QC tests are passed.'
-        ))
+        self.metadata['QCTest'][testName] = 'Overall QC Flag - Test applies to each vector. Test checks if all QC tests are passed.'
 
 
     def file_type(self):
