@@ -1,4 +1,5 @@
 import datetime as dt
+from dateutil.relativedelta import relativedelta
 import geopandas as gpd
 import logging
 import numpy as np
@@ -519,16 +520,19 @@ class Radial(fileParser):
     def apply_ehn_datamodel(self, network_data, station_data, version):
         """
         This function applies the European standard data model developed in the
-        framework of the EuroGOOS HFR Task Team to the xarray DataSet containing  
-        the Radial objectdata and metadata. The xarray DataSet is created by the 
-        Radial object method to_xarray_multidimensional.
+        framework of the EuroGOOS HFR Task Team to the Radial object.
+        The Radial object content is stored into an xarray Dataset built from the
+        xarray DataArrays created by the Radial method to_xarray_multidimensional.
         Variable data types and data packing information are collected from
         "Data_Models/EHN/Radials/Radial_Data_Packing.json" file.
         Variable attribute schema is collected from 
         "Data_Models/EHN/Radials/Radial_Variables.json" file.
+        Global attribute schema is collected from 
+        "Data_Models/EHN/Global_Attributes.json" file.
         Global attributes are created starting from Radial object metadata and from 
         DataFrames containing the information about HFR network and radial station
         read from the EU HFR NODE database.
+        The xarray Dataset is then saved as a netCDF file.
         
         INPUT:
             network_data: DataFrame containing the information of the network to which the radial site belongs
@@ -538,6 +542,9 @@ class Radial(fileParser):
             
         OUTPUT:
         """
+        # Set the netCDF format
+        ncFormat = 'NETCDF4_CLASSIC'
+        
         # Expand Radial object variables along the coordinate axes
         self.to_xarray_multidimensional()
         
@@ -554,6 +561,11 @@ class Radial(fileParser):
         # Get variable attributes
         f = open('Data_Models/EHN/Radials/Radial_Variables.json')
         radVariables = json.loads(f.read())
+        f.close()
+        
+        # Get global attributes
+        f = open('Data_Models/EHN/Global_Attributes.json')
+        globalAttributes = json.loads(f.read())
         f.close()
         
         # Drop unnecessary DataArrays from the DataSet
@@ -626,12 +638,66 @@ class Radial(fileParser):
         for cc in self.xds.coords:
             self.xds[cc].attrs = radVariables[cc]
             
-        # Add global attributes
+        # Evluate easurement maximum depth
+        vertMax = 3e8 / (8*np.pi * station_data.iloc[0]['transmit_central_frequency']*1e6)
         
+        # Evaluate time coverage start, end, resolution and duration
+        timeCoverageStart = self.time - relativedelta(minutes=station_data.iloc[0]['temporal_resolution']/2)
+        timeCoverageEnd = self.time + relativedelta(minutes=station_data.iloc[0]['temporal_resolution']/2)
+        timeResRD = relativedelta(minutes=station_data.iloc[0]['temporal_resolution'])
+        timeCoverageResolution = 'PT'
+        if timeResRD.hours !=0:
+            timeCoverageResolution += str(int(timeResRD.hours)) + 'H'
+        if timeResRD.minutes !=0:
+            timeCoverageResolution += str(int(timeResRD.minutes)) + 'M'
+        if timeResRD.seconds !=0:
+            timeCoverageResolution += str(int(timeResRD.seconds)) + 'S'        
+            
+        # Fill global attributes
+        globalAttributes['site_code'] = siteCode.decode()
+        globalAttributes['platform_code'] = platformCode.decode()
+        globalAttributes['doa_estimation_method'] = station_data.iloc[0]['DoA_estimation_method']
+        globalAttributes['calibration_type'] = station_data.iloc[0]['calibration_type']
+        globalAttributes['last_calibration_date'] = station_data.iloc[0]['last_calibration_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
+        globalAttributes['calibration_link'] = station_data.iloc[0]['calibration_link']
+        globalAttributes['title'] = network_data.iloc[0]['title']
+        globalAttributes['summary'] = station_data.iloc[0]['summary']
+        globalAttributes['institution'] = station_data.iloc[0]['institution_name']
+        globalAttributes['institution_edmo_code'] = str(station_data.iloc[0]['EDMO_code'])
+        globalAttributes['institution_references'] = station_data.iloc[0]['institution_website']
+        globalAttributes['id'] = ID.decode()
+        globalAttributes['project'] = network_data.iloc[0]['project']
+        globalAttributes['comment'] = network_data.iloc[0]['comment']
+        globalAttributes['network'] = network_data.iloc[0]['network_name']
+        globalAttributes['data_type'] = globalAttributes['data_type'].replace('current data', 'radial current data')
+        globalAttributes['geospatial_lat_min'] = str(network_data.iloc[0]['geospatial_lat_min'])
+        globalAttributes['geospatial_lat_max'] = str(network_data.iloc[0]['geospatial_lat_max'])
+        globalAttributes['geospatial_lat_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LATITUDE.values[0,0,:,:][:,0]))))        
+        globalAttributes['geospatial_lon_min'] = str(network_data.iloc[0]['geospatial_lon_min'])
+        globalAttributes['geospatial_lon_max'] = str(network_data.iloc[0]['geospatial_lon_max'])
+        globalAttributes['geospatial_lon_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LONGITUDE.values[0,0,:,:][:,0]))))        
+        globalAttributes['geospatial_vertical_max'] = str(vertMax)
+        globalAttributes['geospatial_vertical_resolution'] = str(vertMax)        
+        globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
+        globalAttributes['time_coverage_end'] = timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ')
+        globalAttributes['time_coverage_resolution'] = timeCoverageResolution
+        globalAttributes['time_coverage_duration'] = timeCoverageResolution
+        globalAttributes['area'] = network_data.iloc[0]['area']
+        globalAttributes['format_version'] = version
+        globalAttributes['netcdf_format'] = ncFormat
+        
+        
+        
+        
+        
+        creationDate = dt.datetime.utcnow()
+        globalAttributes['metadata_date_stamp'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+        globalAttributes['date_created'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+        globalAttributes['date_modified'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+        
+        
+        # Add global attributes to the DataSet
         # TO BE DONE
-        siteCode.decode()
-        platformCode.decode()
-        ID.decode()
             
         # Encode data types, data packing and _FillValue for the data variables of the DataSet
         for vv in self.xds:
