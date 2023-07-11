@@ -63,7 +63,7 @@ def buildEHNradialFilename(networkID,siteCode,ts,ext):
         radFilename: filename for radial file.
     """
     # Get the time related part of the filename
-    timeStr = ts.strftime("_%Y_%m_%d_%M%H")
+    timeStr = ts.strftime("_%Y_%m_%d_%H%M")
     
     # Build the filename
     radFilename = networkID + '-' + siteCode + timeStr + ext
@@ -332,6 +332,7 @@ class Radial(fileParser):
             bearing_dim_2 = np.sort(np.arange(np.min(self.data['BEAR']),np.max(self.data['BEAR'])+bearing_step,bearing_step))
             bearing_dim_3 = np.sort(np.arange(np.max(self.data['BEAR']),360,bearing_step))
             bearing_dim = np.unique(np.concatenate((bearing_dim_1,bearing_dim_2,bearing_dim_3),axis=None))
+            bearing_dim = bearing_dim[(bearing_dim>=0) & (bearing_dim<=360)]
     
             # create radial grid from bearing and range
             [bearing, ranges] = np.meshgrid(bearing_dim, range_dim)
@@ -454,9 +455,6 @@ class Radial(fileParser):
 
         # Refine Codar data
         if not self.is_wera:
-            # Add longitudes and latitudes evaluated from bearing/range grid to the dictionary (BEAR and RNGE are coordinates)
-            d['LONGITUDE'] = np.expand_dims(np.float32(lond), axis=(0,1))
-            d['LATITUDE'] = np.expand_dims(np.float32(latd), axis=(0,1))
             # Flip sign so positive velocities are away from the radar as per CF conventions (only for Codar radials)
             flips = ['MINV', 'MAXV', 'VELO']
             for f in flips:
@@ -489,6 +487,17 @@ class Radial(fileParser):
                                                  'DEPTH': [0],
                                                  'LATITUDE': lat_dim,
                                                  'LONGITUDE': lon_dim})
+            
+        # Add longitudes and latitudes evaluated from bearing/range grid to the dictionary (BEAR and RNGE are coordinates) for Codar data
+        if not self.is_wera:
+            xdr['LONGITUDE'] = xr.DataArray(np.float32(lond),
+                                         dims={'RNGE': lond.shape[0], 'BEAR': lond.shape[1]},
+                                         coords={'RNGE': range_dim,
+                                                 'BEAR': bearing_dim})
+            xdr['LATITUDE'] = xr.DataArray(np.float32(latd),
+                                         dims={'RNGE': latd.shape[0], 'BEAR': latd.shape[1]},
+                                         coords={'RNGE': range_dim,
+                                                 'BEAR': bearing_dim})          
             
         # Add DataArray for coordinate variables
         xdr['TIME'] = xr.DataArray(ncTime,
@@ -629,16 +638,20 @@ class Radial(fileParser):
         for vv in self.xds:
             self.xds[vv].attrs = radVariables[vv]
             
-        # Update QC variable attribute "comment" for inserting test thresholds
+        # Update QC variable attribute "comment" for inserting test thresholds and attribute "flag_values" for assigning the right data type
         for qcv in self.metadata['QCTest']:
             if qcv in self.xds:
                 self.xds[qcv].attrs['comment'] = self.xds[qcv].attrs['comment'] + ' ' + self.metadata['QCTest'][qcv]
+                self.xds[qcv].attrs['flag_values'] = list(np.int_(self.xds[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
+        for qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
+            if qcv in self.xds:
+                self.xds[qcv].attrs['flag_values'] = list(np.int_(self.xds[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
                 
         # Add coordinate variable attributes to the DataSet
         for cc in self.xds.coords:
             self.xds[cc].attrs = radVariables[cc]
             
-        # Evluate easurement maximum depth
+        # Evaluate measurement maximum depth
         vertMax = 3e8 / (8*np.pi * station_data.iloc[0]['transmit_central_frequency']*1e6)
         
         # Evaluate time coverage start, end, resolution and duration
@@ -672,10 +685,10 @@ class Radial(fileParser):
         globalAttributes['data_type'] = globalAttributes['data_type'].replace('current data', 'radial current data')
         globalAttributes['geospatial_lat_min'] = str(network_data.iloc[0]['geospatial_lat_min'])
         globalAttributes['geospatial_lat_max'] = str(network_data.iloc[0]['geospatial_lat_max'])
-        globalAttributes['geospatial_lat_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LATITUDE.values[0,0,:,:][:,0]))))        
+        globalAttributes['geospatial_lat_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LATITUDE.values[:,0]))))        
         globalAttributes['geospatial_lon_min'] = str(network_data.iloc[0]['geospatial_lon_min'])
         globalAttributes['geospatial_lon_max'] = str(network_data.iloc[0]['geospatial_lon_max'])
-        globalAttributes['geospatial_lon_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LONGITUDE.values[0,0,:,:][:,0]))))        
+        globalAttributes['geospatial_lon_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LONGITUDE.values[:,0]))))        
         globalAttributes['geospatial_vertical_max'] = str(vertMax)
         globalAttributes['geospatial_vertical_resolution'] = str(vertMax)        
         globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -685,19 +698,26 @@ class Radial(fileParser):
         globalAttributes['area'] = network_data.iloc[0]['area']
         globalAttributes['format_version'] = version
         globalAttributes['netcdf_format'] = ncFormat
-        
-        
-        
-        
+        globalAttributes['citation'] += network_data.iloc[0]['citation_statement']
+        globalAttributes['license'] = network_data.iloc[0]['license']
+        globalAttributes['acknowledgment'] = network_data.iloc[0]['acknowledgment']
+        globalAttributes['processing_level'] = '2B'
+        globalAttributes['contributor_name'] = network_data.iloc[0]['contributor_name']
+        globalAttributes['contributor_role'] = network_data.iloc[0]['contributor_role']
+        globalAttributes['contributor_email'] = network_data.iloc[0]['contributor_email']
+        globalAttributes['manufacturer'] = station_data.iloc[0]['manufacturer']
+        globalAttributes['sensor_model'] = station_data.iloc[0]['manufacturer']
+        globalAttributes['software_version'] = version
         
         creationDate = dt.datetime.utcnow()
         globalAttributes['metadata_date_stamp'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['date_created'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['date_modified'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
-        
+        globalAttributes['history'] = 'Data measured at ' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
+                                    + creationDate.strftime('%Y-%m-%dT%H:%M:%SZ') + ' by the European HFR Node.'        
         
         # Add global attributes to the DataSet
-        # TO BE DONE
+        self.xds.attrs = globalAttributes
             
         # Encode data types, data packing and _FillValue for the data variables of the DataSet
         for vv in self.xds:
@@ -707,7 +727,7 @@ class Radial(fileParser):
                 if 'scale_factor' in dataPacking[vv]:
                     self.xds[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']                
                 if 'add_offset' in dataPacking[vv]:
-                    self.xds[vv].encoding['add_offset'] = np.int_(dataPacking[vv]['add_offset']).astype(dataPacking[vv]['dtype'])                
+                    self.xds[vv].encoding['add_offset'] = dataPacking[vv]['add_offset']
                 if 'fill_value' in dataPacking[vv]:
                     self.xds[vv].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[vv]['dtype']).kind + str(np.dtype(dataPacking[vv]['dtype']).itemsize)]
                 else:
@@ -737,13 +757,14 @@ class Radial(fileParser):
                     del self.xds[cc].attrs['valid_max']
                 self.xds[cc].encoding['_FillValue'] = None
                 
+        # Set the filename (with full path) for the netCDF file
+        ncFilePath = buildEHNradialFolder(station_data.iloc[0]['radial_HFRnetCDF_folder_path'],station_data.iloc[0]['station_id'],self.time,version)
+        ncFilename = buildEHNradialFilename(station_data.iloc[0]['network_id'],station_data.iloc[0]['station_id'],self.time,'.nc')
+        ncFile = ncFilePath + ncFilename 
+        
         # Create netCDF from DataSet
-        
-        # TO BE DONE
-        self.xds.to_netcdf('/home/lorenz/Downloads/bbb.nc')
-        
-        
-        
+        self.xds.to_netcdf(ncFile, format=ncFormat)
+               
         return
 
     # def to_xarray_tabular(self, range_min=None, range_max=None, enhance=False):

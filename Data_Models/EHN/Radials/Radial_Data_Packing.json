@@ -38,61 +38,61 @@
     "RDVA": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "DRVA": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "EWCT": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "NSCT": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "MAXV": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "MINV": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "ESPC": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "ETMP": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "HCSS": {
         "dtype": "int32",
         "scale_factor": 1e-06,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "EACC": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },    
     "ERSC": {
@@ -106,13 +106,13 @@
     "XDST": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 			  
     },
     "YDST": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SPRC": {
@@ -130,25 +130,25 @@
     "SLTR": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SLNR": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SLTT": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SLNT": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SCDR": {

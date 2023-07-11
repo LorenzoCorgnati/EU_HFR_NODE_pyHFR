@@ -188,7 +188,7 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
         
     except Exception as err:
         qcErr = True
-        logger.error(err.args[0] + ' for radial file ' + R.file_name)     
+        logger.error(err.strerror + ' for radial file ' + R.file_name)     
     
     return  R    
     

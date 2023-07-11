@@ -30,49 +30,49 @@
     "EWCT": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "NSCT": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "EWCS": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "NSCS": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "CCOV": {
         "dtype": "int32",
         "scale_factor": 1e-6,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "GDOP": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "UACC": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "VACC": {
         "dtype": "int16",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },    
     "NARX": {
@@ -86,25 +86,25 @@
     "SLTR": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SLNR": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SLTT": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SLNT": {
         "dtype": "int32",
         "scale_factor": 0.001,
-        "add_offset": 0,
+        "add_offset": 0.0,
         "fill_value": "" 
     },
     "SCDR": {
