@@ -34,7 +34,7 @@ from mysql.connector import errorcode
 import sqlalchemy
 from dateutil.relativedelta import relativedelta
 from radials import Radial, buildEHNradialFolder, buildEHNradialFilename
-from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename
+from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials
 from calc import true2mathAngle, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from pyproj import Geod
 import latlon
@@ -46,17 +46,119 @@ import pickle
 # PROCESSING FUNCTIONS
 ######################
 
-def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,logger):
+def performRadialCombination(combRad,networkData,vers,logger):
+    """
+    This function performs the least square combination of the input Radials and creates
+    a Total object containing the resulting total current data. 
+    The Total object is also saved as .ttl file via pickle binary serialization.
+    The function creates a DataFrame containing the resulting Total object along with 
+    related information.
+    
+    INPUTS:
+        combRad: DataFrame containing the Radial objects to be combined with the related information
+        networkData: DataFrame containing the information of the network to which the radial site belongs
+        vers: version of the data model
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        combTot = DataFrame containing the Total object obtained via the least square combination 
+                  with the related information
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    crErr = False
+    
+    # Create the output DataFrame
+    combTot = pd.DataFrame(columns=['Total'])
+    
+    try:
+        # Check if the combination is to be performed
+        if networkData.iloc[0]['radial_combination'] == 1:
+            # Check if teh radials were already combined
+            if 0 in combRad['NRT_combined_flag'].values:
+                # Get the lat/lons of the bounding box
+                lonMin = networkData.iloc[0]['geospatial_lon_min']
+                lonMax = networkData.iloc[0]['geospatial_lon_max']
+                latMin = networkData.iloc[0]['geospatial_lat_min']
+                latMax = networkData.iloc[0]['geospatial_lat_max']
+                
+                # Get the grid resolution in meters
+                gridResolution = networkData.iloc[0]['grid_resolution'] * 1000      # Grid resolution is stored in km in the database
+                
+                # Cerate the geographical grid
+                gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
+                
+                # Get the combination search radius in meters
+                searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the database
+                
+                # Get the timestamp
+                timeStamp = dt.datetime.strptime(str(combRad.iloc[0]['datetime']),'%Y-%m-%d %H:%M:%S')
+                
+                # Generate the combined Total
+                T, warn = combineRadials(combRad,gridGS,searchRadius,gridResolution,timeStamp)
+                
+                if warn=='':
+                    # Add metadata related to bounding box
+                    T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
+                    T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
+                    T.metadata['BBminLatitude'] = str(latMin) + ' deg'
+                    T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
+                    T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
+                    
+                    # Add is_wera attribute
+                    exts = combRad.extension.unique().tolist()
+                    if (len(exts) == 1):
+                        if exts[0] == '.ruv':
+                            T.is_wera = False
+                        elif exts[0] == '.crad_ascii':
+                            T.is_wera = True
+                    else:
+                        T.is_wera = False
+                    
+                    # Add the Total object to the DataFrame
+                    combTot = pd.concat([combTot, pd.DataFrame([{'Total': T}])])
+                    
+                    # Set the filename (with full path) for the ttl file
+                    ttlFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'].replace('nc','ttl'),T.time,vers)
+                    ttlFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.ttl')
+                    ttlFile = ttlFilePath + ttlFilename 
+                    
+                    # Create the destination folder
+                    if not os.path.isdir(ttlFilePath):
+                        os.makedirs(ttlFilePath)
+                    
+                    # Save Total object as .ttl file with pickle
+                    with open(ttlFile, 'wb') as ttlFile:
+                        pickle.dump(T, ttlFile)
+                else:
+                    logger.info(warn + ' for network ' + networkData.iloc[0]['network_id'] + ' at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
+                    return combTot
+            
+        
+    except Exception as err:
+        crErr = True
+        logger.error(err.strerror + ' for network ' + networkData.iloc[0]['network_id']  + ' in radial combination at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
+    
+    return combTot
+
+def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     """
     This function applies the European standard data model to radial object and saves
     the resulting netCDF file. The Radial object is also saved as .rdl file via pickle
     binary serialization.
+    The function insert information about the created netCDF file into the database.
     
     INPUTS:
         dmRad: Series containing the radial to be processed with the related information
         networkData: DataFrame containing the information of the network to which the radial site belongs
         radSiteData: DataFrame containing the information of the radial site that produced the radial
         vers: version of the data model
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -71,45 +173,103 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,logger):
     # Initialize error flag
     dmErr = False
     
-    try:
+    # Check if the Radial was already processed
+    if dmRad['NRT_processed_flag'] == 0:
     
+        try:        
+        
     #####
     # Enhance Radial object with information from database
     #####
-    
-        # Get the radial object
-        R = dmRad['Radial']
         
-        # Add metadata related to range limits
-        R.metadata['RangeMin'] = '0 km'
-        if 'RangeResolutionKMeters' in R.metadata:
-            R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
-        elif 'RangeResolutionMeters' in R.metadata:
-            R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
-        
+            # Get the radial object
+            R = dmRad['Radial']
+            
+            # Add metadata related to range limits
+            R.metadata['RangeMin'] = '0 km'
+            if 'RangeResolutionKMeters' in R.metadata:
+                R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
+            elif 'RangeResolutionMeters' in R.metadata:
+                R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
+            
     #####        
     # Convert to standard data format (netCDF)  
     #####
-    
-        # Check if the Radial was already processed
-        if dmRad['NRT_processed_flag'] == 0:
+        
             # Apply the standard data model
             R.apply_ehn_datamodel(networkData,radSiteData,vers)
+            
+            # Set the filename (with full path) for the netCDF file
+            ncFilePath = buildEHNradialFolder(radSiteData.iloc[0]['radial_HFRnetCDF_folder_path'],radSiteData.iloc[0]['station_id'],R.time,vers)
+            ncFilename = buildEHNradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
+            ncFile = ncFilePath + ncFilename 
+            
+            # Create the destination folder
+            if not os.path.isdir(ncFilePath):
+                os.makedirs(ncFilePath)
+            
+            # Create netCDF from DataSet and save it
+            R.xds.to_netcdf(ncFile, format=R.xds.attrs['netcdf_format'])            
+            logger.info(ncFilename + ' radial netCDF file succesfully created and stored (' + vers + ').')
+            
+    #####        
+    # Insert information about the created radial netCDF into database 
+    #####
     
-    
+            try:
+                # Delete the entry with the same filename from radial_HFRnetCDF_tb table, if present
+                radialDeleteQuery = 'DELETE FROM radial_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
+                eng.execute(radialDeleteQuery)           
+                
+                # Prepare data to be inserted into database
+                dataRadialNC = {'filename': [ncFilename], \
+                                'network_id': [radSiteData.iloc[0]['network_id']], 'station_id': [radSiteData.iloc[0]['station_id']], \
+                                'timestamp': [R.time.strftime('%Y %m %d %H %M %S')], 'datetime': [R.time.strftime('%Y-%m-%d %H:%M:%S')], \
+                                'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': [R.file_name], 'check_flag': [0]}
+                dfRadialNC = pd.DataFrame(dataRadialNC)
+                
+                # Insert data into radial_HFRnetCDF_tb table
+                dfRadialNC.to_sql('radial_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfRadialNC.columns)
+                logger.info(ncFilename + ' radial netCDF file information inserted into database.')
+                
+            except sqlalchemy.exc.DBAPIError as err:        
+                dMerr = True
+                logger.error('MySQL error ' + err._message())        
     
     #####
     # Save Radial object as .rdl file with pickle
     #####
     
-        # with open('filename.rdl', 'wb') as rdlFile:
-        #      pickle.dump(R, rdlFile)
-    
-    
+            # Create the destination folder
+            if not os.path.isdir(ncFilePath.replace('nc','rdl')):
+                os.makedirs(ncFilePath.replace('nc','rdl'))
+                
+            # Save the rdl file
+            with open(ncFile.replace('nc','rdl'), 'wb') as rdlFile:
+                  pickle.dump(R, rdlFile) 
+            logger.info(ncFilename.replace('nc','rdl') + ' radial rdl file succesfully created and stored (' + vers + ').')
+            
+        except Exception as err:
+            dmErr = True
+            logger.error(err.strerror + ' for radial file ' + R.file_name)
+            return dmRad
+            
+    #####
+    # Update NRT_processed_flag for the processed radial
+    #####
         
-    except Exception as err:
-        dmErr = True
-        logger.error(err.args[0] + ' for radial file ' + R.file_name)     
+        if not dmErr:
+            # Update the local DataFrame
+            dmRad['NRT_processed_flag'] = 1
+            
+            # Update the radial_input_tb table on the database
+            try:
+                radialUpdateQuery = 'UPDATE radial_input_tb SET NRT_processed_flag=1 WHERE filename=\'' + R.file_name + '\''
+                eng.execute(radialUpdateQuery) 
+            except sqlalchemy.exc.DBAPIError as err:        
+                dMerr = True
+                logger.error('MySQL error ' + err._message())        
     
     return  dmRad
 
@@ -140,13 +300,13 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
     # Apply QC    
     #####
     
-    try:
+    try:      
         # Get the radial object
         R = qcRad['Radial']
         
         # Check if the Radial was already processed
-        if qcRad['NRT_processed_flag'] == 0:
-                        
+        if qcRad['NRT_processed_flag'] == 0:           
+            
             # Initialize QC metadata
             R.initialize_qc()
             
@@ -185,6 +345,8 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
 
             # Overall QC
             R.qc_ehn_overall_qc_flag()
+            
+            logger.info('QC tests successfully applied to radial file ' + R.file_name)
         
     except Exception as err:
         qcErr = True
@@ -246,58 +408,32 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         groupedRad.rename(index=indexMapper,inplace=True)        
         
         #####        
-        # Apply radial data QC    
+        # Apply QC to Radials
         #####
         
         groupedRad['Radial'] = groupedRad.apply(lambda x: applyEHNradialQC(x,stationData.loc[stationData['station_id'] == x.station_id],vers,logger),axis=1)
         
         #####        
-        # Radial data conversion to standard data format (netCDF)
+        # Convert Radials to standard data format (netCDF)
         #####
         
-        groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,logger),axis=1)
+        groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
                 
+        #####
+        # Combine Radials into Total
+        #####
         
-        
-        
+        TotDF = performRadialCombination(groupedRad,networkData,vers,logger)
         
         #####        
-        # Insert radial information into database    
+        # Apply QC to Radials
         #####
         
-        # TO BE DONE
+        # TO BE DONE       
         
-        #####
-        # Radial combination into totals
-        #####
-        
-        # TO BE DONE - da fare solo per radiali con NRT_combined_flag=0
-        # # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
-        # T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
-        # T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
-        # T.metadata['BBminLatitude'] = str(latMin) + ' deg'
-        # T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
-        # T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
-        # # INSERIRE ATTRIBUTO is_wera
-        # if weraGrid:
-        #     T.is_wera = True
-        # else:
-        #     T.is_wera = False
-        
-        # # Total data QC
-        
-        # # Save Total object as .ttl file with pickle
-        # with open('filename.ttl', 'wb') as ttlFile:
-        #     pickle.dump(T, ttlFile)
             
-        #####
-        # Total data conversion to standard format (netCDF)
-        #####
-        
-        # TO BE DONE
-        
         #####        
-        # Insert information into database    
+        # Convert Total to standard data format (netCDF)
         #####
         
         # TO BE DONE
@@ -430,7 +566,7 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
     #####
                                 # Prepare data to be inserted into database
                                 dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
-                                             'datetime': [dateTime], 'reception_date': [dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")], \
+                                             'datetime': [dateTime], 'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
                                               'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
                                 dfTotal = pd.DataFrame(dataTotal)
                                 
@@ -525,14 +661,14 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                                     timeStamp = radial.time.strftime("%Y %m %d %H %M %S")                    
                                     dateTime = radial.time.strftime("%Y-%m-%d %H:%M:%S")  
                                     # Get file size in Kbytes
-                                    fileSize = os.path.getsize(inputFile)/1024    
+                                    fileSize = os.path.getsize(inputFile)/1024 
     #####
     # Insert radial information into database
     #####
                                     # Prepare data to be inserted into database
                                     dataRadial = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], \
                                                   'station_id': [stationID], 'timestamp': [timeStamp], 'datetime': [dateTime], \
-                                                  'reception_date': [dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")], \
+                                                  'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
                                                   'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0], \
                                                   'NRT_processed_flag_integrated_network': [0], 'NRT_combined_flag': [0]}
                                     dfRadial = pd.DataFrame(dataRadial)
@@ -616,7 +752,7 @@ def processNetwork(networkID,memory,sqlConfig):
         pNerr = False
         
         # Set datetime of the starting date of the processing period
-        startDate = (dt.datetime.now()- relativedelta(days=memory)).strftime("%Y-%m-%d")
+        startDate = (dt.datetime.utcnow()- relativedelta(days=memory)).strftime("%Y-%m-%d")
         
     except Exception as err:
         pNerr = True
@@ -625,7 +761,7 @@ def processNetwork(networkID,memory,sqlConfig):
         return
     
     #####
-    # Retrieve information from database
+    # Retrieve information about network and stations from database
     #####
     
     try:
@@ -669,6 +805,7 @@ def processNetwork(networkID,memory,sqlConfig):
         
         # Select radials to be processed
         radialsToBeProcessed = selectRadials(networkID,startDate,eng,logger)
+        logger.info('Radials to be processed successfully selected for network ' + networkID)
         
         # Process radials
         radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))

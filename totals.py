@@ -47,7 +47,7 @@ def buildEHNtotalFilename(networkID,ts,ext):
         totFilename: filename for total file.
     """
     # Get the time related part of the filename
-    timeStr = ts.strftime("_%Y_%m_%d_%M%H")
+    timeStr = ts.strftime("_%Y_%m_%d_%H%M")
     
     # Build the filename
     totFilename = networkID + '-Total' + timeStr + ext
@@ -225,7 +225,7 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
             the points in the grid
         sRad: search radius for combination in meters.
         gRes: grid resoultion in meters
-        timeStamp: timestamp in datetime format (YYYY-MM-DD hh:mm:ss)
+        tStp: timestamp in datetime format (YYYY-MM-DD hh:mm:ss)
         minContrSites: minimum number of contributing radial sites (default to 2)
         
     OUTPUT:
@@ -261,7 +261,10 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
                 thisRadial['Lat'] = float(rad.metadata['Origin'].split()[0])
                 thisRadial['Lon'] = float(rad.metadata['Origin'].split()[1])
                 thisRadial['Coverage(s)'] = float(rad.metadata['TimeCoverage'].split()[0])
-                thisRadial['RngStep(km)'] = float(rad.metadata['RangeResolutionKMeters'].split()[0])
+                if 'RangeResolutionKMeters' in rad.metadata:
+                    thisRadial['RngStep(km)'] = float(rad.metadata['RangeResolutionKMeters'].split()[0])
+                elif 'RangeResolutionMeters' in rad.metadata:
+                    thisRadial['RngStep(km)'] = float(rad.metadata['RangeResolutionKMeters'].split()[0]) * 0.001
                 thisRadial['Pattern'] = rad.metadata['PatternType'].split()[0]
                 thisRadial['AntBearing(NCW)'] = float(rad.metadata['AntennaBearing'].split()[0])
             Tcomb.site_source = pd.concat([Tcomb.site_source, thisRadial])
@@ -304,7 +307,7 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
         Tcomb.data.reset_index(level=None, drop=False, inplace=True)    # Set drop=True if the former indices are not necessary
         
     else:
-        warn = 'No combination performed: not enough contributing radial sites.'
+        warn = 'No combination performed: not enough contributing radial sites'
     
     return Tcomb, warn
 

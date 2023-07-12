@@ -334,7 +334,7 @@ class Radial(fileParser):
             bearing_dim = np.unique(np.concatenate((bearing_dim_1,bearing_dim_2,bearing_dim_3),axis=None))
             bearing_dim = bearing_dim[(bearing_dim>=0) & (bearing_dim<=360)]
     
-            # create radial grid from bearing and range
+            # Create radial grid from bearing and range
             [bearing, ranges] = np.meshgrid(bearing_dim, range_dim)
             
             # Get the ellipsoid of the radial coordinate reference system
@@ -345,7 +345,7 @@ class Radial(fileParser):
             # Create Geod object with the retrieved ellipsoid
             g = Geod(ellps=radEllps)
     
-            # calculate lat/lons from origin, bearing, and ranges
+            # Calculate lat/lons from origin, bearing, and ranges
             latlon = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", self.metadata['Origin'])]
             # latd, lond = reckon(latlon[0], latlon[1], bearing, ranges)            
             bb = bearing.flatten()
@@ -356,7 +356,7 @@ class Radial(fileParser):
             lond = lond.reshape(bearing.shape)
             latd = latd.reshape(bearing.shape)            
             
-            # find grid indices from radial grid (bearing, ranges)
+            # Find grid indices from radial grid (bearing, ranges)
             range_map_idx = np.tile(np.nan, self.data['RNGE'].shape)
             bearing_map_idx = np.tile(np.nan, self.data['BEAR'].shape)
     
@@ -364,11 +364,11 @@ class Radial(fileParser):
                 range_map_idx[i] = np.argmin(np.abs(range_dim - self.data.RNGE[i]))
                 bearing_map_idx[i] = np.argmin(np.abs(bearing_dim - self.data.BEAR[i]))
                 
-            # set X and Y coordinate mappings
+            # Set X and Y coordinate mappings
             X_map_idx = bearing_map_idx         # BEAR is X axis
             Y_map_idx = range_map_idx           # RNGE is Y axis
                 
-            # create dictionary containing variables from dataframe in the shape of radial grid
+            # Create dictionary containing variables from dataframe in the shape of radial grid
             d = {key: np.tile(np.nan, bearing.shape) for key in self.data.keys()}
         
         # process WERA radials
@@ -417,10 +417,10 @@ class Radial(fileParser):
             lon_dim[replaceIndLon] = unqLon
             lat_dim[replaceIndLat] = unqLat            
     
-            # create radial grid from longitude and latitude
+            # Create radial grid from longitude and latitude
             [longitudes, latitudes] = np.meshgrid(lon_dim, lat_dim)
     
-            # find grid indices from lon/lat grid (longitudes, latitudes)
+            # Find grid indices from lon/lat grid (longitudes, latitudes)
             lat_map_idx = np.tile(np.nan, self.data['LATD'].shape)
             lon_map_idx = np.tile(np.nan, self.data['LOND'].shape)
     
@@ -541,7 +541,7 @@ class Radial(fileParser):
         Global attributes are created starting from Radial object metadata and from 
         DataFrames containing the information about HFR network and radial station
         read from the EU HFR NODE database.
-        The xarray Dataset is then saved as a netCDF file.
+        The generated xarray Dataset is attached to the Radial object, named as xds.
         
         INPUT:
             network_data: DataFrame containing the information of the network to which the radial site belongs
@@ -756,14 +756,6 @@ class Radial(fileParser):
                 if 'valid_max' in radVariables[cc]:
                     del self.xds[cc].attrs['valid_max']
                 self.xds[cc].encoding['_FillValue'] = None
-                
-        # Set the filename (with full path) for the netCDF file
-        ncFilePath = buildEHNradialFolder(station_data.iloc[0]['radial_HFRnetCDF_folder_path'],station_data.iloc[0]['station_id'],self.time,version)
-        ncFilename = buildEHNradialFilename(station_data.iloc[0]['network_id'],station_data.iloc[0]['station_id'],self.time,'.nc')
-        ncFile = ncFilePath + ncFilename 
-        
-        # Create netCDF from DataSet
-        self.xds.to_netcdf(ncFile, format=ncFormat)
                
         return
 
