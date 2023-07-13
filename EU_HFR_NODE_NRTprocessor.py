@@ -46,6 +46,81 @@ import pickle
 # PROCESSING FUNCTIONS
 ######################
 
+def applyEHNtotalQC(qcTot,networkData,vers,logger):
+    """
+    This function applies QC procedures to Total object according to the European 
+    standard data model.
+    
+    INPUTS:
+        qcTot: Series containing the total to be processed with the related information
+        networkData: DataFrame containing the information of the network producing the total
+        vers: version of the data model
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        T = processed Total object
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    qcErr = False
+    
+    #####        
+    # Apply QC    
+    #####
+    
+    try:      
+        # Get the total object
+        T = qcTot['Total']
+        
+        # Check if the Total was already processed
+        if qcTot['NRT_processed_flag'] == 0:           
+            
+            # Initialize QC metadata
+            T.initialize_qc()
+            
+            # DDNS
+            T.qc_ehn_data_density_threshold(networkData.iloc[0]['total_QC_data_density_threshold'])
+            
+            # CSPD
+            T.qc_ehn_maximum_velocity(networkData.iloc[0]['total_QC_velocity_threshold'])
+            
+            if T.is_wera:
+                # VART
+                T.qc_ehn_maximum_variance(networkData.iloc[0]['total_QC_variance_threshold'])
+            else:
+                # Temporal Gradient
+                prevHourTime = T.time-dt.timedelta(minutes=networkData.iloc[0]['temporal_resolution'])
+                prevHourBaseFolder = networkData.iloc[0]['total_HFRnetCDF_folder_path'].replace('nc','ttl')
+                prevHourFolderPath = buildEHNtotalFolder(prevHourBaseFolder,prevHourTime,vers)
+                prevHourFileName = buildEHNtotalFilename(networkData.iloc[0]['network_id'],prevHourTime,'.ttl')
+                prevHourTotFile = prevHourFolderPath + prevHourFileName     # previous hour total file
+                if os.path.exists(prevHourTotFile):
+                    with open(prevHourTotFile, 'rb') as ttlFile:
+                        t0 = pickle.load(ttlFile)
+                else:
+                    t0 = None
+                T.qc_ehn_temporal_derivative(t0,networkData.iloc[0]['total_QC_temporal_derivative_threshold'])
+                T.metadata['QCTest']['VART_QC'] = 'Variance Threshold QC Test not applicable to Direction Finding systems. ' + T.metadata['QCTest']['VART_QC']
+            
+            # GDOP
+            T.qc_ehn_gdop_threshold(networkData.iloc[0]['total_QC_GDOP_threshold'])
+
+            # Overall QC
+            T.qc_ehn_overall_qc_flag()
+            
+            logger.info('QC tests successfully applied to total file ' + T.file_name)
+        
+    except Exception as err:
+        qcErr = True
+        logger.error(err.strerror + ' for total file ' + T.file_name)     
+    
+    return  T
+
 def performRadialCombination(combRad,networkData,vers,logger):
     """
     This function performs the least square combination of the input Radials and creates
@@ -74,7 +149,7 @@ def performRadialCombination(combRad,networkData,vers,logger):
     crErr = False
     
     # Create the output DataFrame
-    combTot = pd.DataFrame(columns=['Total'])
+    combTot = pd.DataFrame(columns=['Total', 'NRT_processed_flag'])
     
     try:
         # Check if the combination is to be performed
@@ -121,7 +196,7 @@ def performRadialCombination(combRad,networkData,vers,logger):
                         T.is_wera = False
                     
                     # Add the Total object to the DataFrame
-                    combTot = pd.concat([combTot, pd.DataFrame([{'Total': T}])])
+                    combTot = pd.concat([combTot, pd.DataFrame([{'Total': T, 'NRT_processed_flag':0}])])
                     
                     # Set the filename (with full path) for the ttl file
                     ttlFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'].replace('nc','ttl'),T.time,vers)
@@ -135,6 +210,10 @@ def performRadialCombination(combRad,networkData,vers,logger):
                     # Save Total object as .ttl file with pickle
                     with open(ttlFile, 'wb') as ttlFile:
                         pickle.dump(T, ttlFile)
+                        
+                    # Add filename to the Total object
+                    T.file_name = ttlFilename
+                    
                 else:
                     logger.info(warn + ' for network ' + networkData.iloc[0]['network_id'] + ' at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
                     return combTot
@@ -328,7 +407,7 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
                 prevHourRadFile = prevHourFolderPath + prevHourFileName     # previous hour radial file
                 if os.path.exists(prevHourRadFile):
                     with open(prevHourRadFile, 'rb') as rdlFile:
-                        R = pickle.load(rdlFile)
+                        r0 = pickle.load(rdlFile)
                 else:
                     r0 = None
                 R.qc_ehn_temporal_derivative(r0,radSiteData.iloc[0]['radial_QC_temporal_derivative_threshold'])
@@ -352,7 +431,7 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
         qcErr = True
         logger.error(err.strerror + ' for radial file ' + R.file_name)     
     
-    return  R    
+    return  R 
     
 def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,logger):
     """
@@ -423,14 +502,13 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         # Combine Radials into Total
         #####
         
-        TotDF = performRadialCombination(groupedRad,networkData,vers,logger)
+        dfTot = performRadialCombination(groupedRad,networkData,vers,logger)
         
         #####        
         # Apply QC to Radials
         #####
         
-        # TO BE DONE       
-        
+        dfTot['Total'] = dfTot.apply(lambda x: applyEHNtotalQC(x,networkData,vers,logger),axis=1)        
             
         #####        
         # Convert Total to standard data format (netCDF)
