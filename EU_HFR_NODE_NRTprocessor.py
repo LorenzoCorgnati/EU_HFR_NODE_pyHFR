@@ -46,6 +46,135 @@ import pickle
 # PROCESSING FUNCTIONS
 ######################
 
+def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
+    """
+    This function applies the European standard data model to Total object and saves
+    the resulting netCDF file. The Total object is also saved as .ttl file via pickle
+    binary serialization.
+    The function inserts information about the created netCDF file into the database.
+    
+    INPUTS:
+        dmTot: Series containing the total to be processed with the related information
+        networkData: DataFrame containing the information of the network producing the total
+        stationData: DataFrame containing the information of the radial sites belonging to the network
+        vers: version of the data model
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        dmTot = Series containing the processed Total object with the related information
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    dmErr = False
+    
+    # Check if the Radial was already processed
+    if dmTot['NRT_processed_flag'] == 0:
+    
+        try:        
+            # Get the Total object
+            T = dmTot['Total']
+            
+            # Check if the total is native or combined
+            if '.ttl' in T.file_name:
+                combined = True             # combined total
+            else:
+                combined = False            # native total
+            
+    #####        
+    # Convert to standard data format (netCDF)  
+    #####
+        
+            # Apply the standard data model
+            T.apply_ehn_datamodel(networkData,stationData,vers)
+            
+            # Set the filename (with full path) for the netCDF file
+            ncFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'],T.time,vers)
+            ncFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.nc')
+            ncFile = ncFilePath + ncFilename 
+            
+            # Create the destination folder
+            if not os.path.isdir(ncFilePath):
+                os.makedirs(ncFilePath)
+            
+            # Create netCDF from DataSet and save it
+            T.xds.to_netcdf(ncFile, format=T.xds.attrs['netcdf_format'])            
+            logger.info(ncFilename + ' total netCDF file succesfully created and stored (' + vers + ').')
+            
+    #####        
+    # Insert information about the created total netCDF into database 
+    #####
+    
+            try:
+                # Delete the entry with the same filename from total_HFRnetCDF_tb table, if present
+                totalDeleteQuery = 'DELETE FROM total_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
+                eng.execute(totalDeleteQuery)  
+                
+                # Prepare data to be inserted into database
+                if combined:
+                    dataTotalNC = {'filename': [ncFilename], \
+                                    'network_id': [networkData.iloc[0]['network_id']], \
+                                    'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
+                                    'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                    'filesize': [os.path.getsize(ncFile)/1024], 'ttl_filename': T.file_name, 'check_flag': [0]}
+                else:                    
+                    dataTotalNC = {'filename': [ncFilename], \
+                                    'network_id': [networkData.iloc[0]['network_id']], \
+                                    'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
+                                    'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                    'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': T.file_name, 'check_flag': [0]}
+                dfTotalNC = pd.DataFrame(dataTotalNC)
+                
+                # Insert data into total_HFRnetCDF_tb table
+                dfTotalNC.to_sql('total_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfTotalNC.columns)
+                logger.info(ncFilename + ' total netCDF file information inserted into database.')
+                
+            except sqlalchemy.exc.DBAPIError as err:        
+                dMerr = True
+                logger.error('MySQL error ' + err._message())        
+    
+    #####
+    # Save Total object as .rdl file with pickle
+    #####
+    
+            # Create the destination folder
+            if not os.path.isdir(ncFilePath.replace('nc','ttl')):
+                os.makedirs(ncFilePath.replace('nc','ttl'))
+                
+            # Save the ttl file
+            with open(ncFile.replace('nc','ttl'), 'wb') as ttlFile:
+                  pickle.dump(T, ttlFile) 
+            logger.info(ncFilename.replace('nc','ttl') + ' total ttl file succesfully created and stored (' + vers + ').')
+            
+        except Exception as err:
+            dmErr = True
+            logger.error(err.strerror + ' for total file ' + T.file_name)
+            return dmTot
+            
+    #####
+    # Update NRT_processed_flag for the processed total
+    #####
+        
+        if not dmErr:
+            # Update the local DataFrame
+            dmTot['NRT_processed_flag'] = 1
+            
+            # Update the total_input_tb table on the database
+            if not combined:
+                try:
+                    totalUpdateQuery = 'UPDATE total_input_tb SET NRT_processed_flag=1 WHERE filename=\'' + T.file_name + '\''
+                    eng.execute(totalUpdateQuery) 
+                except sqlalchemy.exc.DBAPIError as err:        
+                    dMerr = True
+                    logger.error('MySQL error ' + err._message())        
+    
+    return  dmTot
+
 def applyEHNtotalQC(qcTot,networkData,vers,logger):
     """
     This function applies QC procedures to Total object according to the European 
@@ -121,18 +250,21 @@ def applyEHNtotalQC(qcTot,networkData,vers,logger):
     
     return  T
 
-def performRadialCombination(combRad,networkData,vers,logger):
+def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logger):
     """
     This function performs the least square combination of the input Radials and creates
     a Total object containing the resulting total current data. 
     The Total object is also saved as .ttl file via pickle binary serialization.
     The function creates a DataFrame containing the resulting Total object along with 
     related information.
+    The function inserts information about the created netCDF file into the database.
     
     INPUTS:
         combRad: DataFrame containing the Radial objects to be combined with the related information
         networkData: DataFrame containing the information of the network to which the radial site belongs
+        numActiveStations: number of operational radial sites
         vers: version of the data model
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -165,7 +297,7 @@ def performRadialCombination(combRad,networkData,vers,logger):
                 # Get the grid resolution in meters
                 gridResolution = networkData.iloc[0]['grid_resolution'] * 1000      # Grid resolution is stored in km in the database
                 
-                # Cerate the geographical grid
+                # Create the geographical grid
                 gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
                 
                 # Get the combination search radius in meters
@@ -203,6 +335,9 @@ def performRadialCombination(combRad,networkData,vers,logger):
                     ttlFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.ttl')
                     ttlFile = ttlFilePath + ttlFilename 
                     
+                    # Add filename to the Total object
+                    T.file_name = ttlFilename
+                    
                     # Create the destination folder
                     if not os.path.isdir(ttlFilePath):
                         os.makedirs(ttlFilePath)
@@ -211,18 +346,29 @@ def performRadialCombination(combRad,networkData,vers,logger):
                     with open(ttlFile, 'wb') as ttlFile:
                         pickle.dump(T, ttlFile)
                         
-                    # Add filename to the Total object
-                    T.file_name = ttlFilename
+    #####
+    # Update NRT_combined_flag for the combined radials                        
+    #####
+                    # Update the local DataFrame
+                    if len(combRad) == numActiveStations:
+                        combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
                     
+                    # Update the radial_input_tb table on the database
+                    try:
+                        radialUpdateQuery = 'UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + R.file_name + '\''
+                        eng.execute(radialUpdateQuery) 
+                    except sqlalchemy.exc.DBAPIError as err:        
+                        dMerr = True
+                        logger.error('MySQL error ' + err._message())   
+                        
                 else:
                     logger.info(warn + ' for network ' + networkData.iloc[0]['network_id'] + ' at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
-                    return combTot
-            
+                    return combTot            
         
     except Exception as err:
         crErr = True
-        logger.error(err.strerror + ' for network ' + networkData.iloc[0]['network_id']  + ' in radial combination at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
-    
+        logger.error(err.strerror + ' for network ' + networkData.iloc[0]['network_id']  + ' in radial combination at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S')) 
+                 
     return combTot
 
 def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
@@ -230,7 +376,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     This function applies the European standard data model to radial object and saves
     the resulting netCDF file. The Radial object is also saved as .rdl file via pickle
     binary serialization.
-    The function insert information about the created netCDF file into the database.
+    The function inserts information about the created netCDF file into the database.
     
     INPUTS:
         dmRad: Series containing the radial to be processed with the related information
@@ -261,7 +407,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     # Enhance Radial object with information from database
     #####
         
-            # Get the radial object
+            # Get the Radial object
             R = dmRad['Radial']
             
             # Add metadata related to range limits
@@ -432,6 +578,67 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
         logger.error(err.strerror + ' for radial file ' + R.file_name)     
     
     return  R 
+
+def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
+    """
+    This function processes the input total files pushed by the HFR data providers 
+    according to the workflow of the EU HFR NODE.
+    QC is applied to totals and they are then converted into the European standard 
+    data model.
+    Information about total processing is inserted into the EU HFR NODE database.
+    
+    INPUTS:
+        groupedTot: DataFrame containing the totals to be processed grouped by timestamp
+                    for the input network with the related information
+        networkID: network ID of the network to be processed
+        networkData: DataFrame containing the information of the network to be processed
+        stationData: DataFrame containing the information of the stations belonging 
+                     to the network to be processed
+        startDate: string containing the datetime of the starting date of the processing period
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Set the version of the data model
+    vers = 'v3'
+    
+    # Initialize error flag
+    pTerr = False
+    
+    try:
+        logger.info('Total processing started for ' + networkID + ' network ' + '(' + vers + ').') 
+
+        #####
+        # Enhance the total DataFrame
+        #####
+        
+        # Add Radial objects to the DataFrame
+        dfTot['Total'] = (dfTot.filepath + '/' + dfTot.filename).apply(lambda x: Total(x))
+        
+        #####        
+        # Apply QC to Totals
+        #####
+        
+        dfTot['Total'] = dfTot.apply(lambda x: applyEHNtotalQC(x,networkData,vers,logger),axis=1)
+        
+        #####        
+        # Convert Total to standard data format (netCDF)
+        #####
+        
+        dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+        
+    except Exception as err:
+        pTerr = True
+        logger.error(err.strerror)    
+    
+    return
     
 def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,logger):
     """
@@ -502,10 +709,10 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         # Combine Radials into Total
         #####
         
-        dfTot = performRadialCombination(groupedRad,networkData,vers,logger)
+        dfTot = performRadialCombination(groupedRad,networkData,numActiveStations,vers,eng,logger)
         
         #####        
-        # Apply QC to Radials
+        # Apply QC to Totals
         #####
         
         dfTot['Total'] = dfTot.apply(lambda x: applyEHNtotalQC(x,networkData,vers,logger),axis=1)        
@@ -514,13 +721,63 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         # Convert Total to standard data format (netCDF)
         #####
         
-        # TO BE DONE
+        dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
         
     except Exception as err:
         pRerr = True
         logger.error(err.strerror)    
     
     return
+
+def selectTotals(networkID,startDate,eng,logger):
+    """
+    This function selects the totals to be processed for the input network by reading
+    from the total_input_tb table of the EU HFR NODE database.
+        
+    INPUTS:
+        networkID: network ID of the network to be processed
+        startDate: string containing the datetime of the starting date of the processing period
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        totalsToBeProcessed: DataFrame containing all the totals to be processed for the input 
+                              network with the related information
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    sTerr = False
+    
+    try:
+       
+        #####
+        # Select totals to be processed
+        #####
+        
+        # Set and execute the query for getting totals to be processed
+        if 'HFR-US' in networkID:
+            # GESTIRE TOTALI RETI US
+            
+            print('TO BE DONE')
+        else:
+            networkStr = '\'' + networkID + '\''
+        try:
+            totalSelectionQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0) ORDER BY TIMESTAMP'
+            totalsToBeProcessed = pd.read_sql(totalSelectionQuery, con=eng)
+        except sqlalchemy.exc.DBAPIError as err:        
+            sRerr = True
+            logger.error('MySQL error ' + err._message())
+                
+    except Exception as err:
+        sTerr = True
+        logger.error(err.strerror + ' for network ' + networkID)
+            
+    return totalsToBeProcessed
 
 def selectRadials(networkID,startDate,eng,logger):
     """
@@ -887,26 +1144,14 @@ def processNetwork(networkID,memory,sqlConfig):
         
         # Process radials
         radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))
+        
+        # Select totals to be processed
+        totalsToBeProcessed = selectTotals(networkID,startDate,eng,logger)
+        logger.info('Totals to be processed successfully selected for network ' + networkID)
+        
+        # Process totals
+        totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,eng,logger))
             
-            
-        
-        
-        # Selection of totals to be converted based on timestamp
-        
-        # Total data QC
-        
-        # INSERIRE lonMin, lonMax, latMin, latMax, gridResolution IN T.metadata - CHECK NOMI METADATI
-        T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
-        T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
-        T.metadata['BBminLatitude'] = str(latMin) + ' deg'
-        T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
-        
-        # Save Total object as .ttl file with pickle
-        with open('filename.ttl', 'wb') as ttlFile:
-            pickle.dump(T, ttlFile)
-        
-        # Total data conversion to standard format (netCDF)
-        
     except Exception as err:
         pNerr = True
         logger.error(err.strerror)

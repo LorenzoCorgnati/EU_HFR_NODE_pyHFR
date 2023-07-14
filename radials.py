@@ -521,7 +521,7 @@ class Radial(fileParser):
                                      dims={'LONGITUDE': lon_dim},
                                      coords={'LONGITUDE': lon_dim})              
         
-        # Attach the DataSet to the Radial object
+        # Attach the dictionary to the Radial object
         self.xdr = xdr
         
         return

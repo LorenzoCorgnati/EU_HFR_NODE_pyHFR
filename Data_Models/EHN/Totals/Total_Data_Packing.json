@@ -21,7 +21,8 @@
     "SDN_LOCAL_CDI_ID": {
     },
     "SDN_EDMO_CODE": {
-        "dtype": "int16"
+        "dtype": "int16",
+        "fill_value": ""
     },
     "SDN_REFERENCES": {
     },

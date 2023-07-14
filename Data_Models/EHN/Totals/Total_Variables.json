@@ -4,7 +4,7 @@
         "long_name": "Time",
         "standard_name": "time",        
         "units": "days since 1950-01-01T00:00:00Z",
-        "calendar": "Julian",
+        "calendar": "standard",
         "sdn_parameter_name": "Elapsed time (since 1950-01-01T00:00:00Z)",
         "sdn_parameter_urn": "SDN:P01::ELTJLD01",
         "sdn_uom_name": "Days",
