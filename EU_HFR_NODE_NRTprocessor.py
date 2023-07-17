@@ -7,7 +7,7 @@
 # e-mail: lorenzo.corgnati@sp.ismar.cnr.it
 
 
-# This application inserts into the EU HFR NODE database the information about 
+# This application inserts into the EU HFR NODE EU HFR NODE database the information about 
 # radial and total HFR files (both Codar and WERA) pushed by the data providers,
 # combines radials into totals and generates HFR radial and total data to netCDF 
 # files according to the European standard data model for data distribution towards
@@ -51,7 +51,8 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     This function applies the European standard data model to Total object and saves
     the resulting netCDF file. The Total object is also saved as .ttl file via pickle
     binary serialization.
-    The function inserts information about the created netCDF file into the database.
+    The function inserts information about the created netCDF file into the 
+    EU HFR NODE database.
     
     INPUTS:
         dmTot: Series containing the total to be processed with the related information
@@ -107,7 +108,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             logger.info(ncFilename + ' total netCDF file succesfully created and stored (' + vers + ').')
             
     #####        
-    # Insert information about the created total netCDF into database 
+    # Insert information about the created total netCDF into EU HFR NODE database 
     #####
     
             try:
@@ -115,7 +116,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 totalDeleteQuery = 'DELETE FROM total_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
                 eng.execute(totalDeleteQuery)  
                 
-                # Prepare data to be inserted into database
+                # Prepare data to be inserted into EU HFR NODE database
                 if combined:
                     dataTotalNC = {'filename': [ncFilename], \
                                     'network_id': [networkData.iloc[0]['network_id']], \
@@ -132,7 +133,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 
                 # Insert data into total_HFRnetCDF_tb table
                 dfTotalNC.to_sql('total_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfTotalNC.columns)
-                logger.info(ncFilename + ' total netCDF file information inserted into database.')
+                logger.info(ncFilename + ' total netCDF file information inserted into EU HFR NODE database.')
                 
             except sqlalchemy.exc.DBAPIError as err:        
                 dMerr = True
@@ -164,7 +165,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             # Update the local DataFrame
             dmTot['NRT_processed_flag'] = 1
             
-            # Update the total_input_tb table on the database
+            # Update the total_input_tb table on the EU HFR NODE database
             if not combined:
                 try:
                     totalUpdateQuery = 'UPDATE total_input_tb SET NRT_processed_flag=1 WHERE filename=\'' + T.file_name + '\''
@@ -257,14 +258,14 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
     The Total object is also saved as .ttl file via pickle binary serialization.
     The function creates a DataFrame containing the resulting Total object along with 
     related information.
-    The function inserts information about the created netCDF file into the database.
+    The function inserts information about the created netCDF file into the EU HFR NODE database.
     
     INPUTS:
         combRad: DataFrame containing the Radial objects to be combined with the related information
         networkData: DataFrame containing the information of the network to which the radial site belongs
         numActiveStations: number of operational radial sites
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -295,13 +296,13 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                 latMax = networkData.iloc[0]['geospatial_lat_max']
                 
                 # Get the grid resolution in meters
-                gridResolution = networkData.iloc[0]['grid_resolution'] * 1000      # Grid resolution is stored in km in the database
+                gridResolution = networkData.iloc[0]['grid_resolution'] * 1000      # Grid resolution is stored in km in the EU HFR NODE database
                 
                 # Create the geographical grid
                 gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
                 
                 # Get the combination search radius in meters
-                searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the database
+                searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the EU HFR NODE database
                 
                 # Get the timestamp
                 timeStamp = dt.datetime.strptime(str(combRad.iloc[0]['datetime']),'%Y-%m-%d %H:%M:%S')
@@ -353,10 +354,9 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                     if len(combRad) == numActiveStations:
                         combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
                     
-                    # Update the radial_input_tb table on the database
+                    # Update the radial_input_tb table on the EU HFR NODE database
                     try:
-                        radialUpdateQuery = 'UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + R.file_name + '\''
-                        eng.execute(radialUpdateQuery) 
+                        combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
                     except sqlalchemy.exc.DBAPIError as err:        
                         dMerr = True
                         logger.error('MySQL error ' + err._message())   
@@ -376,14 +376,14 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     This function applies the European standard data model to radial object and saves
     the resulting netCDF file. The Radial object is also saved as .rdl file via pickle
     binary serialization.
-    The function inserts information about the created netCDF file into the database.
+    The function inserts information about the created netCDF file into the EU HFR NODE database.
     
     INPUTS:
         dmRad: Series containing the radial to be processed with the related information
         networkData: DataFrame containing the information of the network to which the radial site belongs
         radSiteData: DataFrame containing the information of the radial site that produced the radial
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -404,7 +404,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
         try:        
         
     #####
-    # Enhance Radial object with information from database
+    # Enhance Radial object with information from EU HFR NODE database
     #####
         
             # Get the Radial object
@@ -438,7 +438,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             logger.info(ncFilename + ' radial netCDF file succesfully created and stored (' + vers + ').')
             
     #####        
-    # Insert information about the created radial netCDF into database 
+    # Insert information about the created radial netCDF into EU HFR NODE database 
     #####
     
             try:
@@ -446,7 +446,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                 radialDeleteQuery = 'DELETE FROM radial_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
                 eng.execute(radialDeleteQuery)           
                 
-                # Prepare data to be inserted into database
+                # Prepare data to be inserted into EU HFR NODE database
                 dataRadialNC = {'filename': [ncFilename], \
                                 'network_id': [radSiteData.iloc[0]['network_id']], 'station_id': [radSiteData.iloc[0]['station_id']], \
                                 'timestamp': [R.time.strftime('%Y %m %d %H %M %S')], 'datetime': [R.time.strftime('%Y-%m-%d %H:%M:%S')], \
@@ -456,7 +456,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                 
                 # Insert data into radial_HFRnetCDF_tb table
                 dfRadialNC.to_sql('radial_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfRadialNC.columns)
-                logger.info(ncFilename + ' radial netCDF file information inserted into database.')
+                logger.info(ncFilename + ' radial netCDF file information inserted into EU HFR NODE database.')
                 
             except sqlalchemy.exc.DBAPIError as err:        
                 dMerr = True
@@ -488,7 +488,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             # Update the local DataFrame
             dmRad['NRT_processed_flag'] = 1
             
-            # Update the radial_input_tb table on the database
+            # Update the radial_input_tb table on the EU HFR NODE database
             try:
                 radialUpdateQuery = 'UPDATE radial_input_tb SET NRT_processed_flag=1 WHERE filename=\'' + R.file_name + '\''
                 eng.execute(radialUpdateQuery) 
@@ -579,13 +579,63 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
     
     return  R 
 
+def updateLastCalibrationDate(lcdRad,radSiteData,eng,logger):
+    """
+    This function updates, if necessary, the last_calibration_date field of the 
+    station_tb table of the EU HFR NODE database based on the input radial file
+    metadata.
+    
+    INPUTS:
+        lcdRad: Series containing the radial to be processed with the related information
+        radSiteData: DataFrame containing the information of the radial site that produced the radial
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    lcdErr = False
+    
+    try:
+        
+        # Get the Radial object
+        R = lcdRad['Radial']
+            
+    # Check if the Radial object contains the last pattern date
+        if not R.is_wera:
+            # Get the last calibration date from Radial object metadata
+            lcdFromFile = dt.datetime.strptime(R.metadata['PatternDate'],'%Y %m %d %H %M %S').date()
+            # Check if the last calibration date is to be updated
+            if lcdFromFile > radSiteData.iloc[0]['last_calibration_date']:
+                # Update the station_tb table on the EU HFR NODE database
+                try:
+                    stationUpdateQuery = 'UPDATE station_tb SET last_calibration_date=\'' + lcdFromFile.strftime('%Y-%m-%d') + '\' WHERE station_id=\'' + radSiteData.iloc[0]['station_id'] + '\''
+                    eng.execute(stationUpdateQuery) 
+                    logger.info('Last calibration date updated for station ' + radSiteData.iloc[0]['station_id'])
+                except sqlalchemy.exc.DBAPIError as err:        
+                    lcdErr = True
+                    logger.error('MySQL error ' + err._message())   
+                
+    except Exception as err:
+        lcdErr = True
+        logger.error(err.strerror + ' for radial file ' + R.file_name)
+        return
+    
+    return
+
 def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
     """
     This function processes the input total files pushed by the HFR data providers 
     according to the workflow of the EU HFR NODE.
     QC is applied to totals and they are then converted into the European standard 
     data model.
-    Information about total processing is inserted into the EU HFR NODE database.
+    Information about total processing is inserted into the EU HFR NODE EU HFR NODE database.
     
     INPUTS:
         groupedTot: DataFrame containing the totals to be processed grouped by timestamp
@@ -694,6 +744,12 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         groupedRad.rename(index=indexMapper,inplace=True)        
         
         #####        
+        # Update the last calibration date in station_tb table of teh database
+        #####
+        
+        groupedRad.apply(lambda x: updateLastCalibrationDate(x,stationData.loc[stationData['station_id'] == x.station_id],eng,logger),axis=1)
+        
+        #####        
         # Apply QC to Radials
         #####
         
@@ -782,12 +838,12 @@ def selectTotals(networkID,startDate,eng,logger):
 def selectRadials(networkID,startDate,eng,logger):
     """
     This function selects the radials to be processed for the input network by reading
-    from the radial_input_tb table of the EU HFR NODE database.
+    from the radial_input_tb table of the EU HFR NODE EU HFR NODE database.
         
     INPUTS:
         networkID: network ID of the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -831,14 +887,14 @@ def selectRadials(networkID,startDate,eng,logger):
 def inputTotals(networkID,networkData,startDate,eng,logger):
     """
     This function lists the input total files pushed by the HFR data providers 
-    and inserts into the EU HFR NODE database the information needed for the 
+    and inserts into the EU HFR NODE EU HFR NODE database the information needed for the 
     generation of the total data files into the European standard data model.
     
     INPUTS:
         networkID: network ID of the network to be processed
         networkData: DataFrame containing the information of the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -884,12 +940,12 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
                         filePath = os.path.dirname(inputFile)
                         fileName = os.path.basename(inputFile)
                         fileExt = os.path.splitext(inputFile)[1]
-                        # Check if the file is already present in the database
+                        # Check if the file is already present in the EU HFR NODE database
                         try:
                             totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
                             totalPresenceData = pd.read_sql(totalPresenceQuery, con=eng)
                             numPresentTotals = totalPresenceData.shape[0]
-                            if numPresentTotals==0:    # the current file is not present in the database
+                            if numPresentTotals==0:    # the current file is not present in the EU HFR NODE database
                                 # Get file timestamp
                                 total = Total(inputFile)
                                 timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
@@ -897,17 +953,17 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
                                 # Get file size in Kbytes
                                 fileSize = os.path.getsize(inputFile)/1024    
     #####
-    # Insert total information into database
+    # Insert total information into EU HFR NODE database
     #####
-                                # Prepare data to be inserted into database
+                                # Prepare data to be inserted into EU HFR NODE database
                                 dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
                                              'datetime': [dateTime], 'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
                                               'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
                                 dfTotal = pd.DataFrame(dataTotal)
                                 
-                                # Insert data into database
+                                # Insert data into EU HFR NODE database
                                 dfTotal.to_sql('total_input_tb', con=eng, if_exists='append', index=False, index_label=dfTotal.columns)
-                                logger.info(fileName + ' total file information inserted into database.')  
+                                logger.info(fileName + ' total file information inserted into EU HFR NODE database.')  
                         except sqlalchemy.exc.DBAPIError as err:        
                             iTerr = True
                             logger.error('MySQL error ' + err._message())
@@ -925,7 +981,7 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
 def inputRadials(networkID,stationData,startDate,eng,logger):
     """
     This function lists the input radial files pushed by the HFR data providers 
-    and inserts into the EU HFR NODE database the information needed for the 
+    and inserts into the EU HFR NODE EU HFR NODE database the information needed for the 
     combination of radial files into totals and for the generation of the 
     radial and total data files into the European standard data model.
     
@@ -934,7 +990,7 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -985,12 +1041,12 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                             filePath = os.path.dirname(inputFile)
                             fileName = os.path.basename(inputFile)
                             fileExt = os.path.splitext(inputFile)[1]
-                            # Check if the file is already present in the database
+                            # Check if the file is already present in the EU HFR NODE database
                             try:
                                 radialPresenceQuery = 'SELECT * FROM radial_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
                                 radialPresenceData = pd.read_sql(radialPresenceQuery, con=eng)
                                 numPresentRadials = radialPresenceData.shape[0]
-                                if numPresentRadials==0:    # the current file is not present in the database
+                                if numPresentRadials==0:    # the current file is not present in the EU HFR NODE database
                                     # Get file timestamp
                                     radial = Radial(inputFile)
                                     timeStamp = radial.time.strftime("%Y %m %d %H %M %S")                    
@@ -998,9 +1054,9 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                                     # Get file size in Kbytes
                                     fileSize = os.path.getsize(inputFile)/1024 
     #####
-    # Insert radial information into database
+    # Insert radial information into EU HFR NODE database
     #####
-                                    # Prepare data to be inserted into database
+                                    # Prepare data to be inserted into EU HFR NODE database
                                     dataRadial = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], \
                                                   'station_id': [stationID], 'timestamp': [timeStamp], 'datetime': [dateTime], \
                                                   'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
@@ -1008,9 +1064,9 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                                                   'NRT_processed_flag_integrated_network': [0], 'NRT_combined_flag': [0]}
                                     dfRadial = pd.DataFrame(dataRadial)
                                     
-                                    # Insert data into database
+                                    # Insert data into EU HFR NODE database
                                     dfRadial.to_sql('radial_input_tb', con=eng, if_exists='append', index=False, index_label=dfRadial.columns)
-                                    logger.info(fileName + ' radial file information inserted into database.')   
+                                    logger.info(fileName + ' radial file information inserted into EU HFR NODE database.')   
                             except sqlalchemy.exc.DBAPIError as err:        
                                 iRerr = True
                                 logger.error('MySQL error ' + err._message())
@@ -1032,16 +1088,16 @@ def processNetwork(networkID,memory,sqlConfig):
     
     The first processing step consists in the listing of the input files
     (both radial and total) pushed by the HFR data providers for inserting into
-    the EU HFR NODE database the information needed for the combination of radial files
+    the EU HFR NODE EU HFR NODE database the information needed for the combination of radial files
     into totals and for the generation of the radial and total data files according
     to the European standard data model.
     
-    The second processing step consists in reading the EU HFR NODE database for collecting
+    The second processing step consists in reading the EU HFR NODE EU HFR NODE database for collecting
     information about the radial data files to be combined into totals and in
     combining and generating radial and total data files according to the European
     standard data model.
     
-    The third processing step consists in reading the EU HFR NODE database for collecting
+    The third processing step consists in reading the EU HFR NODE EU HFR NODE database for collecting
     information about the total data files to be converted into the European standard
     data model and in the generating total data files according to the European
     standard data model.
@@ -1049,7 +1105,7 @@ def processNetwork(networkID,memory,sqlConfig):
     INPUTS:
         networkID: network ID of the network to be processed
         memory: number of days in the past when to start processing
-        sqlConfig: parameters for connecting to the Mysql EU HFR NODE database
+        sqlConfig: parameters for connecting to the Mysql EU HFR NODE EU HFR NODE database
 
         
     OUTPUTS:
@@ -1096,20 +1152,20 @@ def processNetwork(networkID,memory,sqlConfig):
         return
     
     #####
-    # Retrieve information about network and stations from database
+    # Retrieve information about network and stations from EU HFR NODE database
     #####
     
     try:
-        # Create SQLAlchemy engine for connecting to database
+        # Create SQLAlchemy engine for connecting to EU HFR NODE database
         eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
                                        sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
-                                       sqlConfig['database'])
+                                       sqlConfig['EU HFR NODE database'])
         
         # Set and execute the query and get the HFR network data
         networkSelectQuery = 'SELECT * FROM network_tb WHERE network_id=\'' + networkID + '\''
         networkData = pd.read_sql(networkSelectQuery, con=eng)
         numNetworks = networkData.shape[0]
-        logger.info(networkID + ' network data successfully fetched from database.')
+        logger.info(networkID + ' network data successfully fetched from EU HFR NODE database.')
         # Set and execute the query and get the HFR station data
         if networkID == 'HFR-WesternItaly':
             stationSelectQuery = 'SELECT * FROM station_tb WHERE network_id=\'HFR-TirLig\' OR network_id=\'HFR-LaMMA\' OR network_id=\'HFR-ARPAS\''
@@ -1117,7 +1173,7 @@ def processNetwork(networkID,memory,sqlConfig):
             stationSelectQuery = 'SELECT * FROM station_tb WHERE network_id=\'' + networkID + '\''
         stationData = pd.read_sql(stationSelectQuery, con=eng)
         numStations = stationData.shape[0]
-        logger.info(networkID + ' station data successfully fetched from database.')
+        logger.info(networkID + ' station data successfully fetched from EU HFR NODE database.')
     except sqlalchemy.exc.DBAPIError as err:        
         pNerr = True
         logger.error('MySQL error ' + err._message())
@@ -1207,12 +1263,12 @@ def main(argv):
     logger.addHandler(ch)
     
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!TO BE CHANGED FOR OPERATIONS (IP set to 150.145.136.104) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # Set parameter for Mysql database connection
+    # Set parameter for Mysql EU HFR NODE database connection
     sqlConfig = {
       'user': 'HFRuserCP',
       'password': '!_kRIVAHYH2RLpmQxz_!',
       'host': '150.145.136.108',
-      'database': 'HFR_node_db',
+      'EU HFR NODE database': 'HFR_node_db',
     }
     
     # Initialize error flag
@@ -1225,16 +1281,16 @@ def main(argv):
 #####
     
     try:
-        # Create SQLAlchemy engine for connecting to database
+        # Create SQLAlchemy engine for connecting to EU HFR NODE database
         eng = sqlalchemy.create_engine('mysql+mysqlconnector://' + sqlConfig['user'] + ':' + \
                                        sqlConfig['password'] + '@' + sqlConfig['host'] + '/' + \
-                                       sqlConfig['database'])
+                                       sqlConfig['EU HFR NODE database'])
             
         # Set and execute the query and get the HFR network IDs to be processed
         networkSelectQuery = 'SELECT network_id FROM network_tb WHERE EU_HFR_processing_flag=1'
         networkIDs = pd.read_sql(networkSelectQuery, con=eng)
         numNetworks = networkIDs.shape[0]
-        logger.info('Network IDs successfully fetched from database.')
+        logger.info('Network IDs successfully fetched from EU HFR NODE database.')
     except sqlalchemy.exc.DBAPIError as err:        
         EHNerr = True
         logger.error('MySQL error ' + err._message())
