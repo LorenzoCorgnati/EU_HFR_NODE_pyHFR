@@ -51,7 +51,7 @@
     "reference_system": "EPSG:4326",
     "cdm_data_type": "grid",
     "format_version": "",
-    "Conventions": "CF-1.6, EuroGOOS European HFR Node",
+    "Conventions": "CF-1.11, EuroGOOS European HFR Node",
     "netcdf_format": "",
     "netcdf_version": "4.9.3",
     "update_interval": "void",

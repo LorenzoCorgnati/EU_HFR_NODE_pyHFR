@@ -174,7 +174,8 @@ class fileParser(object):
         """
         table_count = 0
         table = False  # Set table to False. Once a table is found, switch to True.
-        self.is_wera = False  # Default false. If 'WERA' is detected in the Manufacturer flag. It is set to True
+        self.is_wera = False  # Default false. If 'WERA' is detected in the Manufacturer flag it is then set to True
+        self.is_combined = False  # Default false. If radial combination is performed it is then set to True
         processing_info = []
         site_source = []
 
@@ -355,6 +356,7 @@ class fileParser(object):
         table_count = 0
         table = False  # Set table to False. Once a table is found, switch to True.
         self.is_wera = True  # Default True
+        self.is_combined = False  # Default false. If radial combination is performed it is then set to True
         processing_info = []
         site_source = []
 
@@ -491,7 +493,7 @@ class fileParser(object):
             metadataDict['Range'] = wordList[wordList.index("RANGE")+1].strip() + ' ' + \
                                     wordList[wordList.index("RANGE")+2].strip()
         if 'TRUENORTH' in wordList:
-            metadataDict['Truenorth'] = wordList[wordList.index("TRUENORTH")+1].strip() + ' ' + \
+            metadataDict['TrueNorth'] = wordList[wordList.index("TRUENORTH")+1].strip() + ' ' + \
                                         wordList[wordList.index("TRUENORTH")+2].strip()
         if 'RATE' in wordList:
             metadataDict['ChirpRate'] = wordList[wordList.index("RATE")+1].strip()

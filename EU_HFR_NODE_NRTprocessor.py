@@ -81,12 +81,6 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             # Get the Total object
             T = dmTot['Total']
             
-            # Check if the total is native or combined
-            if '.ttl' in T.file_name:
-                combined = True             # combined total
-            else:
-                combined = False            # native total
-            
     #####        
     # Convert to standard data format (netCDF)  
     #####
@@ -117,7 +111,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 eng.execute(totalDeleteQuery)  
                 
                 # Prepare data to be inserted into EU HFR NODE database
-                if combined:
+                if T.is_combined:
                     dataTotalNC = {'filename': [ncFilename], \
                                     'network_id': [networkData.iloc[0]['network_id']], \
                                     'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
@@ -166,7 +160,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             dmTot['NRT_processed_flag'] = 1
             
             # Update the total_input_tb table on the EU HFR NODE database
-            if not combined:
+            if not T.is_combined:
                 try:
                     totalUpdateQuery = 'UPDATE total_input_tb SET NRT_processed_flag=1 WHERE filename=\'' + T.file_name + '\''
                     eng.execute(totalUpdateQuery) 
@@ -299,7 +293,15 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                 gridResolution = networkData.iloc[0]['grid_resolution'] * 1000      # Grid resolution is stored in km in the EU HFR NODE database
                 
                 # Create the geographical grid
-                gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
+                exts = combRad.extension.unique().tolist()
+                if (len(exts) == 1):
+                    if exts[0] == '.ruv':
+                        gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
+                    elif exts[0] == '.crad_ascii':
+                        gridGS = createLonLatGridFromBBwera(lonMin, lonMax, latMin, latMax, gridResolution)
+                else:
+                    gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
+                
                 
                 # Get the combination search radius in meters
                 searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the EU HFR NODE database
@@ -318,8 +320,10 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                     T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
                     T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
                     
+                    # Update is_combined attribute
+                    T.is_combined = True
+                    
                     # Add is_wera attribute
-                    exts = combRad.extension.unique().tolist()
                     if (len(exts) == 1):
                         if exts[0] == '.ruv':
                             T.is_wera = False
@@ -412,10 +416,13 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             
             # Add metadata related to range limits
             R.metadata['RangeMin'] = '0 km'
-            if 'RangeResolutionKMeters' in R.metadata:
-                R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
-            elif 'RangeResolutionMeters' in R.metadata:
-                R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
+            if not R.is_wera:
+                if 'RangeResolutionKMeters' in R.metadata:
+                    R.metadata['RangeMax'] = str(float(R.metadata['RangeResolutionKMeters'].split()[0])*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
+                elif 'RangeResolutionMeters' in R.metadata:
+                    R.metadata['RangeMax'] = str((float(R.metadata['RangeResolutionMeters'].split()[0]) * 0.001)*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
+            else:
+                R.metadata['RangeMax'] = str(float(R.metadata['Range'].split()[0])*(radSiteData.iloc[0]['number_of_range_cells']-1)) + ' km'
             
     #####        
     # Convert to standard data format (netCDF)  
@@ -826,7 +833,7 @@ def selectTotals(networkID,startDate,eng,logger):
             totalSelectionQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0) ORDER BY TIMESTAMP'
             totalsToBeProcessed = pd.read_sql(totalSelectionQuery, con=eng)
         except sqlalchemy.exc.DBAPIError as err:        
-            sRerr = True
+            sTerr = True
             logger.error('MySQL error ' + err._message())
                 
     except Exception as err:
@@ -1303,7 +1310,7 @@ def main(argv):
 
 # TO BE DONE USING MULTIPROCESSING - AAGIUNGERE try except
     try:
-        i = 0
+        i = 12
         processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
         # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
     

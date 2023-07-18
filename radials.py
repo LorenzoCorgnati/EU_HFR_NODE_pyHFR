@@ -685,10 +685,16 @@ class Radial(fileParser):
         globalAttributes['data_type'] = globalAttributes['data_type'].replace('current data', 'radial current data')
         globalAttributes['geospatial_lat_min'] = str(network_data.iloc[0]['geospatial_lat_min'])
         globalAttributes['geospatial_lat_max'] = str(network_data.iloc[0]['geospatial_lat_max'])
-        globalAttributes['geospatial_lat_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LATITUDE.values[:,0]))))        
+        if not self.is_wera:
+            globalAttributes['geospatial_lat_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LATITUDE.values[:,0]))))     
+        else:
+            globalAttributes['geospatial_lat_resolution'] = self.metadata['DGT']
         globalAttributes['geospatial_lon_min'] = str(network_data.iloc[0]['geospatial_lon_min'])
         globalAttributes['geospatial_lon_max'] = str(network_data.iloc[0]['geospatial_lon_max'])
-        globalAttributes['geospatial_lon_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LONGITUDE.values[:,0]))))        
+        if not self.is_wera:
+            globalAttributes['geospatial_lon_resolution'] = str(np.abs(np.mean(np.diff(self.xds.LONGITUDE.values[:,0]))))     
+        else:
+            globalAttributes['geospatial_lon_resolution'] = self.metadata['DGT']
         globalAttributes['geospatial_vertical_max'] = str(vertMax)
         globalAttributes['geospatial_vertical_resolution'] = str(vertMax)        
         globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')

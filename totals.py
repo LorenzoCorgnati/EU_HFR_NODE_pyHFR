@@ -15,6 +15,7 @@ from common import fileParser
 from collections import OrderedDict
 from calc import gridded_index, true2mathAngle, dms2dd, evaluateGDOP, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
+import fnmatch
 
 
 logger = logging.getLogger(__name__)
@@ -191,7 +192,7 @@ def makeTotalVector(rBins,rDF):
         # Rename HCSS column to STD (WERA radial case) and squareroot the values
         elif 'HCSS' in contributions.columns:
             contributions = contributions.rename(columns={"HCSS": "STD"})
-            contributions['STD'] = contributions['STD'].apply(math.sqrt())
+            contributions['STD'] = contributions['STD'].apply(lambda x: math.sqrt(x))
             
         # Only keep contributing radials with valid standard deviation values (i.e. different from NaN and 0)
         contributions = contributions[contributions.STD.notnull()]
@@ -251,7 +252,9 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
             thisRadial['#'] = siteNum
             thisRadial['Name'] = Rindex
             if rad.is_wera:
-                thisRadial['Lon'] = dms2dd(list(map(int,rad.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'].split('-')))) 
+                thisRadial['Lon'] = dms2dd(list(map(int,rad.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-')))) 
+                if rad.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'W':
+                    thisRadial['Lon'] = -thisRadial['Lon']
                 thisRadial['Lat'] = dms2dd(list(map(int,rad.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-'))))            
                 if rad.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'S':
                     thisRadial['Lat'] = -thisRadial['Lat']
@@ -526,9 +529,9 @@ class Total(fileParser):
         # Initialize empty dictionary
         xdr = OrderedDict()
         
-        # process Codar radial
+        # process Codar totals
         if not self.is_wera:
-            # Check longitude limits   
+            # Get longitude limits   
             if lon_min is None:
                 if 'BBminLongitude' in self.metadata:
                     lon_min = float(self.metadata['BBminLongitude'].split()[0])
@@ -539,7 +542,8 @@ class Total(fileParser):
                     lon_max = float(self.metadata['BBmaxLongitude'].split()[0])
                 else:
                     lon_max = self.data.LOND.max()
-            # Check latitude limits   
+                    
+            # Get latitude limits   
             if lat_min is None:
                 if 'BBminLatitude' in self.metadata:
                     lat_min = float(self.metadata['BBminLatitude'].split()[0])
@@ -549,7 +553,8 @@ class Total(fileParser):
                 if 'BBmaxLatitude' in self.metadata:
                     lat_max = float(self.metadata['BBmaxLatitude'].split()[0])
                 else:
-                    lat_max = self.data.LATD.max()                
+                    lat_max = self.data.LATD.max()       
+                    
             # Get grid resolution
             if grid_res is None:                
                 if 'GridSpacing' in self.metadata:
@@ -560,36 +565,72 @@ class Total(fileParser):
             # Generate grid coordinates
             gridGS = createLonLatGridFromBB(lon_min, lon_max, lat_min, lat_max, grid_res)
                     
-        # process WERA radials
+        # process WERA totals
         else:
-            # Get longitude limits and step
-            if 'TopLeftLongitude' in self.metadata:
-                topLeftLon = float(self.metadata['TopLeftLongitude'].split()[0])
-            else:
-                topLeftLon = float(0)
-            if 'nx' in self.metadata:
-                cellsLon = int(self.metadata['nx'].split()[0])
-            else:
-                cellsLon = 100
+            if not self.is_combined:
+                # Get longitude limits and step
+                if 'TopLeftLongitude' in self.metadata:
+                    top_left_lon = float(self.metadata['TopLeftLongitude'].split()[0])
+                else:
+                    top_left_lon = self.data.LOND.min()
+                if 'NX' in self.metadata:
+                    cells_lon = int(self.metadata['NX'].split()[0])
+                else:
+                    cells_lon = 100
+                    
+                # Get latitude limits and step
+                if 'TopLeftLatitude' in self.metadata:
+                    top_left_lat = float(self.metadata['TopLeftLatitude'].split()[0])
+                else:
+                    top_left_lat = self.data.LATD.max()
+                if 'NY' in self.metadata:
+                    cells_lat = int(self.metadata['NY'].split()[0])
+                else:
+                    cells_lat = 100
                 
-            # Get latitude limits and step
-            if 'TopLeftLatitude' in self.metadata:
-                topLeftLat = float(self.metadata['TopLeftLatitude'].split()[0])
+                # Get cell size in km
+                if 'DGT' in self.metadata:
+                    cell_size = float(self.metadata['DGT'].split()[0])
+                else:
+                    cell_size = float(1)
+                
+                # Generate grid coordinates
+                gridGS = createLonLatGridFromTopLeftPointWera(top_left_lon, top_left_lat, cell_size, cells_lon, cells_lat)
+                
             else:
-                topLeftLat = float(90)
-            if 'ny' in self.metadata:
-                cellsLat = int(self.metadata['ny'].split()[0])
-            else:
-                cellsLat = 100
-            
-            # Get cell size in km
-            if 'DGT' in self.metadata:
-                cellSize = float(self.metadata['DGT'].split()[0])
-            else:
-                cellSize = float(2)
-            
-            # Generate grid coordinates
-            gridGS = createLonLatGridFromTopLeftPointWera(topLeftLon, topLeftLat, cellSize, cellsLon, cellsLat)              
+                # Get longitude limits   
+                if lon_min is None:
+                    if 'BBminLongitude' in self.metadata:
+                        lon_min = float(self.metadata['BBminLongitude'].split()[0])
+                    else:
+                        lon_min = self.data.LOND.min()
+                if lon_max is None:
+                    if 'BBmaxLongitude' in self.metadata:
+                        lon_max = float(self.metadata['BBmaxLongitude'].split()[0])
+                    else:
+                        lon_max = self.data.LOND.max()
+                        
+                # Get latitude limits   
+                if lat_min is None:
+                    if 'BBminLatitude' in self.metadata:
+                        lat_min = float(self.metadata['BBminLatitude'].split()[0])
+                    else:
+                        lat_min = self.data.LATD.min()
+                if lat_max is None:
+                    if 'BBmaxLatitude' in self.metadata:
+                        lat_max = float(self.metadata['BBmaxLatitude'].split()[0])
+                    else:
+                        lat_max = self.data.LATD.max()       
+                        
+                # Get grid resolution
+                if grid_res is None:                
+                    if 'GridSpacing' in self.metadata:
+                        grid_res = float(self.metadata['GridSpacing'].split()[0]) * 1000
+                    else:
+                        grid_res = float(1)  
+                
+                # Generate grid coordinates
+                gridGS = createLonLatGridFromBBwera(lon_min, lon_max, lat_min, lat_max, grid_res)
             
         # extract longitudes and latitude from grid GeoSeries and insert them into numpy arrays
         lon_dim = np.unique(gridGS.x.to_numpy())
@@ -734,6 +775,9 @@ class Total(fileParser):
         for t in toDrop:
             if t in self.xdr:
                 self.xdr.pop(t)
+        for v in self.xdr:
+            if fnmatch.fnmatch(v,'S*CN'):
+                self.xdr.pop(t)
             
         # Add coordinate reference system to the dictionary
         self.xdr['crs'] = xr.DataArray(np.int(0), )
@@ -741,9 +785,12 @@ class Total(fileParser):
         # Rename velocity related and quality related variables
         self.xdr['EWCT'] = self.xdr.pop('VELU')
         self.xdr['NSCT'] = self.xdr.pop('VELV')
-        self.xdr['EWCS'] = self.xdr.pop('UQAL')
-        self.xdr['NSCS'] = self.xdr.pop('VQAL')
-        self.xdr['CCOV'] = self.xdr.pop('CQAL')
+        if 'UQAL' in self.xdr:
+            self.xdr['EWCS'] = self.xdr.pop('UQAL')
+        if 'VQAL' in self.xdr:
+            self.xdr['NSCS'] = self.xdr.pop('VQAL')
+        if 'CQAL' in self.xdr:
+            self.xdr['CCOV'] = self.xdr.pop('CQAL')
         
         # Add antenna related variables to the dictionary
         # Number of antennas        
@@ -1012,12 +1059,12 @@ class Total(fileParser):
         self.data.loc[:,testName] = 1
     
         # Set bad flag for variances not passing the test
-        if self.is_wera:
-            self.data.loc[(self.data['UACC']**2 > totMaxVar), testName] = 4             # UACC is the temporal standard deviation of U component in m/s for WERA data
-            self.data.loc[(self.data['VACC']**2 > totMaxVar), testName] = 4             # VACC is the temporal standard deviation of V component in m/s for WERA data
+        if self.is_wera and not self.is_combined:
+            self.data.loc[(self.data['UACC']**2 > totMaxVar), testName] = 4             # UACC is the temporal standard deviation of U component in m/s for WERA non-combined total data
+            self.data.loc[(self.data['VACC']**2 > totMaxVar), testName] = 4             # VACC is the temporal standard deviation of V component in m/s for WERA non-combined total data
         else:
-            self.data.loc[((self.data['UQAL']/100)**2 > totMaxVar), testName] = 4       # UQAL is the temporal standard deviation of U component in cm/s for CODAR data
-            self.data.loc[((self.data['VQAL']/100)**2 > totMaxVar), testName] = 4       # VQAL is the temporal standard deviation of V component in cm/s for CODAR data
+            self.data.loc[((self.data['UQAL']/100)**2 > totMaxVar), testName] = 4       # UQAL is the temporal standard deviation of U component in cm/s for CODAR and combined total data
+            self.data.loc[((self.data['VQAL']/100)**2 > totMaxVar), testName] = 4       # VQAL is the temporal standard deviation of V component in cm/s for CODAR and combined total data
     
         self.metadata['QCTest'][testName] = 'Variance Threshold QC Test - Test applies to each vector. ' \
             + 'Threshold=[' + f'maximum variance={totMaxVar} (m2/s2)]'
