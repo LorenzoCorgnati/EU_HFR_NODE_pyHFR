@@ -301,7 +301,11 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                         gridGS = createLonLatGridFromBBwera(lonMin, lonMax, latMin, latMax, gridResolution)
                 else:
                     gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
-                
+                    
+                # Scale velocities of WERA radials in case of combination with CODAR radials
+                if (len(exts) > 1):
+                    # TO BE DONE
+                    print('TO BE DONE - SCALE WERA RADIALS TO cm/s')                
                 
                 # Get the combination search radius in meters
                 searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the EU HFR NODE database
@@ -354,16 +358,16 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
     #####
     # Update NRT_combined_flag for the combined radials                        
     #####
-                    # Update the local DataFrame
+                    # Update the local DataFrame if radials from all station contributed to making the total
                     if len(combRad) == numActiveStations:
                         combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
                     
-                    # Update the radial_input_tb table on the EU HFR NODE database
-                    try:
-                        combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
-                    except sqlalchemy.exc.DBAPIError as err:        
-                        dMerr = True
-                        logger.error('MySQL error ' + err._message())   
+                        # Update the radial_input_tb table on the EU HFR NODE database
+                        try:
+                            combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
+                        except sqlalchemy.exc.DBAPIError as err:        
+                            dMerr = True
+                            logger.error('MySQL error ' + err._message())
                         
                 else:
                     logger.info(warn + ' for network ' + networkData.iloc[0]['network_id'] + ' at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
@@ -830,7 +834,7 @@ def selectTotals(networkID,startDate,eng,logger):
         else:
             networkStr = '\'' + networkID + '\''
         try:
-            totalSelectionQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0) ORDER BY TIMESTAMP'
+            totalSelectionQuery = 'SELECT * FROM total_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0) ORDER BY TIMESTAMP'
             totalsToBeProcessed = pd.read_sql(totalSelectionQuery, con=eng)
         except sqlalchemy.exc.DBAPIError as err:        
             sTerr = True
@@ -878,7 +882,7 @@ def selectRadials(networkID,startDate,eng,logger):
         else:
             networkStr = '\'' + networkID + '\''
         try:
-            radialSelectionQuery = 'SELECT * FROM radial_input_tb WHERE datetime>\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0 OR NRT_combined_flag=0) ORDER BY TIMESTAMP'
+            radialSelectionQuery = 'SELECT * FROM radial_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0 OR NRT_combined_flag=0) ORDER BY TIMESTAMP'
             radialsToBeProcessed = pd.read_sql(radialSelectionQuery, con=eng)
         except sqlalchemy.exc.DBAPIError as err:        
             sRerr = True

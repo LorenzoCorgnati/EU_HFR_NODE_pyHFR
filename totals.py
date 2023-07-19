@@ -115,7 +115,7 @@ def totalLeastSquare(VelHeadStd):
     radial vector components using weighted Least Square method.
     
     INPUT:
-        VelHeadStd: DataFrame containing contributor radial velocities, bearings
+        VelHeadStd: DataFrame containing contributing radial velocities, bearings
                     and standard deviations
         
     OUTPUT:
@@ -134,21 +134,39 @@ def totalLeastSquare(VelHeadStd):
     b = (VelHeadStd['VELO'].to_numpy())/VelHeadStd['STD']    
     
     # Evaluate the covariance matrix C (variance(U) = C(1,1) and variance(V) = C(2,2))
-    C = np.linalg.inv(np.matmul(A.T, A))
+    A2 = np.matmul(A.T, A)
+    if np.linalg.det(A2):
+        C = np.linalg.inv(A2)
     
-    # Calculate the u and v for the total vector
-    a = np.matmul(C, np.matmul(A.T, b))
-    u = a[0]
-    v = a[1]    
+        # Calculate the u and v for the total vector
+        a = np.matmul(C, np.matmul(A.T, b))
+        u = a[0]
+        v = a[1]    
+        
+        # Form the design matrix for GDOP evaluation (i.e. setting all radial std to 1)
+        Agdop = np.stack((np.array([np.cos(np.deg2rad(VelHeadStd['HEAD']))]),np.array([np.sin(np.deg2rad(VelHeadStd['HEAD']))])),axis=-1)[0,:,:]
+        
+        # Evaluate the covariance matrix Cgdop for GDOP evaluation (i.e. setting all radial std to 1)
+        Agdop2 = np.matmul(Agdop.T, Agdop)
+        if np.linalg.det(Agdop2):
+            Cgdop = np.linalg.inv(Agdop2)
+            
+            return u, v, C, Cgdop
+        
+        else:
+            u = np.nan
+            v = np.nan
+            C = np.nan
+            Cgdop = np.nan
+            return u, v, C, Cgdop
     
-    # Form the design matrix for GDOP evaluation (i.e. setting all radial std to 1)
-    Agdop = np.stack((np.array([np.cos(np.deg2rad(VelHeadStd['HEAD']))]),np.array([np.sin(np.deg2rad(VelHeadStd['HEAD']))])),axis=-1)[0,:,:]
+    else:
+        u = np.nan
+        v = np.nan
+        C = np.nan
+        Cgdop = np.nan
+        return u, v, C, Cgdop
     
-    # Evaluate the covariance matrix Cgdop for GDOP evaluation (i.e. setting all radial std to 1)
-    Cgdop = np.linalg.inv(np.matmul(Agdop.T, Agdop))
-    
-    return u, v, C, Cgdop
-
 
 def makeTotalVector(rBins,rDF):
     """
@@ -203,16 +221,17 @@ def makeTotalVector(rBins,rDF):
             # combine radial contributions to get total vector for the current grid cell
             u, v, C, Cgdop = totalLeastSquare(contributions)
             
-            # populate Total Series
-            totalData.loc[0] = u                                            # VELU
-            totalData.loc[1] = v                                            # VELV
-            totalData.loc[2] = np.sqrt(u**2 + v**2)                         # VELO
-            totalData.loc[3] = (360 + np.arctan2(u,v) * 180/np.pi) % 360    # HEAD
-            totalData.loc[4] = math.sqrt(C[0,0])                            # UQAL
-            totalData.loc[5] = math.sqrt(C[1,1])                            # VQAL
-            totalData.loc[6] = C[0,1]                                       # CQAL
-            totalData.loc[7] = math.sqrt(Cgdop.trace())                     # GDOP
-            totalData.loc[8] = len(contributions.index)                     # NRAD
+            if not math.isnan(u):
+                # populate Total Series
+                totalData.loc[0] = u                                            # VELU
+                totalData.loc[1] = v                                            # VELV
+                totalData.loc[2] = np.sqrt(u**2 + v**2)                         # VELO
+                totalData.loc[3] = (360 + np.arctan2(u,v) * 180/np.pi) % 360    # HEAD
+                totalData.loc[4] = math.sqrt(C[0,0])                            # UQAL
+                totalData.loc[5] = math.sqrt(C[1,1])                            # VQAL
+                totalData.loc[6] = C[0,1]                                       # CQAL
+                totalData.loc[7] = math.sqrt(np.abs(Cgdop.trace()))                     # GDOP
+                totalData.loc[8] = len(contributions.index)                     # NRAD
             
     return totalData
 
@@ -680,7 +699,7 @@ class Total(fileParser):
 
         # Refine Codar and combined data
         if not self.is_wera:
-            # Scale velocities to be in m/s (only for Codar or combined totals)
+            # Scale velocities to be in m/s (only for Codar or combined totals with is_wera attribute set to False)
             toMs = ['VELU', 'VELV', 'VELO', 'UQAL', 'VQAL','CQAL']
             for t in toMs:
                 if t in d:

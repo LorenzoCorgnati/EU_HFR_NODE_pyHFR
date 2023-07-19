@@ -15,6 +15,7 @@ import netCDF4
 from common import fileParser, create_dir, make_encoding
 from calc import reckon, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
+import warnings
 
 # try:
 #     # check for local configuration file
@@ -127,7 +128,9 @@ def velocityMedianInDistLimits(cell,radData,distLim,g):
     
     # Evaluate the median of the selected velocities
     # median = np.median(radData.iloc[distSelectionIndices]['VELO'])
-    median = np.nanmedian(radData.iloc[distSelectionIndices]['VELO'])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        median = np.nanmedian(radData.iloc[distSelectionIndices]['VELO'])
             
     return median
 
