@@ -134,7 +134,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 logger.error('MySQL error ' + err._message())        
     
     #####
-    # Save Total object as .rdl file with pickle
+    # Save Total object as .ttl file with pickle
     #####
     
             # Create the destination folder
@@ -1314,7 +1314,7 @@ def main(argv):
 
 # TO BE DONE USING MULTIPROCESSING - AAGIUNGERE try except
     try:
-        i = 12
+        i = 4
         processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
         # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
     

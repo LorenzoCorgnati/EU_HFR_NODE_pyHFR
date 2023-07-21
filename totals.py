@@ -767,7 +767,16 @@ class Total(fileParser):
         ncFormat = 'NETCDF4_CLASSIC'
         
         # Expand Radial object variables along the coordinate axes
-        self.to_xarray_multidimensional()
+        if self.is_combined:
+            self.to_xarray_multidimensional()
+        else:
+            # Get bounding box limits and grid resolution from database
+            lonMin = network_data.iloc[0]['geospatial_lon_min']
+            lonMax = network_data.iloc[0]['geospatial_lon_max']
+            latMin = network_data.iloc[0]['geospatial_lat_min']
+            latMax = network_data.iloc[0]['geospatial_lat_max']
+            gridRes = network_data.iloc[0]['grid_resolution']*1000
+            self.to_xarray_multidimensional(lonMin,lonMax,latMin,latMax,gridRes)
         
         # Set auxiliary coordinate sizes
         maxsiteSize = 50
@@ -790,12 +799,13 @@ class Total(fileParser):
         f.close()
         
         # Drop unnecessary DataArrays from the DataSet
-        toDrop = ['VFLG', 'XDST', 'YDST', 'RNGE', 'BEAR','S*CN', 'NRAD', 'VELO', 'HEAD','index']
+        toDrop = ['VFLG', 'XDST', 'YDST', 'RNGE', 'BEAR','NRAD', 'VELO', 'HEAD','index']
         for t in toDrop:
             if t in self.xdr:
                 self.xdr.pop(t)
-        for v in self.xdr:
-            if fnmatch.fnmatch(v,'S*CN'):
+        toDrop = list(self.xdr.keys())
+        for t in toDrop:
+            if fnmatch.fnmatch(t,'S*CN'):
                 self.xdr.pop(t)
             
         # Add coordinate reference system to the dictionary
@@ -813,26 +823,29 @@ class Total(fileParser):
         
         # Add antenna related variables to the dictionary
         # Number of antennas        
-        nRX = np.asfarray(station_data['number_of_receive_antennas'].to_numpy())
+        contributingSiteNrx = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['number_of_receive_antennas'].to_numpy()
+        nRX = np.asfarray(contributingSiteNrx)
         nRX = np.pad(nRX, (0, maxsiteSize - len(nRX)), 'constant',constant_values=(np.nan,np.nan))
-        nTX = np.asfarray(station_data['number_of_transmit_antennas'].to_numpy())
+        contributingSiteNtx = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['number_of_transmit_antennas'].to_numpy()
+        nTX = np.asfarray(contributingSiteNtx)
         nTX = np.pad(nTX, (0, maxsiteSize - len(nTX)), 'constant',constant_values=(np.nan,np.nan))
         self.xdr['NARX'] = xr.DataArray([nRX], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         self.xdr['NATX'] = xr.DataArray([nTX], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         
         # Longitude and latitude of antennas
-        siteLat = station_data['site_lat'].to_numpy()
-        siteLat = np.pad(siteLat, (0, maxsiteSize - len(siteLat)), 'constant',constant_values=(np.nan,np.nan))
-        siteLon = station_data['site_lon'].to_numpy()
-        siteLon = np.pad(siteLon, (0, maxsiteSize - len(siteLon)), 'constant',constant_values=(np.nan,np.nan))
+        contributingSiteLat = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['site_lat'].to_numpy()
+        siteLat = np.pad(contributingSiteLat, (0, maxsiteSize - len(contributingSiteLat)), 'constant',constant_values=(np.nan,np.nan))
+        contributingSiteLon = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['site_lon'].to_numpy()
+        siteLon = np.pad(contributingSiteLon, (0, maxsiteSize - len(contributingSiteLon)), 'constant',constant_values=(np.nan,np.nan))
         self.xdr['SLTR'] = xr.DataArray([siteLat], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         self.xdr['SLNR'] = xr.DataArray([siteLon], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         self.xdr['SLTT'] = xr.DataArray([siteLat], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         self.xdr['SLNT'] = xr.DataArray([siteLon], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         
         # Codes of antennas
-        antCode = np.array([site.encode() for site in station_data['station_id'].tolist()])
-        antCode = np.pad(antCode, (0, maxsiteSize - len(station_data)), 'constant',constant_values=('',''))
+        contributingSiteCodeList = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['station_id'].tolist()
+        antCode = np.array([site.encode() for site in contributingSiteCodeList])
+        antCode = np.pad(antCode, (0, maxsiteSize - len(contributingSiteCodeList)), 'constant',constant_values=('',''))
         self.xdr['SCDR'] = xr.DataArray(np.array([antCode]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
         self.xdr['SCDR'].encoding['char_dim_name'] = 'STRING' + str(len(station_data['station_id'].to_numpy()[0]))
         self.xdr['SCDT'] = xr.DataArray(np.array([antCode]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
