@@ -21,6 +21,32 @@ desired_width = 320
 pd.set_option('display.width', desired_width)
 datetime_format = '%Y%m%dT%H%M%SZ'
 
+def addBoundingBoxMetadata(obj,lon_min,lon_max,lat_min,lat_max,grid_res=None):
+    """
+    This function adds metadata related to the bounding box to the input Radial or Total object.
+    
+    INPUTS:
+        obj: Radial or Total object
+        lon_min: minimum longitude of the bounding box
+        lon_max: maximum longitude of the bounding box
+        lat_min: minimum latitude of the bounding box
+        lat_max: maximum latitude of the bounding box
+        grid_res: grid resolution in km
+
+        
+    OUTPUTS:
+        obj = Radial or Total object with metadata related to the bounding box
+        
+    """
+    obj.metadata['BBminLongitude'] = str(lon_min) + ' deg'
+    obj.metadata['BBmaxLongitude'] = str(lon_max) + ' deg'
+    obj.metadata['BBminLatitude'] = str(lat_min) + ' deg'
+    obj.metadata['BBmaxLatitude'] = str(lat_max) + ' deg'
+    if grid_res:
+        obj.metadata['GridSpacing'] = str(grid_res) + ' km'
+    
+    return obj
+
 def aggregate_netcdfs(files, save_dir, save_filename=None):
     """
     This function allows you to aggregate multiple netcdf files into a single file. It will concatenate on the coordinates of the netcdf files

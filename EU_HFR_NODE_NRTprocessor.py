@@ -36,6 +36,7 @@ from dateutil.relativedelta import relativedelta
 from radials import Radial, buildEHNradialFolder, buildEHNradialFilename
 from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials
 from calc import true2mathAngle, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+from common import addBoundingBoxMetadata
 from pyproj import Geod
 import latlon
 import time
@@ -318,11 +319,7 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                 
                 if warn=='':
                     # Add metadata related to bounding box
-                    T.metadata['BBminLongitude'] = str(lonMin) + ' deg'
-                    T.metadata['BBmaxLongitude'] = str(lonMax) + ' deg'
-                    T.metadata['BBminLatitude'] = str(latMin) + ' deg'
-                    T.metadata['BBmaxLatitude'] = str(latMax) + ' deg'
-                    T.metadata['GridSpacing'] = str(gridResolution/1000) + ' km'
+                    T = addBoundingBoxMetadata(T,lonMin,lonMax,latMin,latMax,gridResolution/1000)
                     
                     # Update is_combined attribute
                     T.is_combined = True
@@ -683,6 +680,14 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
         # Add Radial objects to the DataFrame
         dfTot['Total'] = (dfTot.filepath + '/' + dfTot.filename).apply(lambda x: Total(x))
         
+        # Add metadata related to bounding box
+        lonMin = networkData.iloc[0]['geospatial_lon_min']
+        lonMax = networkData.iloc[0]['geospatial_lon_max']
+        latMin = networkData.iloc[0]['geospatial_lat_min']
+        latMax = networkData.iloc[0]['geospatial_lat_max']
+        gridRes = networkData.iloc[0]['grid_resolution']
+        dfTot['Radial'] = dfTot['Radial'].apply(lambda x: addBoundingBoxMetadata(x,lonMin,lonMax,latMin,latMax,gridRes))
+        
         #####        
         # Apply QC to Totals
         #####
@@ -749,6 +754,14 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         
         # Add Radial objects to the DataFrame
         groupedRad['Radial'] = (groupedRad.filepath + '/' + groupedRad.filename).apply(lambda x: Radial(x))
+        
+        # Add metadata related to bounding box
+        lonMin = networkData.iloc[0]['geospatial_lon_min']
+        lonMax = networkData.iloc[0]['geospatial_lon_max']
+        latMin = networkData.iloc[0]['geospatial_lat_min']
+        latMax = networkData.iloc[0]['geospatial_lat_max']
+        gridRes = networkData.iloc[0]['grid_resolution']
+        groupedRad['Radial'] = groupedRad['Radial'].apply(lambda x: addBoundingBoxMetadata(x,lonMin,lonMax,latMin,latMax,gridRes))
         
         # Rename indices with site codes
         indexMapper = dict(zip(groupedRad.index.values.tolist(),groupedRad['station_id'].to_list()))
@@ -1314,7 +1327,7 @@ def main(argv):
 
 # TO BE DONE USING MULTIPROCESSING - AAGIUNGERE try except
     try:
-        i = 4
+        i = 16
         processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
         # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
     

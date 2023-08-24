@@ -16,6 +16,8 @@ from collections import OrderedDict
 from calc import gridded_index, true2mathAngle, dms2dd, evaluateGDOP, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
 import fnmatch
+from mpl_toolkits.basemap import Basemap
+import matplotlib.pyplot as plt
 
 
 logger = logging.getLogger(__name__)
@@ -524,6 +526,146 @@ class Total(fileParser):
             return waterIndex
         
         
+    def plot(self, lon_min=None, lon_max=None, lat_min=None, lat_max=None, shade=False):
+        """
+        This function plots the current total velocity field (i.e. VELU and VELV components) on a 
+        Cartesian grid. The grid is defined either from the input values or from the Total object
+        metadata. If no input is passed and no metadata related to the bounding box are present, the
+        grid is defined from data content (i.e. LOND and LATD values).
+        If 'shade' is False (default), a quiver plot with color and magnitude of the vectors proportional to
+        current velocity is produced. If 'shade' is True, a quiver plot with uniform vetor lenghts is produced,
+        superimposed to a pseudo-color map representing velocity magnitude.
+        
+        INPUT:
+            lon_min: minimum longitude value in decimal degrees (if None it is taken from Total metadata)
+            lon_max: maximum longitude value in decimal degrees (if None it is taken from Total metadata)
+            lat_min: minimum latitude value in decimal degrees (if None it is taken from Total metadata)
+            lat_max: maximum latitude value in decimal degrees (if None it is taken from Total metadata)
+            
+        OUTPUT:
+
+        """
+        # Initialize figure
+        fig = plt.figure(figsize=(15,10),tight_layout = {'pad': 0})
+        
+        # Get the bounding box limits
+        if not lon_min:
+            if 'BBminLongitude' in self.metadata:
+                lon_min = self.metadata['BBminLongitude']
+            else:
+                lon_min = self.data.LOND.min() - 1
+                
+        if not lon_max:
+            if 'BBmaxLongitude' in self.metadata:
+                lon_max = self.metadata['BBmaxLongitude']
+            else:
+                lon_max = self.data.LOND.max() + 1
+                
+        if not lat_min:
+            if 'BBminLatitude' in self.metadata:
+                lat_min = self.metadata['BBminLatitude']
+            else:
+                lat_min = self.data.LATD.min() - 1
+                
+        if not lat_max:
+            if 'BBmaxLatitude' in self.metadata:
+                lat_max = self.metadata['BBmaxLatitude']
+            else:
+                lat_max = self.data.LATD.max() + 1   
+                
+        # Evaluate longitude and latitude of the center of the map
+        lon_C = (lon_max + lon_min) / 2
+        lat_C = (lat_max + lat_min) / 2
+            
+        # Set the background map
+        m = Basemap(llcrnrlon=lon_min, llcrnrlat=lat_min, urcrnrlon=lon_max, urcrnrlat=lat_max, lon_0=lon_C, lat_0=lat_C,
+                          resolution = 'i', ellps='WGS84', projection='tmerc')        
+        m.drawcoastlines()
+        # m.fillcontinents(color='#cc9955', lake_color='white')
+        m.fillcontinents()
+        m.drawparallels(np.arange(lat_min,lat_max))
+        m.drawmeridians(np.arange(lon_min,lon_max))
+        m.drawmapboundary(fill_color='white')
+        
+        # m.bluemarble()
+        
+        # Get station coordinates and codes
+        siteLon = self.site_source['Lon'].to_numpy()
+        siteLat = self.site_source['Lat'].to_numpy()
+        siteCode = self.site_source['Name'].tolist()
+        
+        # Compute the native map projection coordinates for the stations
+        xS, yS = m(siteLon, siteLat)       
+        
+        # Plot radial stations
+        m.plot(xS,yS,'rD')
+        for label, xs, ys in zip(siteCode,xS,yS):
+            plt.text(xs,ys,label,fontsize='x-large')
+        
+        # Plot velocity field
+        if shade:
+            self.to_xarray_multidimensional()
+            
+            # Create grid from longitude and latitude
+            [longitudes, latitudes] = np.meshgrid(self.xdr['LONGITUDE'].data, self.xdr['LATITUDE'].data)
+            
+            # Compute the native map projection coordinates for the pseudo-color cells
+            X, Y = m(longitudes, latitudes)
+
+            # Create velocity variable in the shape of the grid
+            V = abs(self.xdr['VELO'][0,0,:,:].to_numpy())
+            V = V[:-1,:-1]            
+            
+            # Make the pseudo-color plot
+            c = m.pcolor(X, Y, V, cmap=plt.cm.jet, vmin=0, vmax=1)
+            
+            # Compute the native map projection coordinates for the vectors
+            x, y = m(self.data.LOND, self.data.LATD)
+            
+            # Create the velocity component variables
+            if self.is_wera:
+                u = self.data.VELU
+                v = self.data.VELV
+            else:
+                u = self.data.VELU / 100        # CODAR velocities are in cm/s
+                v = self.data.VELV / 100        # CODAR velocities are in cm/s
+            
+            # Normalize the arrows
+            u = u / np.sqrt(u**2 + v**2)
+            v = v / np.sqrt(u**2 + v**2)
+            
+            # Make the quiver plot
+            m.quiver(x, y, u, v, width=0.001) 
+            
+        else:
+            # Compute the native map projection coordinates for the vectors
+            x, y = m(self.data.LOND, self.data.LATD)
+            
+            # Create the velocity variables
+            if self.is_wera:
+                u = self.data.VELU
+                v = self.data.VELV
+                vel = abs(self.data.VELO)
+            else:
+                u = self.data.VELU / 100                # CODAR velocities are in cm/s
+                v = self.data.VELV / 100                # CODAR velocities are in cm/s
+                vel = abs(self.data.VELO) / 100         # CODAR velocities are in cm/s                
+            
+            # Make the quiver plot
+            m.quiver(x, y, u, v, vel, cmap=plt.cm.jet, width=0.001)  
+            
+        # Add colorbar
+        cbar = plt.colorbar()
+        cbar.set_label('m/s',fontsize='x-large')
+        
+        # Add title
+        plt.title(self.file_name + ' total velocity field', fontdict={'fontsize': 22, 'fontweight' : 'bold'})
+                
+        plt.show()
+        
+        return fig
+        
+        
     def to_xarray_multidimensional(self, lon_min=None, lon_max=None, lat_min=None, lat_max=None, grid_res=None):
         """
         This function creates a dictionary of xarray DataArrays containing the variables
@@ -537,9 +679,9 @@ class Total(fileParser):
         
         INPUT:
             lon_min: minimum longitude value in decimal degrees (if None it is taken from Total metadata)
-            lon_miax: maximum longitude value in decimal degrees (if None it is taken from Total metadata)
+            lon_max: maximum longitude value in decimal degrees (if None it is taken from Total metadata)
             lat_min: minimum latitude value in decimal degrees (if None it is taken from Total metadata)
-            lat_miax: maximum latitude value in decimal degrees (if None it is taken from Total metadata)
+            lat_max: maximum latitude value in decimal degrees (if None it is taken from Total metadata)
             grid_res: grid resolution in meters (if None it is taken from Total metadata)
             
         OUTPUT:
@@ -682,7 +824,7 @@ class Total(fileParser):
         X_map_idx = lon_map_idx             # LONGITUDE is X axis
         Y_map_idx = lat_map_idx             # LATITUDE is Y axis
             
-        # create dictionary containing variables from dataframe in the shape of radial grid
+        # create dictionary containing variables from dataframe in the shape of total grid
         d = {key: np.tile(np.nan, longitudes.shape) for key in self.data.keys()}       
             
         # Remap all variables
