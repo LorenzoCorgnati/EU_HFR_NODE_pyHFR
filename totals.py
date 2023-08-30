@@ -16,6 +16,7 @@ from collections import OrderedDict
 from calc import gridded_index, true2mathAngle, dms2dd, evaluateGDOP, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
 import fnmatch
+import warnings
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 
@@ -546,7 +547,7 @@ class Total(fileParser):
 
         """
         # Initialize figure
-        fig = plt.figure(figsize=(15,10),tight_layout = {'pad': 0})
+        fig = plt.figure(figsize=(24,16),tight_layout = {'pad': 0})
         
         # Get the bounding box limits
         if not lon_min:
@@ -600,7 +601,7 @@ class Total(fileParser):
         # Plot radial stations
         m.plot(xS,yS,'rD')
         for label, xs, ys in zip(siteCode,xS,yS):
-            plt.text(xs,ys,label,fontsize='x-large')
+            plt.text(xs,ys,label,fontdict={'fontsize': 22, 'fontweight' : 'bold'})
         
         # Plot velocity field
         if shade:
@@ -614,10 +615,11 @@ class Total(fileParser):
 
             # Create velocity variable in the shape of the grid
             V = abs(self.xdr['VELO'][0,0,:,:].to_numpy())
-            V = V[:-1,:-1]            
+            # V = V[:-1,:-1]            
             
             # Make the pseudo-color plot
-            c = m.pcolor(X, Y, V, cmap=plt.cm.jet, vmin=0, vmax=1)
+            warnings.simplefilter("ignore", category=UserWarning)
+            c = m.pcolormesh(X, Y, V, shading='nearest', cmap=plt.cm.jet, vmin=0, vmax=1)
             
             # Compute the native map projection coordinates for the vectors
             x, y = m(self.data.LOND, self.data.LATD)
@@ -630,12 +632,10 @@ class Total(fileParser):
                 u = self.data.VELU / 100        # CODAR velocities are in cm/s
                 v = self.data.VELV / 100        # CODAR velocities are in cm/s
             
-            # Normalize the arrows
-            u = u / np.sqrt(u**2 + v**2)
-            v = v / np.sqrt(u**2 + v**2)
-            
             # Make the quiver plot
-            m.quiver(x, y, u, v, width=0.001) 
+            m.quiver(x, y, u, v, width=0.001, headwidth=4, headlength=4, headaxislength=4)
+            
+            warnings.simplefilter("default", category=UserWarning)
             
         else:
             # Compute the native map projection coordinates for the vectors
@@ -652,14 +652,14 @@ class Total(fileParser):
                 vel = abs(self.data.VELO) / 100         # CODAR velocities are in cm/s                
             
             # Make the quiver plot
-            m.quiver(x, y, u, v, vel, cmap=plt.cm.jet, width=0.001)  
+            m.quiver(x, y, u, v, vel, cmap=plt.cm.jet, width=0.001, headwidth=4, headlength=4, headaxislength=4)
             
         # Add colorbar
         cbar = plt.colorbar()
         cbar.set_label('m/s',fontsize='x-large')
         
         # Add title
-        plt.title(self.file_name + ' total velocity field', fontdict={'fontsize': 22, 'fontweight' : 'bold'})
+        plt.title(self.file_name + ' total velocity field', fontdict={'fontsize': 30, 'fontweight' : 'bold'})
                 
         plt.show()
         

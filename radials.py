@@ -13,7 +13,7 @@ from shapely.geometry import Point
 import xarray as xr
 import netCDF4
 from common import fileParser, create_dir, make_encoding
-from calc import reckon, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+from calc import dms2dd, reckon, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
 import warnings
 from mpl_toolkits.basemap import Basemap
@@ -282,7 +282,7 @@ class Radial(fileParser):
 
         """
         # Initialize figure
-        fig = plt.figure(figsize=(15,10),tight_layout = {'pad': 0})
+        fig = plt.figure(figsize=(24,16),tight_layout = {'pad': 0})
         
         # Get the bounding box limits
         if not lon_min:
@@ -331,8 +331,12 @@ class Radial(fileParser):
             siteLat = float(self.metadata['Origin'].split()[0])
             siteCode = self.metadata['Site']
         else:
-            metadataDict['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray']
-            metadataDict['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray']
+            siteLon = dms2dd(list(map(int,self.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-'))))
+            siteLat = dms2dd(list(map(int,self.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-'))))
+            if self.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'S':
+                siteLat = -siteLat
+            if self.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'W':
+                siteLon = -siteLon
             siteCode = self.metadata['StationName']
         
         # Compute the native map projection coordinates for the stations
@@ -340,21 +344,29 @@ class Radial(fileParser):
         
         # Plot radial stations
         m.plot(xS,yS,'rD')
-        plt.text(xS,yS,siteCode,fontsize='x-large')
+        plt.text(xS,yS,siteCode,fontdict={'fontsize': 22, 'fontweight' : 'bold'})
         
         # Plot velocity field
         if shade:
             self.to_xarray_multidimensional()
             
-            # Compute the native map projection coordinates for the pseudo-color cells
-            X, Y = m(self.xdr['LONGITUDE'].data, self.xdr['LATITUDE'].data)
+            if self.is_wera:
+                # Create grid from longitude and latitude
+                [longitudes, latitudes] = np.meshgrid(self.xdr['LONGITUDE'].data, self.xdr['LATITUDE'].data)
+                
+                # Compute the native map projection coordinates for the pseudo-color cells
+                X, Y = m(longitudes, latitudes)
+            else:
+                # Compute the native map projection coordinates for the pseudo-color cells
+                X, Y = m(self.xdr['LONGITUDE'].data, self.xdr['LATITUDE'].data)
 
             # Create velocity variable in the shape of the grid
             V = abs(self.xdr['VELO'][0,0,:,:].to_numpy())
-            V = V[:-1,:-1]            
+            # V = V[:-1,:-1]            
             
             # Make the pseudo-color plot
-            c = m.pcolor(X, Y, V, cmap=plt.cm.jet, vmin=0, vmax=1)
+            warnings.simplefilter("ignore", category=UserWarning)
+            c = m.pcolormesh(X, Y, V, shading='nearest', cmap=plt.cm.jet, vmin=0, vmax=1)            
             
             # Compute the native map projection coordinates for the vectors
             x, y = m(self.data.LOND, self.data.LATD)
@@ -367,12 +379,10 @@ class Radial(fileParser):
                 u = self.data.VELU / 100        # CODAR velocities are in cm/s
                 v = self.data.VELV / 100        # CODAR velocities are in cm/s
             
-            # Normalize the arrows
-            u = u / np.sqrt(u**2 + v**2)
-            v = v / np.sqrt(u**2 + v**2)
-            
             # Make the quiver plot
-            m.quiver(x, y, u, v, width=0.001) 
+            m.quiver(x, y, u, v, width=0.001, headwidth=4, headlength=4, headaxislength=4)
+            
+            warnings.simplefilter("default", category=UserWarning)
             
         else:
             # Compute the native map projection coordinates for the vectors
@@ -389,14 +399,14 @@ class Radial(fileParser):
                 vel = abs(self.data.VELO) / 100         # CODAR velocities are in cm/s                
             
             # Make the quiver plot
-            m.quiver(x, y, u, v, vel, cmap=plt.cm.jet, width=0.001)  
+            m.quiver(x, y, u, v, vel, cmap=plt.cm.jet, width=0.001, headwidth=4, headlength=4, headaxislength=4)
             
         # Add colorbar
         cbar = plt.colorbar()
         cbar.set_label('m/s',fontsize='x-large')
         
         # Add title
-        plt.title(self.file_name + ' radial velocity field', fontdict={'fontsize': 22, 'fontweight' : 'bold'})
+        plt.title(self.file_name + ' radial velocity field', fontdict={'fontsize': 30, 'fontweight' : 'bold'})
                 
         plt.show()
         
