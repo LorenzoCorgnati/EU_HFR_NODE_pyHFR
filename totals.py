@@ -199,7 +199,7 @@ def makeTotalVector(rBins,rDF):
         # loop over contributing radial indices for collecting velocities and angles
         contributions = pd.DataFrame()
         for idx in contrRad.index:
-            contrVel = rDF.loc[idx]['Radial'].data.VELO[contrRad[idx]]                                      # pandas Series
+            contrVel = rDF.loc[idx]['Radial'].data.VELO[contrRad[idx]]                                  # pandas Series
             contrHead = rDF.loc[idx]['Radial'].data.HEAD[contrRad[idx]]                                     # pandas Series
             if 'ETMP' in rDF.loc[idx]['Radial'].data.columns:
                 contrStd = rDF.loc[idx]['Radial'].data.ETMP[contrRad[idx]]                                  # pandas Series

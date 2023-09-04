@@ -303,10 +303,11 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                 else:
                     gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
                     
-                # Scale velocities of WERA radials in case of combination with CODAR radials
+                # Scale velocities and variances of WERA radials in case of combination with CODAR radials
                 if (len(exts) > 1):
-                    # TO BE DONE
-                    print('TO BE DONE - SCALE WERA RADIALS TO cm/s')                
+                    for idx in combRad.loc[combRad['extension'] == '.ruv'].loc[:]['Radial'].index:
+                        combRad.loc[idx]['Radial'].data.VELO *= 100
+                        combRad.loc[idx]['Radial'].data.HCSS *= 10000
                 
                 # Get the combination search radius in meters
                 searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the EU HFR NODE database
@@ -1214,9 +1215,9 @@ def processNetwork(networkID,memory,sqlConfig):
         # Input total data
         inputTotals(networkID, networkData, startDate, eng, logger)
         
-        #####
-        # Process HFR data
-        #####
+    #####
+    # Process HFR data
+    #####
         
         # Select radials to be processed
         radialsToBeProcessed = selectRadials(networkID,startDate,eng,logger)
@@ -1225,12 +1226,13 @@ def processNetwork(networkID,memory,sqlConfig):
         # Process radials
         radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))
         
-        # Select totals to be processed
-        totalsToBeProcessed = selectTotals(networkID,startDate,eng,logger)
-        logger.info('Totals to be processed successfully selected for network ' + networkID)
-        
-        # Process totals
-        totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,eng,logger))
+        if networkData.iloc[0]['radial_combination'] == 0:
+            # Select totals to be processed
+            totalsToBeProcessed = selectTotals(networkID,startDate,eng,logger)
+            logger.info('Totals to be processed successfully selected for network ' + networkID)
+            
+            # Process totals
+            totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,eng,logger))
             
     except Exception as err:
         pNerr = True
@@ -1325,9 +1327,9 @@ def main(argv):
 # Process launch and monitor
 #####
 
-# TO BE DONE USING MULTIPROCESSING - AAGIUNGERE try except
+# TO BE DONE USING MULTIPROCESSING - AGGIUNGERE try except
     try:
-        i = 16
+        i = 12
         processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
         # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
     
