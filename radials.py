@@ -3,12 +3,10 @@ from dateutil.relativedelta import relativedelta
 import geopandas as gpd
 import logging
 import numpy as np
-import os
 import pandas as pd
 from pyproj import Geod, CRS
 from collections import OrderedDict
 import re
-import copy
 from shapely.geometry import Point
 import xarray as xr
 import netCDF4
@@ -737,7 +735,7 @@ class Radial(fileParser):
             self.xdr.pop('VFLG')
             
         # Add coordinate reference system to the dictionary
-        self.xdr['crs'] = xr.DataArray(np.int(0), )
+        self.xdr['crs'] = xr.DataArray(int(0), )
         
         # Rename velocity related variables
         self.xdr['DRVA'] = self.xdr.pop('HEAD')

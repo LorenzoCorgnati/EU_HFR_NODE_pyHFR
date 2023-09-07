@@ -138,7 +138,7 @@ def totalLeastSquare(VelHeadStd):
     
     # Evaluate the covariance matrix C (variance(U) = C(1,1) and variance(V) = C(2,2))
     A2 = np.matmul(A.T, A)
-    if np.linalg.det(A2):
+    if np.linalg.det(A2)>0:
         C = np.linalg.inv(A2)
     
         # Calculate the u and v for the total vector
@@ -951,7 +951,7 @@ class Total(fileParser):
                 self.xdr.pop(t)
             
         # Add coordinate reference system to the dictionary
-        self.xdr['crs'] = xr.DataArray(np.int(0), )
+        self.xdr['crs'] = xr.DataArray(int(0), )
         
         # Rename velocity related and quality related variables
         self.xdr['EWCT'] = self.xdr.pop('VELU')

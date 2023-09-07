@@ -21,27 +21,20 @@
 
 import os
 import sys
-import io
 import getopt
 import glob
 import logging
 import datetime as dt
-import numpy as np
 import pandas as pd
-import xarray as xr
-import mysql.connector as sql
-from mysql.connector import errorcode
 import sqlalchemy
+from sqlalchemy import text
 from dateutil.relativedelta import relativedelta
 from radials import Radial, buildEHNradialFolder, buildEHNradialFilename
 from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials
-from calc import true2mathAngle, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from common import addBoundingBoxMetadata
-from pyproj import Geod
-import latlon
-import time
-import math
 import pickle
+from concurrent import futures
 
 ######################
 # PROCESSING FUNCTIONS
@@ -282,7 +275,7 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
     try:
         # Check if the combination is to be performed
         if networkData.iloc[0]['radial_combination'] == 1:
-            # Check if teh radials were already combined
+            # Check if the radials were already combined
             if 0 in combRad['NRT_combined_flag'].values:
                 # Get the lat/lons of the bounding box
                 lonMin = networkData.iloc[0]['geospatial_lon_min']
@@ -625,7 +618,7 @@ def updateLastCalibrationDate(lcdRad,radSiteData,eng,logger):
                 # Update the station_tb table on the EU HFR NODE database
                 try:
                     stationUpdateQuery = 'UPDATE station_tb SET last_calibration_date=\'' + lcdFromFile.strftime('%Y-%m-%d') + '\' WHERE station_id=\'' + radSiteData.iloc[0]['station_id'] + '\''
-                    eng.execute(stationUpdateQuery) 
+                    eng.execute(stationUpdateQuery)
                     logger.info('Last calibration date updated for station ' + radSiteData.iloc[0]['station_id'])
                 except sqlalchemy.exc.DBAPIError as err:        
                     lcdErr = True
@@ -1134,6 +1127,7 @@ def processNetwork(networkID,memory,sqlConfig):
 
         
     OUTPUTS:
+        pNerr: error flag (True = errors occurred, False = no error occurred)
         
     """
     #####
@@ -1174,7 +1168,7 @@ def processNetwork(networkID,memory,sqlConfig):
         pNerr = True
         logger.error(err.strerror)
         logger.info('Exited with errors.')
-        return
+        return pNerr
     
     #####
     # Retrieve information about network and stations from EU HFR NODE database
@@ -1203,7 +1197,7 @@ def processNetwork(networkID,memory,sqlConfig):
         pNerr = True
         logger.error('MySQL error ' + err._message())
         logger.info('Exited with errors.')
-        return
+        return pNerr
         
     #####
     # Input HFR data
@@ -1238,10 +1232,9 @@ def processNetwork(networkID,memory,sqlConfig):
         pNerr = True
         logger.error(err.strerror)
         logger.info('Exited with errors.')
-        return
+        return pNerr    
     
-    
-    return
+    return pNerr
 
 ####################
 # MAIN DEFINITION
@@ -1314,8 +1307,7 @@ def main(argv):
             
         # Set and execute the query and get the HFR network IDs to be processed
         networkSelectQuery = 'SELECT network_id FROM network_tb WHERE EU_HFR_processing_flag=1'
-        networkIDs = pd.read_sql(networkSelectQuery, con=eng)
-        numNetworks = networkIDs.shape[0]
+        networkIDs = pd.read_sql(networkSelectQuery, con=eng)['network_id'].to_list()
         logger.info('Network IDs successfully fetched from EU HFR NODE database.')
     except sqlalchemy.exc.DBAPIError as err:        
         EHNerr = True
@@ -1327,11 +1319,26 @@ def main(argv):
 # Process launch and monitor
 #####
 
-# TO BE DONE USING MULTIPROCESSING - AGGIUNGERE try except
     try:
-        i = 12
-        processNetwork(networkIDs.iloc[i]['network_id'], memory, sqlConfig)
-        # INSERIRE LOG CHE INDICA INIZIO PROCESSING PER OGNI RETE QUANDO VIENE LANCIATO IL PROCESSO
+        # Create multiprocessing pool
+        with futures.ProcessPoolExecutor() as ex:
+            # Launch processes for each network
+            for ntw in networkIDs:
+                pool = {ex.submit(processNetwork, ntw, memory, sqlConfig): ntw}
+                logger.info('Job for processing ' + ntw + ' submitted')
+            
+            while pool:
+                # Check for status of the futures which are currently working
+                done, not_done = futures.wait(pool, return_when=futures.FIRST_COMPLETED)
+                
+                # Resubmit terminated processes
+                for future in done:
+                    ntw = pool[future]
+                    if future.result():
+                        logger.error('Job for processing ' + ntw + ' network exited with errors')
+                    pool.pop(future)
+                    pool[ex.submit(processNetwork, ntw, memory, sqlConfig)] = ntw
+                    logger.info('Job for processing ' + ntw + ' network resubmitted')
     
     except Exception as err:
         EHNerr = True
@@ -1343,7 +1350,7 @@ def main(argv):
     if(not EHNerr):
         logger.info('Successfully executed.')
     else:
-        logger.info('Exited with errors.')
+        logger.error('Exited with errors.')
             
 ####################
 
