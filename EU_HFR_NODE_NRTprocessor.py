@@ -35,6 +35,7 @@ from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLa
 from common import addBoundingBoxMetadata
 import pickle
 from concurrent import futures
+import time
 
 ######################
 # PROCESSING FUNCTIONS
@@ -142,7 +143,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             
         except Exception as err:
             dmErr = True
-            logger.error(err.strerror + ' for total file ' + T.file_name)
+            logger.error(err.args[0] + ' for total file ' + T.file_name)
             return dmTot
             
     #####
@@ -235,7 +236,7 @@ def applyEHNtotalQC(qcTot,networkData,vers,logger):
         
     except Exception as err:
         qcErr = True
-        logger.error(err.strerror + ' for total file ' + T.file_name)     
+        logger.error(err.args[0] + ' for total file ' + T.file_name)     
     
     return  T
 
@@ -366,7 +367,7 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
         
     except Exception as err:
         crErr = True
-        logger.error(err.strerror + ' for network ' + networkData.iloc[0]['network_id']  + ' in radial combination at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S')) 
+        logger.error(err.args[0] + ' for network ' + networkData.iloc[0]['network_id']  + ' in radial combination at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S')) 
                  
     return combTot
 
@@ -479,7 +480,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             
         except Exception as err:
             dmErr = True
-            logger.error(err.strerror + ' for radial file ' + R.file_name)
+            logger.error(err.args[0] + ' for radial file ' + R.file_name)
             return dmRad
             
     #####
@@ -577,7 +578,7 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
         
     except Exception as err:
         qcErr = True
-        logger.error(err.strerror + ' for radial file ' + R.file_name)     
+        logger.error(err.args[0] + ' for radial file ' + R.file_name)     
     
     return  R 
 
@@ -626,7 +627,7 @@ def updateLastCalibrationDate(lcdRad,radSiteData,eng,logger):
                 
     except Exception as err:
         lcdErr = True
-        logger.error(err.strerror + ' for radial file ' + R.file_name)
+        logger.error(err.args[0] + ' for radial file ' + R.file_name)
         return
     
     return
@@ -640,7 +641,7 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
     Information about total processing is inserted into the EU HFR NODE EU HFR NODE database.
     
     INPUTS:
-        groupedTot: DataFrame containing the totals to be processed grouped by timestamp
+        dfTot: DataFrame containing the totals to be processed grouped by timestamp
                     for the input network with the related information
         networkID: network ID of the network to be processed
         networkData: DataFrame containing the information of the network to be processed
@@ -666,12 +667,12 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
     
     try:
         logger.info('Total processing started for ' + networkID + ' network ' + '(' + vers + ').') 
-
+        
         #####
         # Enhance the total DataFrame
         #####
         
-        # Add Radial objects to the DataFrame
+        # Add Total objects to the DataFrame
         dfTot['Total'] = (dfTot.filepath + '/' + dfTot.filename).apply(lambda x: Total(x))
         
         # Add metadata related to bounding box
@@ -680,7 +681,24 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
         latMin = networkData.iloc[0]['geospatial_lat_min']
         latMax = networkData.iloc[0]['geospatial_lat_max']
         gridRes = networkData.iloc[0]['grid_resolution']
-        dfTot['Radial'] = dfTot['Radial'].apply(lambda x: addBoundingBoxMetadata(x,lonMin,lonMax,latMin,latMax,gridRes))
+        dfTot['Total'] = dfTot['Total'].apply(lambda x: addBoundingBoxMetadata(x,lonMin,lonMax,latMin,latMax,gridRes))
+        
+        #####
+        # Manage site codes for WERA networks
+        #####
+        
+        # HFR-NADr
+        if networkID == 'HFR-NAdr':
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Izola','IZOL')
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Trieste Dam','TRI1')
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Slovenia1','PIRA')
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Trieste','AURI')
+            
+        # HFR-COSYNA
+        if networkID == 'HFR-COSYNA':
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Buesum','BUES')
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Sylt','SYLT')
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Wangerooge','WANG')
         
         #####        
         # Apply QC to Totals
@@ -696,7 +714,7 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
         
     except Exception as err:
         pTerr = True
-        logger.error(err.strerror)    
+        logger.error(err.args[0])    
     
     return
     
@@ -785,21 +803,23 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         
         dfTot = performRadialCombination(groupedRad,networkData,numActiveStations,vers,eng,logger)
         
+        if dfTot.size > 0:
+        
         #####        
         # Apply QC to Totals
         #####
         
-        dfTot['Total'] = dfTot.apply(lambda x: applyEHNtotalQC(x,networkData,vers,logger),axis=1)        
+            dfTot['Total'] = dfTot.apply(lambda x: applyEHNtotalQC(x,networkData,vers,logger),axis=1)        
             
         #####        
         # Convert Total to standard data format (netCDF)
         #####
         
-        dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+            dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
         
     except Exception as err:
         pRerr = True
-        logger.error(err.strerror)    
+        logger.error(err.args[0])    
     
     return
 
@@ -849,7 +869,7 @@ def selectTotals(networkID,startDate,eng,logger):
                 
     except Exception as err:
         sTerr = True
-        logger.error(err.strerror + ' for network ' + networkID)
+        logger.error(err.args[0] + ' for network ' + networkID)
             
     return totalsToBeProcessed
 
@@ -897,7 +917,7 @@ def selectRadials(networkID,startDate,eng,logger):
                 
     except Exception as err:
         sRerr = True
-        logger.error(err.strerror + ' for network ' + networkID)
+        logger.error(err.args[0] + ' for network ' + networkID)
             
     return radialsToBeProcessed
 
@@ -987,11 +1007,11 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
                             logger.error('MySQL error ' + err._message())
                     except Exception as err:
                         iTerr = True
-                        logger.error(err.strerror + ' for file ' + fileName)
+                        logger.error(err.args[0] + ' for file ' + fileName)
                     
     except Exception as err:
         iTerr = True
-        logger.error(err.strerror)
+        logger.error(err.args[0])
     
     return
 
@@ -1090,11 +1110,11 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                                 logger.error('MySQL error ' + err._message())
                         except Exception as err:
                             iRerr = True
-                            logger.error(err.strerror + ' for file ' + fileName)
+                            logger.error(err.args[0] + ' for file ' + fileName)
                         
         except Exception as err:
             iRerr = True
-            logger.error(err.strerror + ' for station ' + stationID)
+            logger.error(err.args[0] + ' for station ' + stationID)
     
     return
 
@@ -1166,7 +1186,7 @@ def processNetwork(networkID,memory,sqlConfig):
         
     except Exception as err:
         pNerr = True
-        logger.error(err.strerror)
+        logger.error(err.args[0])
         logger.info('Exited with errors.')
         return pNerr
     
@@ -1228,9 +1248,12 @@ def processNetwork(networkID,memory,sqlConfig):
             # Process totals
             totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,eng,logger))
             
+        # Wait a bit (useful for multiprocessing management)
+        time.sleep(60)
+            
     except Exception as err:
         pNerr = True
-        logger.error(err.strerror)
+        logger.error(err.args[0])
         logger.info('Exited with errors.')
         return pNerr    
     
@@ -1323,8 +1346,9 @@ def main(argv):
         # Create multiprocessing pool
         with futures.ProcessPoolExecutor() as ex:
             # Launch processes for each network
+            pool = {}
             for ntw in networkIDs:
-                pool = {ex.submit(processNetwork, ntw, memory, sqlConfig): ntw}
+                pool[ex.submit(processNetwork, ntw, memory, sqlConfig)] = ntw
                 logger.info('Job for processing ' + ntw + ' submitted')
             
             while pool:
@@ -1342,7 +1366,7 @@ def main(argv):
     
     except Exception as err:
         EHNerr = True
-        logger.error(err.strerror)
+        logger.error(err.args[0])
     
     
 ####################
