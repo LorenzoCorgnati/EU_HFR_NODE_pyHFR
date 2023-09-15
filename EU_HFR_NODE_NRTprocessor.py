@@ -1226,8 +1226,10 @@ def processNetwork(networkID,memory,sqlConfig):
     try:
         # Input radial data
         inputRadials(networkID, stationData, startDate, eng, logger)
+        
         # Input total data
-        inputTotals(networkID, networkData, startDate, eng, logger)
+        if networkData.iloc[0]['radial_combination'] == 0:
+            inputTotals(networkID, networkData, startDate, eng, logger)
         
     #####
     # Process HFR data
