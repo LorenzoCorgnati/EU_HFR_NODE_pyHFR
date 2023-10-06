@@ -99,7 +99,7 @@
         "valid_min": -10,
         "valid_max": 10,
         "long_name": "Standard deviation of surface eastward sea water velocity",
-        "standard_name": "",
+        "standard_name": " ",
         "units": "m s-1",
         "sdn_parameter_name": "Eastward current velocity standard deviation in the water body",
         "sdn_parameter_urn": "SDN:P01::SDEWZZZZ",
@@ -113,7 +113,7 @@
         "valid_min": -10,
         "valid_max": 10,
         "long_name": "Standard deviation of surface northward sea water velocity",
-        "standard_name": "",
+        "standard_name": " ",
         "units": "m s-1",
         "sdn_parameter_name": "Northward current velocity standard deviation in the water body",
         "sdn_parameter_urn": "SDN:P01::SDNSZZZZ",
@@ -125,7 +125,7 @@
     },
     "GDOP": {
         "long_name": "Geometrical dilution of precision",
-        "standard_name": "",
+        "standard_name": " ",
         "units": "1",
         "valid_min": -20,
         "valid_max": 20,
@@ -140,7 +140,7 @@
     },
     "CCOV": {
         "long_name": "Covariance of surface sea water velocity",
-        "standard_name": "",
+        "standard_name": " ",
         "units": "m2 s-2",
         "valid_min": -10,
         "valid_max": 10,
@@ -154,7 +154,7 @@
     },
     "UACC": {
         "long_name": "Accuracy of surface eastward sea water velocity",
-        "standard_name": "",
+        "standard_name": " ",
         "units": "m s-1",
         "valid_min": -10,
         "valid_max": 10,
@@ -168,7 +168,7 @@
     },
     "VACC": {
         "long_name": "Accuracy of surface northward sea water velocity",
-        "standard_name": "",
+        "standard_name": " ",
         "units": "m s-1",
         "valid_min": -10,
         "valid_max": 10,
@@ -202,7 +202,7 @@
     },
     "NARX": {
         "long_name": "Number of receive antennas",
-        "standard_name": "",
+        "standard_name": " ",
         "valid_min": 0,
         "valid_max": 127,
         "units": "1" ,
@@ -214,7 +214,7 @@
     },
     "NATX": {
         "long_name": "Number of transmit antennas",
-        "standard_name": "",
+        "standard_name": " ",
         "valid_min": 0,
         "valid_max": 127,
         "units": "1" ,
@@ -278,7 +278,7 @@
     },
     "SCDR": {
         "long_name": "Receive antenna codes",
-        "standard_name": "",
+        "standard_name": " ",
         "units": 1,
         "sdn_parameter_name": " " ,
         "sdn_parameter_urn": " " ,
@@ -288,7 +288,7 @@
     },
     "SCDT": {
         "long_name": "Transmit antenna codes",
-        "standard_name": "",
+        "standard_name": " ",
         "units": 1,
         "sdn_parameter_name": " " ,
         "sdn_parameter_urn": " " ,
@@ -298,7 +298,6 @@
     },
     "TIME_QC": {
         "long_name": "Time quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -308,7 +307,6 @@
     },
     "POSITION_QC": {
         "long_name": "Position quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -318,7 +316,6 @@
     },
     "DEPH_QC": {
         "long_name": "Depth quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -328,7 +325,6 @@
     },
     "QCflag": {
         "long_name": "Overall quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -338,7 +334,6 @@
     },
     "VART_QC": {
         "long_name": "Variance threshold quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -348,7 +343,6 @@
     },
     "CSPD_QC": {
         "long_name": "Velocity threshold quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -358,7 +352,6 @@
     },
     "GDOP_QC": {
         "long_name": "GDOP threshold quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -368,7 +361,6 @@
     },
     "DDNS_QC": {
         "long_name": "Data density threshold quality flag",
-        "conventions" : "Copernicus Marine In Situ reference table 2",
         "valid_min": 0,
         "valid_max": 9,
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],

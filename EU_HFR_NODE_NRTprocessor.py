@@ -29,17 +29,134 @@ import pandas as pd
 import sqlalchemy
 from sqlalchemy import text
 from dateutil.relativedelta import relativedelta
-from radials import Radial, buildEHNradialFolder, buildEHNradialFilename
+from radials import Radial, buildEHNradialFolder, buildEHNradialFilename, convertEHNtoINSTACradialDatamodel, buildINSTACradialFolder, buildINSTACradialFilename
 from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials
 from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from common import addBoundingBoxMetadata
 import pickle
 from concurrent import futures
 import time
+import xarray as xr
+import netCDF4 as nc4
 
 ######################
 # PROCESSING FUNCTIONS
 ######################
+
+def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
+    """
+    This function aggregates all the radial netCDF files related to data measured in the day of the 
+    Radial object timestamp, applies the Copernicus Marine Service In Situ TAC standard data model 
+    to the aggregated dataset and saves the resulting aggregated netCDF file into the buffer for 
+    pushing data towards the Copernicus Marine Service In Situ TAC.
+    
+    INPUTS:
+        dmRad: Series containing the radial to be processed with the related information
+        networkData: DataFrame containing the information of the network to which the radial site belongs
+        radSiteData: DataFrame containing the information of the radial site that produced the radial
+        vers: version of the data model
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    dmErr = False
+    
+    # Set the path to the CMEMS INSTAC buffer
+    instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
+    
+    # Get the Radial object
+    R = dmRad['Radial']
+    
+    # Set the filename (with full path) for the nhourly etCDF file
+    ncFilePath = buildEHNradialFolder(radSiteData.iloc[0]['radial_HFRnetCDF_folder_path'],radSiteData.iloc[0]['station_id'],R.time,vers)
+    ncFilename = buildEHNradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
+    
+    # Check if the file was already sent to Copernicus Marine Service In Situ TAC buffer
+    try:
+        radialInstacQuery = 'SELECT * FROM radial_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
+        radialInstacData = pd.read_sql(radialInstacQuery, con=eng)
+        
+    except sqlalchemy.exc.DBAPIError as err:        
+        dmErr = True
+        logger.error('MySQL error ' + err._message())    
+    
+    if radialInstacData.iloc[0]['sent_to_instac'] == 0:
+    
+        try:        
+        
+    #####
+    # Open the netCDF files of the day in an aggregated dataset
+    #####
+    
+            hourlyFiles = [file for file in glob.glob(os.path.join(ncFilePath,'**/*.nc'), recursive = True)]
+
+            dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+            
+    #####        
+    # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
+    #####
+        
+            # Apply the Copernicus Marine Service In Situ TAC data model
+            instacDS = convertEHNtoINSTACradialDatamodel(dailyDS, networkData, radSiteData, vers)
+            
+            # Enable compression
+            enc = {}
+            for vv in instacDS.data_vars:
+                if instacDS[vv].ndim < 2:
+                    continue
+            
+                enc[vv] = instacDS[vv].encoding
+                enc[vv]['zlib'] = True
+                enc[vv]['complevel'] = 9
+                enc[vv]['fletcher32'] = True
+            
+            # Set the filename (with full path) for the netCDF file
+            ncFilePathInstac = buildINSTACradialFolder(instacBuffer,radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],vers)
+            ncFilenameInstac = buildINSTACradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
+            ncFileInstac = ncFilePathInstac + ncFilenameInstac 
+            
+            # Create the destination folder
+            if not os.path.isdir(ncFilePathInstac):
+                os.makedirs(ncFilePathInstac)
+            
+            # Create netCDF wih compression from DataSet and save it
+            # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC')   
+            instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
+            
+            # Modify the units attribute of TIME variable for including timezone digit
+            ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
+            ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+            ncf.close()
+        
+            logger.info(ncFilenameInstac + ' radial netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+            
+        except Exception as err:
+            dmErr = True
+            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file ' + ncFilenameInstac)
+            return dmRad
+            
+    #####
+    # Update sent_to_instac on the EU HFR NODE database for the generated radial netCDF
+    #####
+        
+        if not dmErr:
+            # Update the radial_HFRnetCDF_tb table on the EU HFR NODE database
+            try:
+                radialUpdateQuery = 'UPDATE radial_HFRnetCDF_tb SET sent_to_instac=1 WHERE filename=\'' + ncFilename + '\''
+                eng.execute(radialUpdateQuery) 
+            except sqlalchemy.exc.DBAPIError as err:        
+                dMerr = True
+                logger.error('MySQL error ' + err._message())        
+    
+    return
 
 def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     """
@@ -117,7 +234,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                                     'network_id': [networkData.iloc[0]['network_id']], \
                                     'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
                                     'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                    'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': T.file_name, 'check_flag': [0]}
+                                    'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': T.file_name, 'sent_to_instac': [0]}
                 dfTotalNC = pd.DataFrame(dataTotalNC)
                 
                 # Insert data into total_HFRnetCDF_tb table
@@ -454,7 +571,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                                 'network_id': [radSiteData.iloc[0]['network_id']], 'station_id': [radSiteData.iloc[0]['station_id']], \
                                 'timestamp': [R.time.strftime('%Y %m %d %H %M %S')], 'datetime': [R.time.strftime('%Y-%m-%d %H:%M:%S')], \
                                 'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': [R.file_name], 'check_flag': [0]}
+                                'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': [R.file_name], 'sent_to_instac': [0]}
                 dfRadialNC = pd.DataFrame(dataRadialNC)
                 
                 # Insert data into radial_HFRnetCDF_tb table
@@ -666,8 +783,7 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
     pTerr = False
     
     try:
-        logger.info('Total processing started for ' + networkID + ' network ' + '(' + vers + ').') 
-        
+                
         #####
         # Enhance the total DataFrame
         #####
@@ -758,8 +874,7 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
     numActiveStations = stationData['operational_to'].isna().sum() 
     
     try:
-        logger.info('Radial processing started for ' + networkID + ' network ' + '(' + vers + ').') 
-
+        
         #####
         # Enhance the radial DataFrame
         #####
@@ -795,7 +910,11 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         # Convert Radials to standard data format (netCDF)
         #####
         
+        # European standard data model
         groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
+        
+        # Copernicus Marine Service In Situ TAC data model
+        groupedRad.apply(lambda x: applyINSTACradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
                 
         #####
         # Combine Radials into Total
@@ -1240,6 +1359,7 @@ def processNetwork(networkID,memory,sqlConfig):
         logger.info('Radials to be processed successfully selected for network ' + networkID)
         
         # Process radials
+        logger.info('Radial processing started for ' + networkID + ' network') 
         radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))
         
         if networkData.iloc[0]['radial_combination'] == 0:
@@ -1248,6 +1368,7 @@ def processNetwork(networkID,memory,sqlConfig):
             logger.info('Totals to be processed successfully selected for network ' + networkID)
             
             # Process totals
+            logger.info('Total processing started for ' + networkID + ' network') 
             totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,eng,logger))
             
         # Wait a bit (useful for multiprocessing management)

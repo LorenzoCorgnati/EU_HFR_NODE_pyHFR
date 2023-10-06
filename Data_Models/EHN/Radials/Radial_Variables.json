@@ -88,7 +88,7 @@
         "sdn_parameter_urn": "SDN:P01::HFRDCRSP",
         "sdn_uom_name": "Metres per second",
         "sdn_uom_urn": "SDN:P06::UVAA",
-        "ancillary_variables": "QCflag OWTR_QC MDFL_QC CSPD_QC RDCT_QC",
+        "ancillary_variables": "QCflag OWTR_QC MDFL_QC CSPD_QC VART_QC RDCT_QC",
         "coordinates" : "TIME DEPTH LATITUDE LONGITUDE"
     },
     "DRVA": {
@@ -455,7 +455,8 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "",
-        "units": "1" 
+        "units": "1",
+        "coordinates" : "TIME DEPTH LATITUDE LONGITUDE"
     },
     "RDCT_QC": {
         "long_name": "Radial count quality flag",
@@ -465,6 +466,7 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "",
-        "units": "1" 
+        "units": "1",
+        "coordinates" : "TIME DEPTH LATITUDE LONGITUDE"
     }
 }

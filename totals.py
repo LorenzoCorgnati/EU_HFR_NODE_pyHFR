@@ -39,6 +39,50 @@ logger = logging.getLogger(__name__)
 #     ds = xr.concat(totals_dict.values(), 'time')
 #     return ds
 
+def buildINSTACtotalFilename(networkID,ts,ext):
+    """
+    This function builds the filename for total files according to 
+    the structure used by Copernicus Marine Service In Situ TAC, 
+    i.e. networkID-stationID_YYYY_MM_DD.
+    
+    INPUT:
+        networkID: ID of the HFR network
+        ts: timestamp as datetime object
+        ext: file extension
+        
+    OUTPUT:
+        totFilename: filename for total file.
+    """
+    # Get the time related part of the filename
+    timeStr = ts.strftime("_%Y%m%d")
+    
+    # Build the filename
+    totFilename = 'GL_TV_HF_' + networkID + '-Total' + timeStr + ext
+    
+    return totFilename
+
+def buildINSTACradialFolder(basePath,networkID,vers):
+    """
+    This function builds the folder structure for storing total files according to 
+    the structure used by Copernicus Marine Service In Situ TAC, 
+    i.e. networkID-stationID_YYYY_MM_DD.
+    
+    INPUT:
+        basePath: base path
+        networkID: ID of the HFR network
+        vers: version of the data model
+        
+    OUTPUT:
+        totFolder: folder path for storing total files.
+    """
+    # Strip trailing slash character
+    basePath = basePath.rstrip('/')
+    
+    # Build the folder path
+    totFolder = basePath + '/' + networkID + '/Totals/' + vers + '/' 
+    
+    return totFolder
+
 def buildEHNtotalFilename(networkID,ts,ext):
     """
     This function builds the filename for total files according to 

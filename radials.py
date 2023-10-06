@@ -49,6 +49,254 @@ import matplotlib.pyplot as plt
 #     ds = xr.concat(radial_dict.values(), 'time')
 #     return ds.sortby('time')
 
+def buildINSTACradialFilename(networkID,siteCode,ts,ext):
+    """
+    This function builds the filename for radial files according to 
+    the structure used by Copernicus Marine Service In Situ TAC, 
+    i.e. networkID-stationID_YYYY_MM_DD.
+    
+    INPUT:
+        networkID: ID of the HFR network
+        siteCode: code of the radial site
+        ts: timestamp as datetime object
+        ext: file extension
+        
+    OUTPUT:
+        radFilename: filename for radial file.
+    """
+    # Get the time related part of the filename
+    timeStr = ts.strftime("_%Y%m%d")
+    
+    # Build the filename
+    radFilename = 'GL_RV_HF_' + networkID + '-' + siteCode + timeStr + ext
+    
+    return radFilename
+
+def buildINSTACradialFolder(basePath,networkID,siteCode,vers):
+    """
+    This function builds the folder structure for storing radial files 
+    according to the structure used by Copernicus Marine Service In Situ TAC, 
+    i.e. networkID-stationID_YYYY_MM_DD.
+    
+    INPUT:
+        basePath: base path
+        networkID: ID of the HFR network
+        siteCode: code of the radial site
+        vers: version of the data model
+        
+    OUTPUT:
+        radFolder: folder path for storing radial files.
+    """
+    # Strip trailing slash character
+    basePath = basePath.rstrip('/')
+    
+    # Build the folder path
+    radFolder = basePath + '/' + networkID + '/Radials/' + vers + '/' + siteCode + '/'
+    
+    return radFolder
+
+def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
+    """
+    This function applies the Copernicus Marine Service data model to the input xarray
+    dataset containing radial (either non temporally aggregated or temporally aggregated)
+    data. The input dataset must follow the European standard data model.
+    Variable data types and data packing information are collected from
+    "Data_Models/CMEMS_IN_SITU_TAC/Radials/Radial_Data_Packing.json" file.
+    Variable attribute schema is collected from 
+    "Data_Models/CMEMS_IN_SITU_TAC/Radials/Radial_Variables.json" file.
+    Global attribute schema is collected from 
+    "Data_Models/CMEMS_IN_SITU_TAC/Global_Attributes.json" file.
+    Global attributes are created starting from the input dataset and from 
+    DataFrames containing the information about HFR network and radial station
+    read from the EU HFR NODE database.
+    The function returns an xarray dataset compliant with the Copernicus Marine Service 
+    In Situ TAC data model.
+    
+    INPUT:
+        rDS: xarray DataSet containing radial (either non temporally aggregated or temporally aggregated)
+             data.
+        networkData: DataFrame containing the information of the network to which the radial site belongs
+        stationData: DataFrame containing the information of the radial site that produced the radial
+        version: version of the data model        
+        
+    OUTPUT:
+        instacDS: xarray dataset compliant with the Copernicus Marine Service In Situ TAC data model
+    """
+    # Get data packing information per variable
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Radials/Radial_Data_Packing.json')
+    dataPacking = json.loads(f.read())
+    f.close()
+    
+    # Get variable attributes
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Radials/Radial_Variables.json')
+    radVariables = json.loads(f.read())
+    f.close()
+    
+    # Get global attributes
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Global_Attributes.json')
+    globalAttributes = json.loads(f.read())
+    f.close()
+    
+    # Create the output dataset
+    instacDS = rDS
+    instacDS.encoding = {}
+    
+    # Rename DEPTH_QC variable to DEPH_QC
+    instacDS = instacDS.rename({'DEPTH_QC':'DEPH_QC'})  
+    
+    # Add DEPH variable
+    instacDS['DEPH'] = xr.DataArray(0,
+                             dims={'DEPTH': 1},
+                             coords={'DEPTH': [0]})
+    
+    # Remove coordinates from dataset encoding
+    for vv in instacDS:
+        if 'char_dim_name' in instacDS[vv].encoding.keys():
+            instacDS[vv].encoding = {'char_dim_name': instacDS[vv].encoding['char_dim_name']}
+        else:
+            instacDS[vv].encoding = {}
+            
+    # Remove attributes and encoding from coordinates variables
+    for cc in instacDS.coords:
+        instacDS[cc].attrs = {}
+        instacDS[cc].encoding = {}
+        
+    # Add units and calendar to encoding for coordinate TIME
+    instacDS['TIME'].encoding['units'] = 'days since 1950-01-01T00:00:00Z'
+    instacDS['TIME'].encoding['calendar'] = 'standard'
+    
+    # Add data variable attributes to the DataSet
+    for vv in instacDS:
+        instacDS[vv].attrs = radVariables[vv]
+        
+    # Add coordinate variable attributes to the DataSet
+    for cc in instacDS.coords:
+        instacDS[cc].attrs = radVariables[cc]
+    
+    # Update QC variable attribute "comment" for inserting test thresholds and attribute "flag_values" for assigning the right data type
+    for qcv in list(rDS.keys()):
+        if 'QC' in qcv:
+            if not qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
+                instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + rDS[qcv].attrs['comment']            
+    
+    # Evaluate time coverage start, end, resolution and duration
+    timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
+    timeCoverageEnd = pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime() + relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
+    
+    timeCoverageDuration = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
+    
+    # Build the file id
+    ID = 'GL_RV_HF_' + rDS.attrs['platform_code'] + '_' + pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime().strftime('%Y%m%d')
+        
+    # Fill global attributes
+    globalAttributes['site_code'] = rDS.attrs['site_code']
+    globalAttributes['platform_code'] = rDS.attrs['platform_code']
+    globalAttributes['platform_name'] = globalAttributes['platform_code']
+    globalAttributes['doa_estimation_method'] = rDS.attrs['doa_estimation_method']
+    globalAttributes['calibration_type'] = rDS.attrs['calibration_type']
+    globalAttributes['last_calibration_date'] = rDS.attrs['last_calibration_date']
+    globalAttributes['calibration_link'] = rDS.attrs['calibration_link']
+    globalAttributes['summary'] = rDS.attrs['summary']    
+    globalAttributes['institution'] = rDS.attrs['institution']
+    globalAttributes['institution_edmo_code'] = rDS.attrs['institution_edmo_code']
+    globalAttributes['institution_references'] = rDS.attrs['institution_references']   
+    # globalAttributes['institution_abreviated']
+    # globalAttributes['institution_country']   
+    globalAttributes['id'] = ID
+    globalAttributes['project'] = rDS.attrs['project']
+    globalAttributes['comment'] = rDS.attrs['comment']
+    globalAttributes['network'] = rDS.attrs['network']
+    globalAttributes['geospatial_lat_min'] = rDS.attrs['geospatial_lat_min']
+    globalAttributes['geospatial_lat_max'] = rDS.attrs['geospatial_lat_max']
+    globalAttributes['geospatial_lat_resolution'] = rDS.attrs['geospatial_lat_resolution']   
+    globalAttributes['geospatial_lon_min'] = rDS.attrs['geospatial_lon_min']
+    globalAttributes['geospatial_lon_max'] = rDS.attrs['geospatial_lon_max']
+    globalAttributes['geospatial_lon_resolution'] = rDS.attrs['geospatial_lon_resolution']   
+    globalAttributes['geospatial_vertical_max'] = rDS.attrs['geospatial_vertical_max']
+    globalAttributes['geospatial_vertical_resolution'] = rDS.attrs['geospatial_vertical_resolution']     
+    globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['time_coverage_end'] = timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['time_coverage_resolution'] = rDS.attrs['time_coverage_resolution']
+    globalAttributes['time_coverage_duration'] = timeCoverageDuration
+    globalAttributes['area'] = rDS.attrs['area']    
+    globalAttributes['citation'] += networkData.iloc[0]['citation_statement']
+    globalAttributes['processing_level'] = '2B'
+    globalAttributes['manufacturer'] = rDS.attrs['manufacturer']
+    globalAttributes['sensor_model'] = rDS.attrs['manufacturer']
+    
+    creationDate = dt.datetime.utcnow()
+    globalAttributes['date_created'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['date_modified'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['history'] = 'Data measured from ' + timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ') + ' to ' \
+                                + timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
+                                + creationDate.strftime('%Y-%m-%dT%H:%M:%SZ') + ' by the European HFR Node.'        
+    
+    # Remove spatial_resolution global attribute (only admitted for totals)
+    globalAttributes.pop('spatial_resolution')
+    
+    # Add global attributes to the DataSet
+    instacDS.attrs = globalAttributes
+        
+    # Encode data types, data packing and _FillValue for the data variables of the DataSet
+    for vv in instacDS:
+        if vv in dataPacking:
+            if 'dtype' in dataPacking[vv]:
+                instacDS[vv].encoding['dtype'] = dataPacking[vv]['dtype']
+            if 'scale_factor' in dataPacking[vv]:
+                instacDS[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']                
+            if 'add_offset' in dataPacking[vv]:
+                instacDS[vv].encoding['add_offset'] = dataPacking[vv]['add_offset']
+            if 'fill_value' in dataPacking[vv]:
+                if not vv in ['SCDR', 'SCDT']:
+                    instacDS[vv].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[vv]['dtype']).kind + str(np.dtype(dataPacking[vv]['dtype']).itemsize)]
+                else:
+                    instacDS[vv].encoding['_FillValue'] = b' '
+                    
+            else:
+                instacDS[vv].encoding['_FillValue'] = None
+                
+    # Update valid_min and valid_max variable attributes according to data packing for data variables
+    for vv in instacDS:
+        if 'valid_min' in radVariables[vv]:
+            if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                instacDS[vv].attrs['valid_min'] = np.float_(((radVariables[vv]['valid_min'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+            else:
+                instacDS[vv].attrs['valid_min'] = np.float_(radVariables[vv]['valid_min']).astype(dataPacking[vv]['dtype'])
+        if 'valid_max' in radVariables[vv]:             
+            if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                instacDS[vv].attrs['valid_max'] = np.float_(((radVariables[vv]['valid_max'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+            else:
+                instacDS[vv].attrs['valid_max'] = np.float_(radVariables[vv]['valid_max']).astype(dataPacking[vv]['dtype'])
+                
+    # Encode data types, data packing and _FillValue for the coordinate variables of the DataSet
+    for cc in instacDS.coords:
+        if cc in dataPacking:
+            if 'dtype' in dataPacking[cc]:
+                instacDS[cc].encoding['dtype'] = dataPacking[cc]['dtype']
+            if 'scale_factor' in dataPacking[cc]:
+                instacDS[cc].encoding['scale_factor'] = dataPacking[cc]['scale_factor']                
+            if 'add_offset' in dataPacking[cc]:
+                instacDS[cc].encoding['add_offset'] = dataPacking[cc]['add_offset']
+            if 'fill_value' in dataPacking[cc]:
+                instacDS[cc].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[cc]['dtype']).kind + str(np.dtype(dataPacking[cc]['dtype']).itemsize)]
+            else:
+                instacDS[cc].encoding['_FillValue'] = None
+        
+    # Update valid_min and valid_max variable attributes according to data packing for coordinate variables
+    for cc in instacDS.coords:
+        if 'valid_min' in radVariables[cc]:
+            if ('scale_factor' in dataPacking[cc]) and ('add_offset' in dataPacking[cc]):
+                instacDS[cc].attrs['valid_min'] = np.float_(((radVariables[cc]['valid_min'] - dataPacking[cc]['add_offset']) / dataPacking[cc]['scale_factor'])).astype(dataPacking[cc]['dtype'])
+            else:
+                instacDS[cc].attrs['valid_min'] = np.float_(radVariables[cc]['valid_min']).astype(dataPacking[cc]['dtype'])
+        if 'valid_max' in radVariables[cc]:             
+            if ('scale_factor' in dataPacking[cc]) and ('add_offset' in dataPacking[cc]):
+                instacDS[cc].attrs['valid_max'] = np.float_(((radVariables[cc]['valid_max'] - dataPacking[cc]['add_offset']) / dataPacking[cc]['scale_factor'])).astype(dataPacking[cc]['dtype'])
+            else:
+                instacDS[cc].attrs['valid_max'] = np.float_(radVariables[cc]['valid_max']).astype(dataPacking[cc]['dtype'])
+           
+    return instacDS
+
 def buildEHNradialFilename(networkID,siteCode,ts,ext):
     """
     This function builds the filename for radial files according to 

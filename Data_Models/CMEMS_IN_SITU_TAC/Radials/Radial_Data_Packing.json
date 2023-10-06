@@ -98,10 +98,14 @@
     },    
     "ERSC": {
         "dtype": "int16",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "ERTC": {
         "dtype": "int16",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "XDST": {
@@ -118,14 +122,20 @@
     },
     "SPRC": {
         "dtype": "int16",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "NARX": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "NATX": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "SLTR": {
@@ -153,49 +163,69 @@
         "fill_value": "" 
     },
     "SCDR": {
-        "fill_value": "" 
+        "fill_value": " " 
     },
     "SCDT": {
-        "fill_value": "" 
+        "fill_value": " " 
     },
     "TIME_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "POSITION_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
-    "DEPTH_QC": {
+    "DEPH_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "QCflag": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "OWTR_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "MDFL_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "VART_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "CSPD_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "AVRB_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     },
     "RDCT_QC": {
         "dtype": "int8",
+        "scale_factor": 1,
+        "add_offset": 0,
         "fill_value": "" 
     }
 }
