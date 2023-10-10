@@ -149,7 +149,7 @@ def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
                              dims={'DEPTH': 1},
                              coords={'DEPTH': [0]})
     
-    # Remove coordinates from dataset encoding
+    # Remove encoding for data variables
     for vv in instacDS:
         if 'char_dim_name' in instacDS[vv].encoding.keys():
             instacDS[vv].encoding = {'char_dim_name': instacDS[vv].encoding['char_dim_name']}

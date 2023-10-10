@@ -3,8 +3,6 @@
         "axis": "T",
         "long_name": "Time",
         "standard_name": "time",        
-        "units": "days since 1950-01-01T00:00:00Z",
-        "calendar": "standard",
         "valid_min": -90000.0,
         "valid_max": 90000.0,
         "uncertainty": "",
@@ -13,6 +11,8 @@
         "sdn_uom_name": "Days",
         "sdn_uom_urn": "SDN:P06::UTAA",
         "ancillary_variables": "TIME_QC"
+    },
+    "DEPTH": {
     },
     "DEPH": {
         "axis": "Z",
@@ -73,12 +73,13 @@
         "standard_name": "eastward_sea_water_velocity",
         "long_name": "West-east current component",
         "units": "m s-1",
-        "sdn_parameter_name": "Eastward velocity of water current in the water body",
+        "sdn_parameter_name": "Eastward current velocity in the water body",
         "sdn_parameter_urn": "SDN:P01::LCEWZZ01",
         "sdn_uom_name": "Metres per second",
         "sdn_uom_urn": "SDN:P06::UVAA",
         "coordinates" : "TIME DEPH LATITUDE LONGITUDE",
         "ancillary_variables": "QCflag VART_QC CSPD_QC DDNS_QC GDOP_QC",
+        
         "data_mode": "R"
     },
     "NSCT": {
@@ -312,7 +313,8 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "OceanSITES quality flagging for position coordinates",
-        "units": "1"
+        "units": "1",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE"
     },
     "DEPH_QC": {
         "long_name": "Depth quality flag",
@@ -330,7 +332,8 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "OceanSITES quality flagging for all QC tests",
-        "units": "1"
+        "units": "1",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE"
     },
     "VART_QC": {
         "long_name": "Variance threshold quality flag",
@@ -339,7 +342,8 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "OceanSITES quality flagging for variance threshold QC test.",
-        "units": "1"
+        "units": "1",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE"
     },
     "CSPD_QC": {
         "long_name": "Velocity threshold quality flag",
@@ -348,7 +352,8 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "OceanSITES quality flagging for Velocity threshold QC test.",
-        "units": "1" 
+        "units": "1",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE"
     },
     "GDOP_QC": {
         "long_name": "GDOP threshold quality flag",
@@ -357,7 +362,8 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "OceanSITES quality flagging for GDOP threshold QC test.",
-        "units": "1" 
+        "units": "1",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE"
     },
     "DDNS_QC": {
         "long_name": "Data density threshold quality flag",
@@ -366,6 +372,7 @@
         "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
         "comment" : "OceanSITES quality flagging for Data density threshold QC test.",
-        "units": "1" 
+        "units": "1",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE"
     }
 }

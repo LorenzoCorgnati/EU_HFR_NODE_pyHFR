@@ -39,6 +39,206 @@ logger = logging.getLogger(__name__)
 #     ds = xr.concat(totals_dict.values(), 'time')
 #     return ds
 
+def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
+    """
+    This function applies the Copernicus Marine Service data model to the input xarray
+    dataset containing total (either non temporally aggregated or temporally aggregated)
+    data. The input dataset must follow the European standard data model.
+    Variable data types and data packing information are collected from
+    "Data_Models/CMEMS_IN_SITU_TAC/Totals/Total_Data_Packing.json" file.
+    Variable attribute schema is collected from 
+    "Data_Models/CMEMS_IN_SITU_TAC/Totals/Total_Variables.json" file.
+    Global attribute schema is collected from 
+    "Data_Models/CMEMS_IN_SITU_TAC/Global_Attributes.json" file.
+    Global attributes are created starting from the input dataset and from 
+    DataFrames containing the information about HFR network and radial station
+    read from the EU HFR NODE database.
+    The function returns an xarray dataset compliant with the Copernicus Marine Service 
+    In Situ TAC data model.
+    
+    INPUT:
+        tDS: xarray DataSet containing total (either non temporally aggregated or temporally aggregated)
+             data.
+        networkData: DataFrame containing the information of the network to which the total belongs
+        stationData: DataFrame containing the information of the radial sites that produced the total
+        version: version of the data model        
+        
+    OUTPUT:
+        instacDS: xarray dataset compliant with the Copernicus Marine Service In Situ TAC data model
+    """
+    # Get data packing information per variable
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Totals/Total_Data_Packing.json')
+    dataPacking = json.loads(f.read())
+    f.close()
+    
+    # Get variable attributes
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Totals/Total_Variables.json')
+    totVariables = json.loads(f.read())
+    f.close()
+    
+    # Get global attributes
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Global_Attributes.json')
+    globalAttributes = json.loads(f.read())
+    f.close()
+    
+    # Create the output dataset
+    instacDS = tDS
+    instacDS.encoding = {}
+    
+    # Rename DEPTH_QC variable to DEPH_QC
+    instacDS = instacDS.rename({'DEPTH_QC':'DEPH_QC'})  
+    
+    # Add DEPH variable
+    instacDS['DEPH'] = xr.DataArray(0,
+                             dims={'DEPTH': 1},
+                             coords={'DEPTH': [0]})
+    
+    # Remove encoding for data variables
+    for vv in instacDS:
+        if 'char_dim_name' in instacDS[vv].encoding.keys():
+            instacDS[vv].encoding = {'char_dim_name': instacDS[vv].encoding['char_dim_name']}
+        else:
+            instacDS[vv].encoding = {}
+            
+    # Remove attributes and encoding from coordinates variables
+    for cc in instacDS.coords:
+        instacDS[cc].attrs = {}
+        instacDS[cc].encoding = {}
+        
+    # Add units and calendar to encoding for coordinate TIME
+    instacDS['TIME'].encoding['units'] = 'days since 1950-01-01T00:00:00Z'
+    instacDS['TIME'].encoding['calendar'] = 'standard'
+    
+    # Add data variable attributes to the DataSet
+    for vv in instacDS:
+        instacDS[vv].attrs = totVariables[vv]
+        
+    # Add coordinate variable attributes to the DataSet
+    for cc in instacDS.coords:
+        instacDS[cc].attrs = totVariables[cc]
+    
+    # Update QC variable attribute "comment" for inserting test thresholds and attribute "flag_values" for assigning the right data type
+    for qcv in list(tDS.keys()):
+        if 'QC' in qcv:
+            if not qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
+                instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + tDS[qcv].attrs['comment']            
+    
+    # Evaluate time coverage start, end, resolution and duration
+    timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=networkData.iloc[0]['temporal_resolution']/2)
+    timeCoverageEnd = pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime() + relativedelta(minutes=networkData.iloc[0]['temporal_resolution']/2)
+    
+    timeCoverageDuration = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
+    
+    # Build the file id
+    ID = 'GL_RV_HF_' + tDS.attrs['platform_code'] + '_' + pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime().strftime('%Y%m%d')
+        
+    # Fill global attributes
+    globalAttributes['site_code'] = tDS.attrs['site_code']
+    globalAttributes['platform_code'] = tDS.attrs['platform_code']
+    globalAttributes['platform_name'] = globalAttributes['platform_code']
+    globalAttributes['doa_estimation_method'] = tDS.attrs['doa_estimation_method']
+    globalAttributes['calibration_type'] = tDS.attrs['calibration_type'].replace(',',';')
+    globalAttributes['last_calibration_date'] = tDS.attrs['last_calibration_date'].replace(',',';')
+    globalAttributes['calibration_link'] = tDS.attrs['calibration_link'].replace(',',';')
+    globalAttributes['summary'] = tDS.attrs['summary']    
+    globalAttributes['institution'] = tDS.attrs['institution']
+    globalAttributes['institution_edmo_code'] = tDS.attrs['institution_edmo_code']
+    globalAttributes['institution_references'] = tDS.attrs['institution_references']   
+    # globalAttributes['institution_abreviated']
+    # globalAttributes['institution_country']   
+    globalAttributes['id'] = ID
+    globalAttributes['project'] = tDS.attrs['project']
+    globalAttributes['comment'] = tDS.attrs['comment']
+    globalAttributes['network'] = tDS.attrs['network']
+    globalAttributes['geospatial_lat_min'] = tDS.attrs['geospatial_lat_min']
+    globalAttributes['geospatial_lat_max'] = tDS.attrs['geospatial_lat_max']
+    globalAttributes['geospatial_lat_resolution'] = tDS.attrs['geospatial_lat_resolution']   
+    globalAttributes['geospatial_lon_min'] = tDS.attrs['geospatial_lon_min']
+    globalAttributes['geospatial_lon_max'] = tDS.attrs['geospatial_lon_max']
+    globalAttributes['geospatial_lon_resolution'] = tDS.attrs['geospatial_lon_resolution']   
+    globalAttributes['geospatial_vertical_max'] = tDS.attrs['geospatial_vertical_max']
+    globalAttributes['geospatial_vertical_resolution'] = tDS.attrs['geospatial_vertical_resolution']  
+    globalAttributes['spatial_resolution'] = str(networkData.iloc[0]['grid_resolution'])
+    globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['time_coverage_end'] = timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['time_coverage_resolution'] = tDS.attrs['time_coverage_resolution']
+    globalAttributes['time_coverage_duration'] = timeCoverageDuration
+    globalAttributes['area'] = tDS.attrs['area']    
+    globalAttributes['citation'] += networkData.iloc[0]['citation_statement']
+    globalAttributes['processing_level'] = tDS.attrs['processing_level']
+    globalAttributes['manufacturer'] = tDS.attrs['manufacturer']
+    globalAttributes['sensor_model'] = tDS.attrs['manufacturer']
+    
+    creationDate = dt.datetime.utcnow()
+    globalAttributes['date_created'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['date_modified'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+    globalAttributes['history'] = 'Data measured from ' + timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ') + ' to ' \
+                                + timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
+                                + creationDate.strftime('%Y-%m-%dT%H:%M:%SZ') + ' by the European HFR Node.'        
+    
+    # Add global attributes to the DataSet
+    instacDS.attrs = globalAttributes
+        
+    # Encode data types, data packing and _FillValue for the data variables of the DataSet
+    for vv in instacDS:
+        if vv in dataPacking:
+            if 'dtype' in dataPacking[vv]:
+                instacDS[vv].encoding['dtype'] = dataPacking[vv]['dtype']
+            if 'scale_factor' in dataPacking[vv]:
+                instacDS[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']                
+            if 'add_offset' in dataPacking[vv]:
+                instacDS[vv].encoding['add_offset'] = dataPacking[vv]['add_offset']
+            if 'fill_value' in dataPacking[vv]:
+                if not vv in ['SCDR', 'SCDT']:
+                    instacDS[vv].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[vv]['dtype']).kind + str(np.dtype(dataPacking[vv]['dtype']).itemsize)]
+                else:
+                    instacDS[vv].encoding['_FillValue'] = b' '
+                    
+            else:
+                instacDS[vv].encoding['_FillValue'] = None
+                
+    # Update valid_min and valid_max variable attributes according to data packing for data variables
+    for vv in instacDS:
+        if 'valid_min' in totVariables[vv]:
+            if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                instacDS[vv].attrs['valid_min'] = np.float_(((totVariables[vv]['valid_min'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+            else:
+                instacDS[vv].attrs['valid_min'] = np.float_(totVariables[vv]['valid_min']).astype(dataPacking[vv]['dtype'])
+        if 'valid_max' in totVariables[vv]:             
+            if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                instacDS[vv].attrs['valid_max'] = np.float_(((totVariables[vv]['valid_max'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+            else:
+                instacDS[vv].attrs['valid_max'] = np.float_(totVariables[vv]['valid_max']).astype(dataPacking[vv]['dtype'])
+                
+    # Encode data types, data packing and _FillValue for the coordinate variables of the DataSet
+    for cc in instacDS.coords:
+        if cc in dataPacking:
+            if 'dtype' in dataPacking[cc]:
+                instacDS[cc].encoding['dtype'] = dataPacking[cc]['dtype']
+            if 'scale_factor' in dataPacking[cc]:
+                instacDS[cc].encoding['scale_factor'] = dataPacking[cc]['scale_factor']                
+            if 'add_offset' in dataPacking[cc]:
+                instacDS[cc].encoding['add_offset'] = dataPacking[cc]['add_offset']
+            if 'fill_value' in dataPacking[cc]:
+                instacDS[cc].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[cc]['dtype']).kind + str(np.dtype(dataPacking[cc]['dtype']).itemsize)]
+            else:
+                instacDS[cc].encoding['_FillValue'] = None
+        
+    # Update valid_min and valid_max variable attributes according to data packing for coordinate variables
+    for cc in instacDS.coords:
+        if 'valid_min' in totVariables[cc]:
+            if ('scale_factor' in dataPacking[cc]) and ('add_offset' in dataPacking[cc]):
+                instacDS[cc].attrs['valid_min'] = np.float_(((totVariables[cc]['valid_min'] - dataPacking[cc]['add_offset']) / dataPacking[cc]['scale_factor'])).astype(dataPacking[cc]['dtype'])
+            else:
+                instacDS[cc].attrs['valid_min'] = np.float_(totVariables[cc]['valid_min']).astype(dataPacking[cc]['dtype'])
+        if 'valid_max' in totVariables[cc]:             
+            if ('scale_factor' in dataPacking[cc]) and ('add_offset' in dataPacking[cc]):
+                instacDS[cc].attrs['valid_max'] = np.float_(((totVariables[cc]['valid_max'] - dataPacking[cc]['add_offset']) / dataPacking[cc]['scale_factor'])).astype(dataPacking[cc]['dtype'])
+            else:
+                instacDS[cc].attrs['valid_max'] = np.float_(totVariables[cc]['valid_max']).astype(dataPacking[cc]['dtype'])
+           
+    return instacDS
+
 def buildINSTACtotalFilename(networkID,ts,ext):
     """
     This function builds the filename for total files according to 
@@ -61,7 +261,7 @@ def buildINSTACtotalFilename(networkID,ts,ext):
     
     return totFilename
 
-def buildINSTACradialFolder(basePath,networkID,vers):
+def buildINSTACtotalFolder(basePath,networkID,vers):
     """
     This function builds the folder structure for storing total files according to 
     the structure used by Copernicus Marine Service In Situ TAC, 
