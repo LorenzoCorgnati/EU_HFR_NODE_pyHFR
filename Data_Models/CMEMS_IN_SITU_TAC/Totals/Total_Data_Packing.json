@@ -7,12 +7,10 @@
         "fill_value": ""
     },
     "LATITUDE": {
-        "dtype": "float32",
-        "fill_value": ""
+        "dtype": "float32"
     },
     "LONGITUDE": {
-        "dtype": "float32",
-        "fill_value": ""
+        "dtype": "float32"
     },
     "crs": {
         "dtype": "int16"
@@ -24,7 +22,8 @@
     "SDN_LOCAL_CDI_ID": {
     },
     "SDN_EDMO_CODE": {
-        "dtype": "int16"
+        "dtype": "int16",
+        "fill_value": ""
     },
     "SDN_REFERENCES": {
     },

@@ -130,22 +130,22 @@ def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
     timeCoverageDuration = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
     
     # Build the file id
-    ID = 'GL_RV_HF_' + tDS.attrs['platform_code'] + '_' + pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime().strftime('%Y%m%d')
+    ID = 'GL_TV_HF_' + tDS.attrs['platform_code'] + '_' + pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime().strftime('%Y%m%d')
         
     # Fill global attributes
     globalAttributes['site_code'] = tDS.attrs['site_code']
     globalAttributes['platform_code'] = tDS.attrs['platform_code']
     globalAttributes['platform_name'] = globalAttributes['platform_code']
-    globalAttributes['doa_estimation_method'] = tDS.attrs['doa_estimation_method']
+    globalAttributes['doa_estimation_method'] = tDS.attrs['doa_estimation_method'].replace(',',';')
     globalAttributes['calibration_type'] = tDS.attrs['calibration_type'].replace(',',';')
     globalAttributes['last_calibration_date'] = tDS.attrs['last_calibration_date'].replace(',',';')
     globalAttributes['calibration_link'] = tDS.attrs['calibration_link'].replace(',',';')
     globalAttributes['summary'] = tDS.attrs['summary']    
-    globalAttributes['institution'] = tDS.attrs['institution']
-    globalAttributes['institution_edmo_code'] = tDS.attrs['institution_edmo_code']
-    globalAttributes['institution_references'] = tDS.attrs['institution_references']   
-    # globalAttributes['institution_abreviated']
-    # globalAttributes['institution_country']   
+    globalAttributes['institution'] = tDS.attrs['institution'].replace(',',';')
+    globalAttributes['institution_edmo_code'] = tDS.attrs['institution_edmo_code'].replace(', ',' ')
+    globalAttributes['institution_references'] = tDS.attrs['institution_references'].replace(', ',' ')
+    # globalAttributes['institution_abreviated'] = tDS.attrs['institution_abreviated'].replace(', ',' ')
+    # globalAttributes['institution_country'] = tDS.attrs['institution_country'].replace(',',';')
     globalAttributes['id'] = ID
     globalAttributes['project'] = tDS.attrs['project']
     globalAttributes['comment'] = tDS.attrs['comment']
