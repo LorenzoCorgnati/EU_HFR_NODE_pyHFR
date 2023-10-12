@@ -34,7 +34,7 @@ from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRad
 from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from common import addBoundingBoxMetadata
 import pickle
-from concurrent import futures
+from multiprocessing import Process
 import time
 import xarray as xr
 import netCDF4 as nc4
@@ -1591,26 +1591,29 @@ def main(argv):
 #####
 
     try:
-        # Create multiprocessing pool
-        with futures.ProcessPoolExecutor(max_workers=32,max_tasks_per_child=1) as ex:
-            # Launch processes for each network
-            pool = {}
-            for ntw in networkIDs:
-                pool[ex.submit(processNetwork, ntw, memory, sqlConfig)] = ntw
-                logger.info('Job for processing ' + ntw + ' submitted')
+        # Start a process per each network
+        prcs = {}
+        for ntw in networkIDs:
+            p = Process(target=processNetwork, args=(ntw, memory, sqlConfig,))
+            p.start()
+            prcs[p] = ntw
+            logger.info('Processing for ' + ntw + ' network started')
             
-            while pool:
-                # Check for status of the futures which are currently working
-                done, not_done = futures.wait(pool, return_when=futures.FIRST_COMPLETED)
-                
-                # Resubmit terminated processes
-                for future in done:
-                    ntw = pool[future]
-                    if future.result():
-                        logger.error('Job for processing ' + ntw + ' network exited with errors')
-                    pool.pop(future)
-                    pool[ex.submit(processNetwork, ntw, memory, sqlConfig)] = ntw
-                    logger.info('Job for processing ' + ntw + ' network resubmitted')
+        while True:
+            # Check which processes are terminated and append the processed network name to a list for future processing
+            trm = {}
+            for pp in prcs.keys():
+                if pp.exitcode != None:
+                    trm[pp] = prcs[pp]                
+                    
+            # Terminate and relauch terminated processes
+            for tt in trm.keys():
+                tt.close()
+                prcs.pop(tt)
+                p = Process(target=processNetwork, args=(trm[tt], memory, sqlConfig,))
+                p.start()
+                prcs[p] = trm[tt]
+                logger.info('Processing for ' + ntw + ' network restarted')
     
     except Exception as err:
         EHNerr = True
