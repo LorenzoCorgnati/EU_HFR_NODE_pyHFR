@@ -30,7 +30,7 @@ import sqlalchemy
 from sqlalchemy import text
 from dateutil.relativedelta import relativedelta
 from radials import Radial, buildEHNradialFolder, buildEHNradialFilename, convertEHNtoINSTACradialDatamodel, buildINSTACradialFolder, buildINSTACradialFilename
-from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials, convertEHNtoINSTACtotalDatamodel, buildINSTACtotalFolder, buildINSTACtotalFilename
+from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials, convertEHNtoINSTACtotalDatamodel, buildINSTACtotalFolder, buildINSTACtotalFilename, buildUStotal
 from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from common import addBoundingBoxMetadata
 import pickle
@@ -51,6 +51,65 @@ instacBuffer = '/home/lorenz/Downloads/INSTAC_BUFFER/'
 ######################
 # PROCESSING FUNCTIONS
 ######################
+
+def createUStotal(ts,USxds,networkData,stationData,vers,logger):
+    """
+    This function creates a Total object from the input aggregated xarray dataset for the input
+    timestamp. The Total object is saved as .ttl file.
+    
+    INPUT:
+        ts: timestamp as datetime object
+        USxds: xarray DataSet containing gridded total data temporally aggregated along 
+               the processing interval
+        networkData: DataFrame containing the information of the network to which the total belongs
+        stationData: DataFrame containing the information of the radial sites that produced the total
+        vers: version of the data model
+        logger: logger object of the current processing
+        
+    OUTPUT:
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    utErr = False
+    
+    try:
+    
+    #####
+    # Build and save the Total object
+    #####
+    
+        # Convert timestamp to datetime
+        tsDT = ts['timestamp'].to_pydatetime()
+    
+        # Create the Total object
+        Tus = buildUStotal(tsDT,USxds.where(USxds.time == ts.timestamp, drop=True),networkData,stationData)
+        
+    #####
+    # Save Total object as .ttl file with pickle
+    #####
+    
+        # Set the filename (with full path) for the netCDF file
+        ncFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'],ts,vers)
+        ncFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],ts,'.nc')
+        ncFile = ncFilePath + ncFilename 
+    
+        # Create the destination folder
+        if not os.path.isdir(ncFilePath.replace('nc','ttl')):
+            os.makedirs(ncFilePath.replace('nc','ttl'))
+            
+        # Save the ttl file
+        with open(ncFile.replace('nc','ttl'), 'wb') as ttlFile:
+              pickle.dump(Tus, ttlFile) 
+        logger.info(ncFilename.replace('nc','ttl') + ' total ttl file succesfully created and stored (' + vers + ').')
+        
+    except Exception as err:
+        utErr = True
+        logger.error(err.args[0] + ' for total file ' + ncFilename.replace('nc','ttl'))
+    
+    return
 
 def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     """
@@ -580,6 +639,7 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                     # Save Total object as .ttl file with pickle
                     with open(ttlFile, 'wb') as ttlFile:
                         pickle.dump(T, ttlFile)
+                    logger.info(ttlFilename + ' combined total ttl file succesfully created and stored (' + vers + ').')
                         
     #####
     # Update NRT_combined_flag for the combined radials                        
@@ -866,7 +926,7 @@ def updateLastCalibrationDate(lcdRad,radSiteData,eng,logger):
     
     return
 
-def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
+def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,logger):
     """
     This function processes the input total files pushed by the HFR data providers 
     according to the workflow of the EU HFR NODE.
@@ -882,6 +942,7 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
+        vers: version of the data model
         eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
@@ -892,9 +953,6 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
     #####
     # Setup
     #####
-    
-    # Set the version of the data model
-    vers = 'v3'
     
     # Initialize error flag
     pTerr = False
@@ -955,7 +1013,7 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,eng,logger):
     
     return
     
-def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,logger):
+def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,eng,logger):
     """
     This function processes the input radial files pushed by the HFR data providers 
     according to the workflow of the EU HFR NODE.
@@ -974,6 +1032,7 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
         startDate: string containing the datetime of the starting date of the processing period
+        vers: version of the data model
         eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
@@ -984,9 +1043,6 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
     #####
     # Setup
     #####
-    
-    # Set the version of the data model
-    vers = 'v3'
     
     # Initialize error flag
     pRerr = False
@@ -1041,7 +1097,9 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,eng,lo
         # Combine Radials into Total
         #####
         
-        dfTot = performRadialCombination(groupedRad,networkData,numActiveStations,vers,eng,logger)
+        if len(groupedRad) > 1:
+            dfTot = performRadialCombination(groupedRad,networkData,numActiveStations,vers,eng,logger)
+            
         
         if dfTot.size > 0:
         
@@ -1164,6 +1222,147 @@ def selectRadials(networkID,startDate,eng,logger):
         logger.error(err.args[0] + ' for network ' + networkID)
             
     return radialsToBeProcessed
+
+
+def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
+    """
+    This function reads data from HFR US network via OpenDAP, selects the data subset to be processed
+    according to the processing time interval, produces and stores hourly Total objects from hourly 
+    subsets of the selected data and inserts into the EU HFR NODE EU HFR NODE database the information 
+    needed for the generation of the total data files into the European standard data model.
+    
+    INPUTS:
+        networkID: network ID of the network to be processed
+        networkData: DataFrame containing the information of the network to be processed
+        stationData: DataFrame containing the information of the stations belonging 
+                     to the network to be processed
+        startDate: string containing the datetime of the starting date of the processing period
+        vers: version of the data model
+        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    iTerr = False
+    
+    # Convert starting date from string to numpy datetime64
+    startTS = pd.to_datetime(startDate)
+    
+    #####
+    # Load totals from the TDS catalog
+    #####
+    
+    try:
+        logger.info('Total input started for ' + networkID + ' network.')
+        
+        # Trim heading and trailing whitespaces from TDS root URL
+        TDSrootURL = networkData.iloc[0]['TDS_root_url'].strip()
+        
+        # Load data (xarray initially loads only the information on the data and not the values)
+        UStdsDS=xr.open_dataset(TDSrootURL,decode_times=True)        
+        
+    #####
+    # Select the total data to be inserted by checking the timestamps and the database
+    #####
+    
+    # Get the timestamps of the totals already present in the database (i.e. timestamps of the totals already processed)
+        try:
+            tsPresenceQuery = 'SELECT datetime FROM total_input_tb WHERE datetime>=\'' + startDate + '\' AND network_id=\'' + networkID + '\''
+            tsPresenceData = pd.read_sql(tsPresenceQuery, con=eng)['datetime'].to_list()             
+        except sqlalchemy.exc.DBAPIError as err:        
+            iTerr = True
+            logger.error('MySQL error ' + err._message())
+            
+        # Select the timestamps to be processed
+        tsToBeInserted = UStdsDS['time'].where((UStdsDS.time>=startTS ) & (UStdsDS.time not in tsPresenceData), drop=True)
+        
+        # Select data for the timestamps to be inserted
+        USxds = UStdsDS.where(UStdsDS.time == tsToBeInserted.time, drop=True)   
+    
+    #####
+    # Create and store Total objects for each timestamp
+    #####
+    
+        # Create a pandas DataFrame containing the timestamps to be processed
+        tsDF = pd.DataFrame(data=tsToBeInserted.time.values,columns=['timestamp'])
+    
+        # Create and save the Total objects
+        tsDF.apply(lambda x: createUStotal(x,USxds,networkData,stationData,vers,logger),axis=1)
+        
+    
+    
+    
+    #####
+    # List totals from the network
+    #####
+        
+        
+        
+        
+        # Check if the input folder is specified
+        if(not inputFolder):
+            logger.info('No total input folder specified for network ' + networkID)
+        else:
+            # Check if the input folder path exists
+            if not os.path.isdir(inputFolder):
+                logger.info('The total input folder for network ' + networkID + ' does not exist.')
+            else:
+                # Consider file types for Codar and WERA systems
+                codarTypeWildcard = '**/*.tuv'      # Codar systems
+                weraTypeWildcard = '**/*.cur_asc'   # WERA systems                
+                # List input files (only in the processing period)
+                codarInputFiles = [file for file in glob.glob(os.path.join(inputFolder,codarTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]                    
+                weraInputFiles = [file for file in glob.glob(os.path.join(inputFolder,weraTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]
+                inputFiles = codarInputFiles + weraInputFiles
+                for inputFile in inputFiles:
+                    try:
+                        # Get file parts
+                        filePath = os.path.dirname(inputFile)
+                        fileName = os.path.basename(inputFile)
+                        fileExt = os.path.splitext(inputFile)[1]
+                        # Check if the file is already present in the EU HFR NODE database
+                        try:
+                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
+                            totalPresenceData = pd.read_sql(totalPresenceQuery, con=eng)
+                            numPresentTotals = totalPresenceData.shape[0]
+                            if numPresentTotals==0:    # the current file is not present in the EU HFR NODE database
+                                # Get file timestamp
+                                total = Total(inputFile)
+                                timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
+                                dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
+                                # Get file size in Kbytes
+                                fileSize = os.path.getsize(inputFile)/1024    
+    #####
+    # Insert total information into EU HFR NODE database
+    #####
+                                # Prepare data to be inserted into EU HFR NODE database
+                                dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
+                                             'datetime': [dateTime], 'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                              'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
+                                dfTotal = pd.DataFrame(dataTotal)
+                                
+                                # Insert data into EU HFR NODE database
+                                dfTotal.to_sql('total_input_tb', con=eng, if_exists='append', index=False, index_label=dfTotal.columns)
+                                logger.info(fileName + ' total file information inserted into EU HFR NODE database.')  
+                        except sqlalchemy.exc.DBAPIError as err:        
+                            iTerr = True
+                            logger.error('MySQL error ' + err._message())
+                    except Exception as err:
+                        iTerr = True
+                        logger.error(err.args[0] + ' for file ' + fileName)
+                    
+    except Exception as err:
+        iTerr = True
+        logger.error(err.args[0])
+    
+    return
 
 
 def inputTotals(networkID,networkData,startDate,eng,logger):
@@ -1398,6 +1597,9 @@ def processNetwork(networkID,memory,sqlConfig):
     # Setup
     #####
     
+    # Set the version of the data model
+    vers = 'v3'
+    
     try:
         # Create the folder for the network log
         networkLogFolder = '/var/log/EU_HFR_NODE_NRT/' + networkID
@@ -1469,35 +1671,47 @@ def processNetwork(networkID,memory,sqlConfig):
     
     try:
         # Input radial data
-        inputRadials(networkID, stationData, startDate, eng, logger)
+        if 'HFR-US' in networkID:
+            pass
+        else:
+            inputRadials(networkID, stationData, startDate, eng, logger)
         
         # Input total data
-        if networkData.iloc[0]['radial_combination'] == 0:
-            inputTotals(networkID, networkData, startDate, eng, logger)
+        if 'HFR-US' in networkID:
+            inputUStotals(networkID, networkData, stationData, startDate, vers, eng, logger)
+        else:
+            if networkData.iloc[0]['radial_combination'] == 0:
+                inputTotals(networkID, networkData, startDate, eng, logger)
         
     #####
     # Process HFR data
     #####
         
         # Select radials to be processed
-        radialsToBeProcessed = selectRadials(networkID,startDate,eng,logger)
-        logger.info('Radials to be processed successfully selected for network ' + networkID)
+        if 'HFR-US' in networkID:
+            pass
+        else:
+            radialsToBeProcessed = selectRadials(networkID,startDate,eng,logger)
+            logger.info('Radials to be processed successfully selected for network ' + networkID)
         
         # Process radials
-        logger.info('Radial processing started for ' + networkID + ' network') 
-        radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,eng,logger))
+        if 'HFR-US' in networkID:
+            pass
+        else:
+            logger.info('Radial processing started for ' + networkID + ' network') 
+            radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,vers,eng,logger))
         
+        # Select totals to be processed
         if networkData.iloc[0]['radial_combination'] == 0:
-            # Select totals to be processed
             totalsToBeProcessed = selectTotals(networkID,startDate,eng,logger)
             logger.info('Totals to be processed successfully selected for network ' + networkID)
             
-            # Process totals
+        # Process totals
             logger.info('Total processing started for ' + networkID + ' network') 
-            totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,eng,logger))
+            totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
             
         # Wait a bit (useful for multiprocessing management)
-        time.sleep(60)
+        time.sleep(600)
             
     except Exception as err:
         pNerr = True
@@ -1613,7 +1827,7 @@ def main(argv):
                 p = Process(target=processNetwork, args=(trm[tt], memory, sqlConfig,))
                 p.start()
                 prcs[p] = trm[tt]
-                logger.info('Processing for ' + ntw + ' network restarted')
+                logger.info('Processing for ' + trm[tt] + ' network restarted')
     
     except Exception as err:
         EHNerr = True

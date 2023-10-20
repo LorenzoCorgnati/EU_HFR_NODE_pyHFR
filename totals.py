@@ -39,6 +39,48 @@ logger = logging.getLogger(__name__)
 #     ds = xr.concat(totals_dict.values(), 'time')
 #     return ds
 
+def buildUStotal(ts,USxds,networkData,stationData):
+    """
+    This function builds the Total object for the input timestamp from an xarray DataSet
+    containing the gridded total data of a US network.
+    
+    INPUT:
+        ts: timestamp as datetime object
+        USxds: xarray DataSet containing gridded total data related to the input timestamp
+        networkData: DataFrame containing the information of the network to which the total belongs
+        stationData: DataFrame containing the information of the radial sites that produced the total
+        
+    OUTPUT:
+        Tus: Total object containing the US network total data
+    """
+    #####
+    # Build the longitude/latitude couples for the input data geographical grid
+    #####
+    
+    # Get longitude and latitude values
+    lonDim = USxds.lon.to_numpy()
+    latDim = USxds.lat.to_numpy()
+    
+    # Get the longitude/latitude couples
+    Lon, Lat = np.meshgrid(lonDim, latDim)
+    # Create grid
+    Lonc = Lon.flatten()
+    Latc = Lat.flatten()
+
+    # Now convert these points to geo-data
+    pts = gpd.GeoSeries([Point(x, y) for x, y in zip(Lonc, Latc)])
+    pts = pts.set_crs('epsg:4326')
+    
+    #####
+    # Create the Total object for the input timestamp
+    #####    
+    
+    # Create empty total with grid
+    Tus = Total(grid=pts)
+    
+    
+    return Tus
+
 def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
     """
     This function applies the Copernicus Marine Service data model to the input xarray
