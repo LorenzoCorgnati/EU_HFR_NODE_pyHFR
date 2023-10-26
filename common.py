@@ -337,7 +337,7 @@ class fileParser(object):
             )
             self._tables[str(table_count)]['data'] = tdf
             
-        # Get the indexes of columns for which Kur is 0 (i.e. no measurements)
+        # Get the indexes of rows for which Kur is 0 (i.e. no measurements)
         indexNames = tdf[ tdf['KUR'] == 0 ].index
         # Delete these row indexes from DataFrame
         tdf.drop(indexNames , inplace=True)

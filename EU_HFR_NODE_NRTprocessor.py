@@ -25,7 +25,10 @@ import getopt
 import glob
 import logging
 import datetime as dt
+import numpy as np
 import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
 import sqlalchemy
 from sqlalchemy import text
 from dateutil.relativedelta import relativedelta
@@ -52,15 +55,15 @@ instacBuffer = '/home/lorenz/Downloads/INSTAC_BUFFER/'
 # PROCESSING FUNCTIONS
 ######################
 
-def createUStotal(ts,USxds,networkData,stationData,vers,logger):
+def createTotalFromUStds(ts,pts,USxds,networkData,stationData,vers,logger):
     """
-    This function creates a Total object from the input aggregated xarray dataset for the input
-    timestamp. The Total object is saved as .ttl file.
+    This function creates a Total object for each timestamp from the input aggregated xarray dataset read
+    from the US TDS. The Total object is saved as .ttl file.
     
     INPUT:
-        ts: timestamp as datetime object
-        USxds: xarray DataSet containing gridded total data temporally aggregated along 
-               the processing interval
+        ts: timestamp as timestamp object
+        pts: Geoseries containing the lon/lat positions of the data geographical grid
+        USxds: xarray DataSet containing gridded total data related to the input timestamp
         networkData: DataFrame containing the information of the network to which the total belongs
         stationData: DataFrame containing the information of the radial sites that produced the total
         vers: version of the data model
@@ -78,14 +81,14 @@ def createUStotal(ts,USxds,networkData,stationData,vers,logger):
     try:
     
     #####
-    # Build and save the Total object
-    #####
-    
+    # Build the Total object
+    #####  
+
         # Convert timestamp to datetime
-        tsDT = ts['timestamp'].to_pydatetime()
+        ts = ts.to_pydatetime()     
     
         # Create the Total object
-        Tus = buildUStotal(tsDT,USxds.where(USxds.time == ts.timestamp, drop=True),networkData,stationData)
+        Tus = buildUStotal(ts,pts,USxds,networkData,stationData)
         
     #####
     # Save Total object as .ttl file with pickle
@@ -592,7 +595,7 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                     
                 # Scale velocities and variances of WERA radials in case of combination with CODAR radials
                 if (len(exts) > 1):
-                    for idx in combRad.loc[combRad['extension'] == '.ruv'].loc[:]['Radial'].index:
+                    for idx in combRad.loc[combRad['extension'] == '.crad_ascii'].loc[:]['Radial'].index:
                         combRad.loc[idx]['Radial'].data.VELO *= 100
                         combRad.loc[idx]['Radial'].data.HCSS *= 10000
                 
@@ -1291,13 +1294,24 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
     #####
     
         # Create a pandas DataFrame containing the timestamps to be processed
-        tsDF = pd.DataFrame(data=tsToBeInserted.time.values,columns=['timestamp'])
+        tsDF = pd.DataFrame(data=USxds.time.values,columns=['timestamp'])
+    
+        # Get longitude and latitude values of the input data geographical grid
+        lonDim = USxds.lon.to_numpy()
+        latDim = USxds.lat.to_numpy()
+        
+        # Get the longitude/latitude couples
+        Lon, Lat = np.meshgrid(lonDim, latDim)
+        # Create grid
+        Lonc = Lon.flatten()
+        Latc = Lat.flatten()
+    
+        # Now convert these points to geo-data
+        positions = gpd.GeoSeries([Point(x, y) for x, y in zip(Lonc, Latc)])
+        positions = positions.set_crs('epsg:4326')    
     
         # Create and save the Total objects
-        tsDF.apply(lambda x: createUStotal(x,USxds,networkData,stationData,vers,logger),axis=1)
-        
-    
-    
+        tsDF['timestamp'].apply(lambda x: createTotalFromUStds(x,positions,USxds.where(USxds.time == x, drop=True),networkData,stationData,vers,logger))   
     
     #####
     # List totals from the network

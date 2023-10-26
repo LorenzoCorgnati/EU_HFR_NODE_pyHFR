@@ -39,13 +39,14 @@ logger = logging.getLogger(__name__)
 #     ds = xr.concat(totals_dict.values(), 'time')
 #     return ds
 
-def buildUStotal(ts,USxds,networkData,stationData):
+def buildUStotal(ts,pts,USxds,networkData,stationData):
     """
     This function builds the Total object for the input timestamp from an xarray DataSet
     containing the gridded total data of a US network.
     
     INPUT:
         ts: timestamp as datetime object
+        pts: Geoseries containing the lon/lat positions of the data geographical grid
         USxds: xarray DataSet containing gridded total data related to the input timestamp
         networkData: DataFrame containing the information of the network to which the total belongs
         stationData: DataFrame containing the information of the radial sites that produced the total
@@ -53,24 +54,7 @@ def buildUStotal(ts,USxds,networkData,stationData):
     OUTPUT:
         Tus: Total object containing the US network total data
     """
-    #####
-    # Build the longitude/latitude couples for the input data geographical grid
-    #####
-    
-    # Get longitude and latitude values
-    lonDim = USxds.lon.to_numpy()
-    latDim = USxds.lat.to_numpy()
-    
-    # Get the longitude/latitude couples
-    Lon, Lat = np.meshgrid(lonDim, latDim)
-    # Create grid
-    Lonc = Lon.flatten()
-    Latc = Lat.flatten()
-
-    # Now convert these points to geo-data
-    pts = gpd.GeoSeries([Point(x, y) for x, y in zip(Lonc, Latc)])
-    pts = pts.set_crs('epsg:4326')
-    
+       
     #####
     # Create the Total object for the input timestamp
     #####    
@@ -78,7 +62,41 @@ def buildUStotal(ts,USxds,networkData,stationData):
     # Create empty total with grid
     Tus = Total(grid=pts)
     
+    # Fill the Total object with data
+    Tus.data['VELU'] = USxds.u.values[0,:,:].flatten()
+    Tus.data['VELV'] = USxds.v.values[0,:,:].flatten()
+    Tus.data['GDOP'] = USxds.hdop.values[0,:,:].flatten()
+    Tus.data['NRAD'] = USxds.number_of_radials.values[0,:,:].flatten()
+    Tus.data['VELO'] = np.sqrt(Tus.data['VELU']**2 + Tus.data['VELV']**2)
+    Tus.data['HEAD'] = (360 + np.arctan2(Tus.data['VELU'],Tus.data['VELV']) * 180/np.pi) % 360
     
+    # Get the indexes of rows without measurements (i.e. containing nan values)
+    indexNames = Tus.data.loc[pd.isna(Tus.data['VELU']), :].index
+    # Delete these row indexes from DataFrame
+    Tus.data.drop(indexNames , inplace=True)
+    Tus.data.reset_index(level=None, drop=False, inplace=True)
+    
+    # Get the list of contributing radial files
+    contrRadFilesDF = pd.Series(data=USxds.radial_metadata.files_loaded.split('\n'))    
+    # Add contributing radial sites
+    contrRadSites = contrRadFilesDF.apply(lambda x: x.split('_')[-5]).to_list()
+    # Keep only radial sites registered on the datbase
+    contrRadSites = stationData.loc[stationData['station_id'].isin(contrRadSites)]
+    
+    # Insert contributing radial sites into Total object
+    Tus.site_source = pd.DataFrame(index=range(len(contrRadSites)),columns=['#', 'Name', 'Lat', 'Lon', 'Coverage(s)', 'RngStep(km)', 'Pattern', 'AntBearing(NCW)'])
+    Tus.site_source['#'] = Tus.site_source.index + 1
+    Tus.site_source['Name'] = contrRadSites['station_id']
+    Tus.site_source['Lat'] = contrRadSites['site_lat']
+    Tus.site_source['Lon'] = contrRadSites['site_lon']
+    
+    #!!!!!!!!!!!!!!!!!!!!!!!!! PROBLEMA CO INDICI E nan !!!!!!!!!!!!!!!!!!!!!
+    
+    # Add metadata
+    
+    
+    
+                                              
     return Tus
 
 def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
