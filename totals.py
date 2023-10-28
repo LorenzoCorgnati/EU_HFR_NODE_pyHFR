@@ -11,7 +11,7 @@ from shapely.geometry import Point
 import geopandas as gpd
 import re
 import io
-from common import fileParser
+from common import fileParser, addBoundingBoxMetadata
 from collections import OrderedDict
 from calc import gridded_index, true2mathAngle, dms2dd, evaluateGDOP, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
@@ -62,13 +62,25 @@ def buildUStotal(ts,pts,USxds,networkData,stationData):
     # Create empty total with grid
     Tus = Total(grid=pts)
     
+    # Add timestamp
+    Tus.time = ts
+    
     # Fill the Total object with data
-    Tus.data['VELU'] = USxds.u.values[0,:,:].flatten()
-    Tus.data['VELV'] = USxds.v.values[0,:,:].flatten()
+    if USxds.u.units.strip() == 'm s-1':
+        Tus.data['VELU'] = USxds.u.values[0,:,:].flatten() * 100
+    elif USxds.u.units.strip() == 'cm s-1':
+        Tus.data['VELU'] = USxds.u.values[0,:,:].flatten() 
+    if USxds.v.units.strip() == 'm s-1':
+        Tus.data['VELV'] = USxds.v.values[0,:,:].flatten() * 100
+    elif USxds.v.units.strip() == 'cm s-1':
+        Tus.data['VELV'] = USxds.v.values[0,:,:].flatten()
     Tus.data['GDOP'] = USxds.hdop.values[0,:,:].flatten()
     Tus.data['NRAD'] = USxds.number_of_radials.values[0,:,:].flatten()
     Tus.data['VELO'] = np.sqrt(Tus.data['VELU']**2 + Tus.data['VELV']**2)
     Tus.data['HEAD'] = (360 + np.arctan2(Tus.data['VELU'],Tus.data['VELV']) * 180/np.pi) % 360
+    
+    # Set is_wera attribute to False (all velocities are expressed in cm/s)
+    Tus.is_wera = False
     
     # Get the indexes of rows without measurements (i.e. containing nan values)
     indexNames = Tus.data.loc[pd.isna(Tus.data['VELU']), :].index
@@ -84,19 +96,31 @@ def buildUStotal(ts,pts,USxds,networkData,stationData):
     contrRadSites = stationData.loc[stationData['station_id'].isin(contrRadSites)]
     
     # Insert contributing radial sites into Total object
-    Tus.site_source = pd.DataFrame(index=range(len(contrRadSites)),columns=['#', 'Name', 'Lat', 'Lon', 'Coverage(s)', 'RngStep(km)', 'Pattern', 'AntBearing(NCW)'])
-    Tus.site_source['#'] = Tus.site_source.index + 1
-    Tus.site_source['Name'] = contrRadSites['station_id']
-    Tus.site_source['Lat'] = contrRadSites['site_lat']
-    Tus.site_source['Lon'] = contrRadSites['site_lon']
+    Tus.site_source = pd.DataFrame(index=contrRadSites.index,columns=['#', 'Name', 'Lat', 'Lon', 'Coverage(s)', 'RngStep(km)', 'Pattern', 'AntBearing(NCW)'])
+    Tus.site_source['#'] = contrRadSites.index
+    Tus.site_source['Name'] = contrRadSites.loc[:]['station_id']
+    Tus.site_source['Lat'] = contrRadSites.loc[:]['site_lat']
+    Tus.site_source['Lon'] = contrRadSites.loc[:]['site_lon']
     
-    #!!!!!!!!!!!!!!!!!!!!!!!!! PROBLEMA CO INDICI E nan !!!!!!!!!!!!!!!!!!!!!
-    
+    # Get spatial resolution from TDS url
+    if 'Resolution' in networkData.loc[0]['TDS_root_url'].split('_'):
+        sptRes = networkData.loc[0]['TDS_root_url'].split('_')[networkData.loc[0]['TDS_root_url'].split('_').index('Resolution')-1]
+        sptRes = re.sub(r"([0-9]+(\.[0-9]+)?)",r" \1 ", sptRes).strip()
+    elif 'hourly' in networkData.loc[0]['TDS_root_url'].split('/'):
+        sptRes = networkData.loc[0]['TDS_root_url'].split('/')[networkData.loc[0]['TDS_root_url'].split('/').index('hourly')-1]
+        sptRes = re.sub(r"([0-9]+(\.[0-9]+)?)",r" \1 ", sptRes).strip()
+    else:
+        sptRes = None
+        
     # Add metadata
-    
-    
-    
-                                              
+    Tus.metadata['TimeZone'] = '"UTC" +0.000 0 "GMT"'
+    Tus.metadata['AveragingRadius'] = str(USxds.processing_parameters.grid_search_radius) + ' ' + USxds.processing_parameters.grid_search_radius_units
+    Tus.metadata['CurrentVelocityLimit'] = str(USxds.processing_parameters.max_rtv_speed) + ' ' + USxds.processing_parameters.max_rtv_speed_units
+    Tus.metadata['GridAxisOrientation'] = '0.0 DegNCW'
+    if sptRes:
+        Tus.metadata['GridSpacing'] = sptRes
+    Tus = addBoundingBoxMetadata(Tus,USxds.attrs['geospatial_lon_min'],USxds.attrs['geospatial_lon_max'],USxds.attrs['geospatial_lat_min'],USxds.attrs['geospatial_lat_max'])
+                                                 
     return Tus
 
 def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):

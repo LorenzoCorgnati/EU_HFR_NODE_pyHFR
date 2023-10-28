@@ -967,7 +967,10 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,log
         #####
         
         # Add Total objects to the DataFrame
-        dfTot['Total'] = (dfTot.filepath + '/' + dfTot.filename).apply(lambda x: Total(x))
+        if 'HFR-US' in networkID:
+            dfTot['Total'] = (dfTot.filepath + '/' + dfTot.filename).apply(lambda x: pickle.load(open(x, 'rb')))
+        else:
+            dfTot['Total'] = (dfTot.filepath + '/' + dfTot.filename).apply(lambda x: Total(x))
         
         # Add metadata related to bounding box
         lonMin = networkData.iloc[0]['geospatial_lon_min']
@@ -1159,14 +1162,8 @@ def selectTotals(networkID,startDate,eng,logger):
         #####
         
         # Set and execute the query for getting totals to be processed
-        if 'HFR-US' in networkID:
-            # GESTIRE TOTALI RETI US
-            
-            print('TO BE DONE')
-        else:
-            networkStr = '\'' + networkID + '\''
         try:
-            totalSelectionQuery = 'SELECT * FROM total_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0) ORDER BY TIMESTAMP'
+            totalSelectionQuery = 'SELECT * FROM total_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=\'' + networkID + '\') AND (NRT_processed_flag=0) ORDER BY TIMESTAMP'
             totalsToBeProcessed = pd.read_sql(totalSelectionQuery, con=eng)
         except sqlalchemy.exc.DBAPIError as err:        
             sTerr = True
@@ -1258,6 +1255,9 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
     # Convert starting date from string to numpy datetime64
     startTS = pd.to_datetime(startDate)
     
+    # Convert starting date from string to timestamp
+    mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
+    
     #####
     # Load totals from the TDS catalog
     #####
@@ -1275,19 +1275,23 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
     # Select the total data to be inserted by checking the timestamps and the database
     #####
     
-    # Get the timestamps of the totals already present in the database (i.e. timestamps of the totals already processed)
+        # Get the timestamps of the totals already present in the database (i.e. timestamps of the totals already processed)
         try:
             tsPresenceQuery = 'SELECT datetime FROM total_input_tb WHERE datetime>=\'' + startDate + '\' AND network_id=\'' + networkID + '\''
-            tsPresenceData = pd.read_sql(tsPresenceQuery, con=eng)['datetime'].to_list()             
+            tsPresenceData = pd.read_sql(tsPresenceQuery, con=eng)['datetime'].to_numpy()        
         except sqlalchemy.exc.DBAPIError as err:        
             iTerr = True
             logger.error('MySQL error ' + err._message())
             
-        # Select the timestamps to be processed
-        tsToBeInserted = UStdsDS['time'].where((UStdsDS.time>=startTS ) & (UStdsDS.time not in tsPresenceData), drop=True)
-        
+        # Find the indices of the dataset timestamps in the time interval to be processed
+        idxToBeInserted = np.searchsorted(UStdsDS['time'].to_numpy(),UStdsDS['time'].where(UStdsDS.time>=startTS, drop=True).to_numpy())
+        # Find the indices of the dataset timestamps that were already processed
+        idxAlreadyInserted = np.searchsorted(UStdsDS['time'].to_numpy(),tsPresenceData)
+        # Find the indices of the dataset timestamps to be inserted into database
+        idxToBeInserted = [item for item in idxToBeInserted if item not in idxAlreadyInserted]
+       
         # Select data for the timestamps to be inserted
-        USxds = UStdsDS.where(UStdsDS.time == tsToBeInserted.time, drop=True)   
+        USxds = UStdsDS.isel(time=idxToBeInserted)
     
     #####
     # Create and store Total objects for each timestamp
@@ -1316,10 +1320,9 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
     #####
     # List totals from the network
     #####
-        
-        
-        
-        
+    
+        # Build input folder path string
+        inputFolder = networkData.iloc[0]['total_HFRnetCDF_folder_path'].strip().replace('nc','ttl')       
         # Check if the input folder is specified
         if(not inputFolder):
             logger.info('No total input folder specified for network ' + networkID)
@@ -1328,13 +1331,10 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
             if not os.path.isdir(inputFolder):
                 logger.info('The total input folder for network ' + networkID + ' does not exist.')
             else:
-                # Consider file types for Codar and WERA systems
-                codarTypeWildcard = '**/*.tuv'      # Codar systems
-                weraTypeWildcard = '**/*.cur_asc'   # WERA systems                
+                # Consider file type for totals from US networks
+                usTypeWildcard = '**/*.ttl'
                 # List input files (only in the processing period)
-                codarInputFiles = [file for file in glob.glob(os.path.join(inputFolder,codarTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]                    
-                weraInputFiles = [file for file in glob.glob(os.path.join(inputFolder,weraTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]
-                inputFiles = codarInputFiles + weraInputFiles
+                inputFiles = [file for file in glob.glob(os.path.join(inputFolder,usTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]                    
                 for inputFile in inputFiles:
                     try:
                         # Get file parts
@@ -1348,7 +1348,8 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
                             numPresentTotals = totalPresenceData.shape[0]
                             if numPresentTotals==0:    # the current file is not present in the EU HFR NODE database
                                 # Get file timestamp
-                                total = Total(inputFile)
+                                with open(inputFile, 'rb') as ttlFile:
+                                    total = pickle.load(ttlFile)
                                 timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
                                 dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
                                 # Get file size in Kbytes
