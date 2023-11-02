@@ -98,6 +98,11 @@ def createTotalFromUStds(ts,pts,USxds,networkData,stationData,vers,logger):
         ncFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'],ts,vers)
         ncFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],ts,'.nc')
         ncFile = ncFilePath + ncFilename 
+        
+        # Add filename and filepath to the Total object
+        Tus.file_path = ncFilePath.replace('nc','ttl')
+        Tus.file_name = ncFilename.replace('nc','ttl')
+        Tus.full_file = ncFile.replace('nc','ttl')
     
         # Create the destination folder
         if not os.path.isdir(ncFilePath.replace('nc','ttl')):
@@ -632,8 +637,10 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                     ttlFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.ttl')
                     ttlFile = ttlFilePath + ttlFilename 
                     
-                    # Add filename to the Total object
+                    # Add filename and filepath to the Total object
+                    T.file_path = ttlFilePath
                     T.file_name = ttlFilename
+                    T.full_file = ttlFile
                     
                     # Create the destination folder
                     if not os.path.isdir(ttlFilePath):
@@ -1103,27 +1110,29 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
         # Combine Radials into Total
         #####
         
-        if len(groupedRad) > 1:
-            dfTot = performRadialCombination(groupedRad,networkData,numActiveStations,vers,eng,logger)
+        # Check if the combination is to be performed
+        if networkData.iloc[0]['radial_combination'] == 1:
+            # Check if at least two Radials are available for combination
+            if len(groupedRad) > 1:
+                dfTot = performRadialCombination(groupedRad,networkData,numActiveStations,vers,eng,logger)                
             
-        
-        if dfTot.size > 0:
-        
-        #####        
-        # Apply QC to Totals
-        #####
-        
-            dfTot['Total'] = dfTot.apply(lambda x: applyEHNtotalQC(x,networkData,vers,logger),axis=1)        
+            if 'dfTot' in locals():
             
-        #####        
-        # Convert Totals to standard data format (netCDF)
-        #####
-        
-            # European standard data model
-            dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+            #####        
+            # Apply QC to Totals
+            #####
             
-            # Copernicus Marine Service In Situ TAC data model
-            dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+                dfTot['Total'] = dfTot.apply(lambda x: applyEHNtotalQC(x,networkData,vers,logger),axis=1)        
+                
+            #####        
+            # Convert Totals to standard data format (netCDF)
+            #####
+            
+                # European standard data model
+                dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+                
+                # Copernicus Marine Service In Situ TAC data model
+                dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
         
     except Exception as err:
         pRerr = True
@@ -1343,7 +1352,7 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
                         fileExt = os.path.splitext(inputFile)[1]
                         # Check if the file is already present in the EU HFR NODE database
                         try:
-                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
+                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE filename=\'' + fileName + '\''
                             totalPresenceData = pd.read_sql(totalPresenceQuery, con=eng)
                             numPresentTotals = totalPresenceData.shape[0]
                             if numPresentTotals==0:    # the current file is not present in the EU HFR NODE database
@@ -1438,7 +1447,7 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
                         fileExt = os.path.splitext(inputFile)[1]
                         # Check if the file is already present in the EU HFR NODE database
                         try:
-                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
+                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE filename=\'' + fileName + '\''
                             totalPresenceData = pd.read_sql(totalPresenceQuery, con=eng)
                             numPresentTotals = totalPresenceData.shape[0]
                             if numPresentTotals==0:    # the current file is not present in the EU HFR NODE database
@@ -1539,7 +1548,7 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                             fileExt = os.path.splitext(inputFile)[1]
                             # Check if the file is already present in the EU HFR NODE database
                             try:
-                                radialPresenceQuery = 'SELECT * FROM radial_input_tb WHERE datetime>\'' + startDate + '\' AND filename=\'' + fileName + '\''
+                                radialPresenceQuery = 'SELECT * FROM radial_input_tb WHERE filename=\'' + fileName + '\''
                                 radialPresenceData = pd.read_sql(radialPresenceQuery, con=eng)
                                 numPresentRadials = radialPresenceData.shape[0]
                                 if numPresentRadials==0:    # the current file is not present in the EU HFR NODE database
@@ -1714,7 +1723,7 @@ def processNetwork(networkID,memory,sqlConfig):
             pass
         else:
             logger.info('Radial processing started for ' + networkID + ' network') 
-            radialsToBeProcessed.groupby('datetime').apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,vers,eng,logger))
+            radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,vers,eng,logger))
         
         # Select totals to be processed
         if networkData.iloc[0]['radial_combination'] == 0:
@@ -1723,7 +1732,7 @@ def processNetwork(networkID,memory,sqlConfig):
             
         # Process totals
             logger.info('Total processing started for ' + networkID + ' network') 
-            totalsToBeProcessed.groupby('datetime').apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
+            totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
             
         # Wait a bit (useful for multiprocessing management)
         time.sleep(600)

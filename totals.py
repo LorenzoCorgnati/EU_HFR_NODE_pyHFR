@@ -82,6 +82,9 @@ def buildUStotal(ts,pts,USxds,networkData,stationData):
     # Set is_wera attribute to False (all velocities are expressed in cm/s)
     Tus.is_wera = False
     
+    # Set is_combined attribute to False
+    Tus.is_combined = False
+    
     # Get the indexes of rows without measurements (i.e. containing nan values)
     indexNames = Tus.data.loc[pd.isna(Tus.data['VELU']), :].index
     # Delete these row indexes from DataFrame
@@ -1236,7 +1239,7 @@ class Total(fileParser):
         # Set the netCDF format
         ncFormat = 'NETCDF4_CLASSIC'
         
-        # Expand Radial object variables along the coordinate axes
+        # Expand Total object variables along the coordinate axes
         if self.is_combined:
             self.to_xarray_multidimensional()
         else:
@@ -1249,9 +1252,9 @@ class Total(fileParser):
             self.to_xarray_multidimensional(lonMin,lonMax,latMin,latMax,gridRes)
         
         # Set auxiliary coordinate sizes
-        maxsiteSize = 50
-        refmaxSize = 10
-        maxinstSize = 10
+        maxsiteSize = 150
+        refmaxSize = 50
+        maxinstSize = 50
         
         # Get data packing information per variable
         f = open('Data_Models/EHN/Totals/Total_Data_Packing.json')
@@ -1386,7 +1389,11 @@ class Total(fileParser):
         globalAttributes['platform_code'] = platformCode.decode()
         globalAttributes['doa_estimation_method'] = ', '.join(station_data[["station_id", "DoA_estimation_method"]].apply(": ".join, axis=1))
         globalAttributes['calibration_type'] = ', '.join(station_data[["station_id", "calibration_type"]].apply(": ".join, axis=1))
-        globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date'].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%SZ'))],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
+        if 'HFR-US' in network_data.iloc[0]['network_id']:
+            station_data['last_calibration_date'] = 'N/A'
+            globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date']],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
+        else:
+            globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date'].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%SZ'))],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
         globalAttributes['calibration_link'] = ', '.join(station_data[["station_id", "calibration_link"]].apply(": ".join, axis=1))
         globalAttributes['title'] = network_data.iloc[0]['title']
         globalAttributes['summary'] = network_data.iloc[0]['summary']
