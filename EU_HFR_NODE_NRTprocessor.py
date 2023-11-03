@@ -169,46 +169,52 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     # Open the netCDF files of the day in an aggregated dataset
     #####
     
+            # List all netCDF files in the current day folder
             hourlyFiles = [file for file in glob.glob(os.path.join(ncFilePath,'**/*.nc'), recursive = True)]
 
-            dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+            if len(hourlyFiles)>0:
+                # Open all netCDF files in the current day folder
+                dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+                
+        #####        
+        # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
+        #####
             
-    #####        
-    # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
-    #####
-        
-            # Apply the Copernicus Marine Service In Situ TAC data model
-            instacDS = convertEHNtoINSTACtotalDatamodel(dailyDS, networkData, stationData, vers)
+                # Apply the Copernicus Marine Service In Situ TAC data model
+                instacDS = convertEHNtoINSTACtotalDatamodel(dailyDS, networkData, stationData, vers)
+                
+                # Enable compression
+                enc = {}
+                for vv in instacDS.data_vars:
+                    if instacDS[vv].ndim < 2:
+                        continue
+                
+                    enc[vv] = instacDS[vv].encoding
+                    enc[vv]['zlib'] = True
+                    enc[vv]['complevel'] = 9
+                    enc[vv]['fletcher32'] = True
+                
+                # Set the filename (with full path) for the aggregated netCDF file
+                ncFilePathInstac = buildINSTACtotalFolder(instacBuffer,networkData.iloc[0]['network_id'],vers)
+                ncFilenameInstac = buildINSTACtotalFilename(networkData.iloc[0]['network_id'],T.time,'.nc')
+                ncFileInstac = ncFilePathInstac + ncFilenameInstac 
+                
+                # Create the destination folder
+                if not os.path.isdir(ncFilePathInstac):
+                    os.makedirs(ncFilePathInstac)
+                
+                # Create netCDF wih compression from DataSet and save it
+                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
+                
+                # Modify the units attribute of TIME variable for including timezone digit
+                ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
+                ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+                ncf.close()
             
-            # Enable compression
-            enc = {}
-            for vv in instacDS.data_vars:
-                if instacDS[vv].ndim < 2:
-                    continue
-            
-                enc[vv] = instacDS[vv].encoding
-                enc[vv]['zlib'] = True
-                enc[vv]['complevel'] = 9
-                enc[vv]['fletcher32'] = True
-            
-            # Set the filename (with full path) for the aggregated netCDF file
-            ncFilePathInstac = buildINSTACtotalFolder(instacBuffer,networkData.iloc[0]['network_id'],vers)
-            ncFilenameInstac = buildINSTACtotalFilename(networkData.iloc[0]['network_id'],T.time,'.nc')
-            ncFileInstac = ncFilePathInstac + ncFilenameInstac 
-            
-            # Create the destination folder
-            if not os.path.isdir(ncFilePathInstac):
-                os.makedirs(ncFilePathInstac)
-            
-            # Create netCDF wih compression from DataSet and save it
-            instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
-            
-            # Modify the units attribute of TIME variable for including timezone digit
-            ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
-            ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
-            ncf.close()
-        
-            logger.info(ncFilenameInstac + ' total netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+                logger.info(ncFilenameInstac + ' total netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+                
+            else:
+                return
             
         except Exception as err:
             dmErr = True
@@ -280,47 +286,53 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     # Open the netCDF files of the day in an aggregated dataset
     #####
     
+            # List all netCDF files in the current day folder
             hourlyFiles = [file for file in glob.glob(os.path.join(ncFilePath,'**/*.nc'), recursive = True)]
 
-            dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+            if len(hourlyFiles)>0:
+                # Open all netCDF files in the current day folder
+                dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+                
+        #####        
+        # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
+        #####
             
-    #####        
-    # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
-    #####
-        
-            # Apply the Copernicus Marine Service In Situ TAC data model
-            instacDS = convertEHNtoINSTACradialDatamodel(dailyDS, networkData, radSiteData, vers)
+                # Apply the Copernicus Marine Service In Situ TAC data model
+                instacDS = convertEHNtoINSTACradialDatamodel(dailyDS, networkData, radSiteData, vers)
+                
+                # Enable compression
+                enc = {}
+                for vv in instacDS.data_vars:
+                    if instacDS[vv].ndim < 2:
+                        continue
+                
+                    enc[vv] = instacDS[vv].encoding
+                    enc[vv]['zlib'] = True
+                    enc[vv]['complevel'] = 9
+                    enc[vv]['fletcher32'] = True
+                
+                # Set the filename (with full path) for the aggregated netCDF file
+                ncFilePathInstac = buildINSTACradialFolder(instacBuffer,radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],vers)
+                ncFilenameInstac = buildINSTACradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
+                ncFileInstac = ncFilePathInstac + ncFilenameInstac 
+                
+                # Create the destination folder
+                if not os.path.isdir(ncFilePathInstac):
+                    os.makedirs(ncFilePathInstac)
+                
+                # Create netCDF wih compression from DataSet and save it
+                # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC')   
+                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
+                
+                # Modify the units attribute of TIME variable for including timezone digit
+                ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
+                ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+                ncf.close()
             
-            # Enable compression
-            enc = {}
-            for vv in instacDS.data_vars:
-                if instacDS[vv].ndim < 2:
-                    continue
-            
-                enc[vv] = instacDS[vv].encoding
-                enc[vv]['zlib'] = True
-                enc[vv]['complevel'] = 9
-                enc[vv]['fletcher32'] = True
-            
-            # Set the filename (with full path) for the aggregated netCDF file
-            ncFilePathInstac = buildINSTACradialFolder(instacBuffer,radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],vers)
-            ncFilenameInstac = buildINSTACradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
-            ncFileInstac = ncFilePathInstac + ncFilenameInstac 
-            
-            # Create the destination folder
-            if not os.path.isdir(ncFilePathInstac):
-                os.makedirs(ncFilePathInstac)
-            
-            # Create netCDF wih compression from DataSet and save it
-            # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC')   
-            instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
-            
-            # Modify the units attribute of TIME variable for including timezone digit
-            ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
-            ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
-            ncf.close()
-        
-            logger.info(ncFilenameInstac + ' radial netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+                logger.info(ncFilenameInstac + ' radial netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+                
+            else:
+                return
             
         except Exception as err:
             dmErr = True
@@ -1790,12 +1802,11 @@ def main(argv):
     logger.addHandler(lfh)
     logger.addHandler(ch)
     
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!TO BE CHANGED FOR OPERATIONS (IP set to 150.145.136.104) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # Set parameter for Mysql EU HFR NODE database connection
     sqlConfig = {
       'user': 'HFRuserCP',
       'password': '!_kRIVAHYH2RLpmQxz_!',
-      'host': '150.145.136.108',
+      'host': '150.145.136.104',
       'EU HFR NODE database': 'HFR_node_db',
     }
     
