@@ -47,8 +47,7 @@ import netCDF4 as nc4
 ######################
 
 # Set the path to the CMEMS INSTAC buffer
-# instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
-instacBuffer = '/home/lorenz/Downloads/INSTAC_BUFFER/'
+instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
 
 
 ######################
@@ -1694,6 +1693,10 @@ def processNetwork(networkID,memory,sqlConfig):
             stationSelectQuery = 'SELECT * FROM station_tb WHERE network_id=\'' + networkID + '\''
         stationData = pd.read_sql(stationSelectQuery, con=eng)
         numStations = stationData.shape[0]
+        
+        # Avoid to have None in the last_Calibration_date field
+        stationData['last_calibration_date']=stationData['last_calibration_date'].apply(lambda x: dt.date(1,1,1) if x is None else x)
+        
         logger.info(networkID + ' station data successfully fetched from EU HFR NODE database.')
     except sqlalchemy.exc.DBAPIError as err:        
         pNerr = True
@@ -1734,6 +1737,7 @@ def processNetwork(networkID,memory,sqlConfig):
         if 'HFR-US' in networkID:
             pass
         else:
+            
             logger.info('Radial processing started for ' + networkID + ' network') 
             radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,vers,eng,logger))
         
@@ -1747,7 +1751,7 @@ def processNetwork(networkID,memory,sqlConfig):
             totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
             
         # Wait a bit (useful for multiprocessing management)
-        time.sleep(600)
+        time.sleep(10)
             
     except Exception as err:
         pNerr = True
@@ -1839,34 +1843,75 @@ def main(argv):
 # Process launch and monitor
 #####
 
+    # try:
+        
+    #     while True:
+    #         for ntw in networkIDs:
+    #             try:
+    #                 logger.info('Processing for ' + ntw + ' network started')
+    #                 processNetwork(ntw, memory, sqlConfig)
+    #                 logger.info('Processing for ' + ntw + ' network successfully executed')
+    #             except Exception as err:
+    #                 EHNerr = True
+    #                 logger.error(err.args[0])
+    #                 logger.info('Processing for ' + ntw + ' network exited with errors')
+            
+    
+    # except Exception as err:
+    #     EHNerr = True
+    #     logger.error(err.args[0])
+        
     try:
-        # Start a process per each network
+        # Set the queue containing the network IDs
+        networkQueue = networkIDs
+    
+        # Set the batch size
+        numCPU = os.cpu_count()
+        if len(networkIDs) < numCPU -1:
+            batchDim = len(networkIDs)
+        else:
+            batchDim = numCPU - 2
+        
+        # Start a process per each network in the batch
         prcs = {}
-        for ntw in networkIDs:
+        for ntw in networkQueue[0:batchDim]:
             p = Process(target=processNetwork, args=(ntw, memory, sqlConfig,))
             p.start()
             prcs[p] = ntw
             logger.info('Processing for ' + ntw + ' network started')
             
         while True:
-            # Check which processes are terminated and append the processed network name to a list for future processing
+            # check which processes are terminated and append the processed network names to a dictionary for future processing
             trm = {}
             for pp in prcs.keys():
                 if pp.exitcode != None:
-                    trm[pp] = prcs[pp]                
+                    trm[pp] = prcs[pp]
                     
-            # Terminate and relauch terminated processes
+            # Close the terminated processes and appen them to the queue
             for tt in trm.keys():
+                # Close the process
                 tt.close()
                 prcs.pop(tt)
-                p = Process(target=processNetwork, args=(trm[tt], memory, sqlConfig,))
+                logger.info('Processing for ' + trm[tt] + ' network ended')
+                # Pop the network from the queue
+                networkQueue.remove(trm[tt])
+                # Add the tne network at the end of the queue
+                networkQueue.append(trm[tt])
+                
+                # Start a new process for the first network of the queue not in the dictionary of the running processes
+                for ntw in networkQueue:
+                    if ntw not in prcs.values():
+                        break
+                p = Process(target=processNetwork, args=(ntw, memory, sqlConfig,))
                 p.start()
-                prcs[p] = trm[tt]
-                logger.info('Processing for ' + trm[tt] + ' network restarted')
+                prcs[p] = ntw
+                logger.info('Processing for ' + ntw + ' network started')
+            
     
     except Exception as err:
         EHNerr = True
         logger.error(err.args[0])
+    
     
     
 ####################
