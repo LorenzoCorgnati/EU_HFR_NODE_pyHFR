@@ -664,6 +664,7 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
         Tcomb.data.drop(indexNoVec , inplace=True)
         Tcomb.data.reset_index(level=None, drop=False, inplace=True)    # Set drop=True if the former indices are not necessary
         
+        # Check if the combined Total is empty (i.e. there's no overlap in radial coverages)
         if Tcomb.data.empty:
             warn = 'No combination performed: no overlap in radial coverages'
         
