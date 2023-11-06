@@ -43,14 +43,6 @@ import xarray as xr
 import netCDF4 as nc4
 
 ######################
-# SET INSTAC BUFFER
-######################
-
-# Set the path to the CMEMS INSTAC buffer
-instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
-
-
-######################
 # PROCESSING FUNCTIONS
 ######################
 
@@ -142,7 +134,10 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     #####
     
     # Initialize error flag
-    dmErr = False
+    dmErr = False 
+    
+    # Set the path to the CMEMS INSTAC buffer
+    instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
     
     # Get the Total object
     T = dmTot['Total']
@@ -260,6 +255,9 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     
     # Initialize error flag
     dmErr = False
+    
+    # Set the path to the CMEMS INSTAC buffer
+    instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
     
     # Get the Radial object
     R = dmRad['Radial']
@@ -1751,7 +1749,7 @@ def processNetwork(networkID,memory,sqlConfig):
             totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
             
         # Wait a bit (useful for multiprocessing management)
-        time.sleep(10)
+        time.sleep(30)
             
     except Exception as err:
         pNerr = True
@@ -1873,16 +1871,20 @@ def main(argv):
             batchDim = numCPU - 2
         
         # Start a process per each network in the batch
-        prcs = {}
+        prcs = {}       # dictionary of the running processes contanig processes and related network IDs
         for ntw in networkQueue[0:batchDim]:
+            # Wait a bit (useful for multiprocessing management)
+            time.sleep(10)
+            # Start the process
             p = Process(target=processNetwork, args=(ntw, memory, sqlConfig,))
             p.start()
+            # Insert process and the related network ID into the dictionary of the running processs
             prcs[p] = ntw
             logger.info('Processing for ' + ntw + ' network started')
             
         while True:
-            # check which processes are terminated and append the processed network names to a dictionary for future processing
-            trm = {}
+            # check which processes are terminated and append the processed network names to the dictionary of terminated processes
+            trm = {}        # dictionary of the terminated processes 
             for pp in prcs.keys():
                 if pp.exitcode != None:
                     trm[pp] = prcs[pp]
@@ -1902,8 +1904,12 @@ def main(argv):
                 for ntw in networkQueue:
                     if ntw not in prcs.values():
                         break
+                # Wait a bit (useful for multiprocessing management)
+                time.sleep(10)
+                # Start the process
                 p = Process(target=processNetwork, args=(ntw, memory, sqlConfig,))
                 p.start()
+                # Insert process and the related network ID into the dictionary of the running processes
                 prcs[p] = ntw
                 logger.info('Processing for ' + ntw + ' network started')
             

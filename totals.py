@@ -522,7 +522,7 @@ def makeTotalVector(rBins,rDF):
     minContrRads = 3
     
     # create output total Series
-    totalData = pd.Series(np.nan,index=range(6))
+    totalData = pd.Series(np.nan,index=range(9))
     # only consider contributing radial sites
     contrRad = rBins[rBins.str.len() != 0]
     # check if there are at least two contributing radial sites
@@ -663,6 +663,9 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
         # Delete these row indexes from DataFrame
         Tcomb.data.drop(indexNoVec , inplace=True)
         Tcomb.data.reset_index(level=None, drop=False, inplace=True)    # Set drop=True if the former indices are not necessary
+        
+        if Tcomb.data.empty:
+            warn = 'No combination performed: no overlap in radial coverages'
         
     else:
         warn = 'No combination performed: not enough contributing radial sites'
