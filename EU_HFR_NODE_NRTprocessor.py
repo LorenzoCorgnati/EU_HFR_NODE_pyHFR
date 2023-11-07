@@ -142,6 +142,11 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     # Get the Total object
     T = dmTot['Total']
     
+    # Check if Total object contains data
+    if T.data.empty:
+        logger.info(T.file_name + ' total file is empty: INSTAC data model not applied')
+        return
+    
     # Set the filename (with full path) for the hourly netCDF file
     ncFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'],T.time,vers)
     ncFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.nc')
@@ -209,7 +214,7 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 
             else:
                 return
-            
+            xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
         except Exception as err:
             dmErr = True
             logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file ' + ncFilenameInstac)
@@ -261,6 +266,11 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     
     # Get the Radial object
     R = dmRad['Radial']
+    
+    # Check if Radial object contains data
+    if R.data.empty:
+        logger.info(R.file_name + ' radial file is empty: INSTAC data model not applied')
+        return
     
     # Set the filename (with full path) for the hourly netCDF file
     ncFilePath = buildEHNradialFolder(radSiteData.iloc[0]['radial_HFRnetCDF_folder_path'],radSiteData.iloc[0]['station_id'],R.time,vers)
@@ -318,7 +328,6 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                     os.makedirs(ncFilePathInstac)
                 
                 # Create netCDF wih compression from DataSet and save it
-                # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC')   
                 instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
                 
                 # Modify the units attribute of TIME variable for including timezone digit
@@ -385,6 +394,11 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
         try:        
             # Get the Total object
             T = dmTot['Total']
+            
+            # Check if Total object contains data
+            if T.data.empty:
+                logger.info(T.file_name + ' total file is empty: EHN data model not applied')
+                return dmTot
             
     #####        
     # Convert to standard data format (netCDF)  
@@ -506,6 +520,11 @@ def applyEHNtotalQC(qcTot,networkData,vers,logger):
         # Get the total object
         T = qcTot['Total']
         
+        # Check if Total object contains data
+        if T.data.empty:
+            logger.info(T.file_name + ' total file is empty: no QC test applied')
+            return T
+        
         # Check if the Total was already processed
         if qcTot['NRT_processed_flag'] == 0:           
             
@@ -548,7 +567,7 @@ def applyEHNtotalQC(qcTot,networkData,vers,logger):
         qcErr = True
         logger.error(err.args[0] + ' for total file ' + T.file_name)     
     
-    return  T
+    return T
 
 def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logger):
     """
@@ -622,25 +641,25 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                 # Generate the combined Total
                 T, warn = combineRadials(combRad,gridGS,searchRadius,gridResolution,timeStamp)
                 
-                if warn=='':
-                    # Add metadata related to bounding box
-                    T = addBoundingBoxMetadata(T,lonMin,lonMax,latMin,latMax,gridResolution/1000)
-                    
-                    # Update is_combined attribute
-                    T.is_combined = True
-                    
-                    # Add is_wera attribute
-                    if (len(exts) == 1):
-                        if exts[0] == '.ruv':
-                            T.is_wera = False
-                        elif exts[0] == '.crad_ascii':
-                            T.is_wera = True
-                    else:
+                # Add metadata related to bounding box
+                T = addBoundingBoxMetadata(T,lonMin,lonMax,latMin,latMax,gridResolution/1000)
+                
+                # Update is_combined attribute
+                T.is_combined = True
+                
+                # Add is_wera attribute
+                if (len(exts) == 1):
+                    if exts[0] == '.ruv':
                         T.is_wera = False
-                    
-                    # Add the Total object to the DataFrame
-                    combTot = pd.concat([combTot, pd.DataFrame([{'Total': T, 'NRT_processed_flag':0}])])
-                    
+                    elif exts[0] == '.crad_ascii':
+                        T.is_wera = True
+                else:
+                    T.is_wera = False
+                
+                # Add the Total object to the DataFrame
+                combTot = pd.concat([combTot, pd.DataFrame([{'Total': T, 'NRT_processed_flag':0}])])
+                
+                if warn=='':                    
                     # Set the filename (with full path) for the ttl file
                     ttlFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'].replace('nc','ttl'),T.time,vers)
                     ttlFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.ttl')
@@ -722,6 +741,11 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
         
             # Get the Radial object
             R = dmRad['Radial']
+            
+            # Check if Radial object contains data
+            if R.data.empty:
+                logger.info(R.file_name + ' radial file is empty: EHN data model not applied')
+                return dmRad
             
             # Add metadata related to range limits
             R.metadata['RangeMin'] = '0 km'
@@ -812,7 +836,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                 dMerr = True
                 logger.error('MySQL error ' + err._message())        
     
-    return  dmRad
+    return dmRad
 
 def applyEHNradialQC(qcRad,radSiteData,vers,logger):
     """
@@ -844,6 +868,11 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
     try:      
         # Get the radial object
         R = qcRad['Radial']
+        
+        # Check if Radial object contains data
+        if R.data.empty:
+            logger.info(R.file_name + ' radial file is empty: no QC test applied')
+            return R
         
         # Check if the Radial was already processed
         if qcRad['NRT_processed_flag'] == 0:           
@@ -1241,7 +1270,6 @@ def selectRadials(networkID,startDate,eng,logger):
             
     return radialsToBeProcessed
 
-
 def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
     """
     This function reads data from HFR US network via OpenDAP, selects the data subset to be processed
@@ -1397,7 +1425,6 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
     
     return
 
-
 def inputTotals(networkID,networkData,startDate,eng,logger):
     """
     This function lists the input total files pushed by the HFR data providers 
@@ -1490,7 +1517,6 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
         logger.error(err.args[0])
     
     return
-
 
 def inputRadials(networkID,stationData,startDate,eng,logger):
     """
@@ -1593,7 +1619,6 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
             logger.error(err.args[0] + ' for station ' + stationID)
     
     return
-
 
 def processNetwork(networkID,memory,sqlConfig):
     """

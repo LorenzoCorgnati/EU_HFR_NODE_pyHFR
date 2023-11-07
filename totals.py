@@ -664,7 +664,6 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
         Tcomb.data.drop(indexNoVec , inplace=True)
         Tcomb.data.reset_index(level=None, drop=False, inplace=True)    # Set drop=True if the former indices are not necessary
         
-        # Check if the combined Total is empty (i.e. there's no overlap in radial coverages)
         if Tcomb.data.empty:
             warn = 'No combination performed: no overlap in radial coverages'
         
@@ -1275,19 +1274,6 @@ class Total(fileParser):
         globalAttributes = json.loads(f.read())
         f.close()
         
-        # Drop unnecessary DataArrays from the DataSet
-        toDrop = ['VFLG', 'XDST', 'YDST', 'RNGE', 'BEAR','NRAD', 'VELO', 'HEAD','index']
-        for t in toDrop:
-            if t in self.xdr:
-                self.xdr.pop(t)
-        toDrop = list(self.xdr.keys())
-        for t in toDrop:
-            if fnmatch.fnmatch(t,'S*CN'):
-                self.xdr.pop(t)
-            
-        # Add coordinate reference system to the dictionary
-        self.xdr['crs'] = xr.DataArray(int(0), )
-        
         # Rename velocity related and quality related variables
         self.xdr['EWCT'] = self.xdr.pop('VELU')
         self.xdr['NSCT'] = self.xdr.pop('VELV')
@@ -1297,6 +1283,25 @@ class Total(fileParser):
             self.xdr['NSCS'] = self.xdr.pop('VQAL')
         if 'CQAL' in self.xdr:
             self.xdr['CCOV'] = self.xdr.pop('CQAL')
+        
+        # Drop unnecessary DataArrays from the DataSet
+        toDrop = ['VFLG', 'XDST', 'YDST', 'RNGE', 'BEAR','NRAD', 'VELO', 'HEAD','index']
+        for t in toDrop:
+            if t in self.xdr:
+                self.xdr.pop(t)
+        toDrop = list(self.xdr.keys())
+        for t in toDrop:
+            if fnmatch.fnmatch(t,'S*CN'):
+                self.xdr.pop(t)
+        toDrop = []
+        for vv in self.xdr:
+            if vv not in totVariables.keys():
+                toDrop.append(vv)
+        for rv in toDrop:
+            self.xdr.pop(rv)            
+            
+        # Add coordinate reference system to the dictionary
+        self.xdr['crs'] = xr.DataArray(int(0), )       
         
         # Add antenna related variables to the dictionary
         # Number of antennas        

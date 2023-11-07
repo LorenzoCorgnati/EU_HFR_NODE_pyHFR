@@ -978,18 +978,24 @@ class Radial(fileParser):
         globalAttributes = json.loads(f.read())
         f.close()
         
-        # Drop unnecessary DataArrays from the DataSet
-        if not self.is_wera:
-            self.xdr.pop('VFLG')
-            
-        # Add coordinate reference system to the dictionary
-        self.xdr['crs'] = xr.DataArray(int(0), )
-        
         # Rename velocity related variables
         self.xdr['DRVA'] = self.xdr.pop('HEAD')
         self.xdr['RDVA'] = self.xdr.pop('VELO')
         self.xdr['EWCT'] = self.xdr.pop('VELU')
         self.xdr['NSCT'] = self.xdr.pop('VELV')
+        
+        # Drop unnecessary DataArrays from the DataSet
+        if not self.is_wera:
+            self.xdr.pop('VFLG')
+        toDrop = []
+        for vv in self.xdr:
+            if vv not in radVariables.keys():
+                toDrop.append(vv)
+        for rv in toDrop:
+            self.xdr.pop(rv)
+            
+        # Add coordinate reference system to the dictionary
+        self.xdr['crs'] = xr.DataArray(int(0), )  
         
         # Add antenna related variables to the dictionary
         # Number of antennas
