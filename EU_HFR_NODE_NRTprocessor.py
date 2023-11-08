@@ -201,6 +201,10 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 # Create the destination folder
                 if not os.path.isdir(ncFilePathInstac):
                     os.makedirs(ncFilePathInstac)
+                    
+                # Check if the netCDF file exists and remove it
+                if os.path.isfile(ncFileInstac):
+                    os.remove(ncFileInstac)
                 
                 # Create netCDF wih compression from DataSet and save it
                 instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
@@ -214,7 +218,7 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 
             else:
                 return
-            xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+
         except Exception as err:
             dmErr = True
             logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file ' + ncFilenameInstac)
@@ -326,6 +330,10 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                 # Create the destination folder
                 if not os.path.isdir(ncFilePathInstac):
                     os.makedirs(ncFilePathInstac)
+                    
+                # Check if the netCDF file exists and remove it
+                if os.path.isfile(ncFileInstac):
+                    os.remove(ncFileInstac)
                 
                 # Create netCDF wih compression from DataSet and save it
                 instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
@@ -415,6 +423,10 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             # Create the destination folder
             if not os.path.isdir(ncFilePath):
                 os.makedirs(ncFilePath)
+            
+            # Check if the netCDF file exists and remove it
+            if os.path.isfile(ncFile):
+                os.remove(ncFile)
             
             # Create netCDF from DataSet and save it
             T.xds.to_netcdf(ncFile, format=T.xds.attrs['netcdf_format'])            
@@ -606,7 +618,7 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
         # Check if the combination is to be performed
         if networkData.iloc[0]['radial_combination'] == 1:
             # Check if the radials were already combined
-            if 0 in combRad['NRT_combined_flag'].values:
+            if ((networkData.iloc[0]['network_id'] != 'HFR-WesternItaly') and (0 in combRad['NRT_combined_flag'].values)) or ((networkData.iloc[0]['network_id'] == 'HFR-WesternItaly') and (0 in combRad['NRT_processed_flag_integrated_network'].values)):
                 # Get the lat/lons of the bounding box
                 lonMin = networkData.iloc[0]['geospatial_lon_min']
                 lonMax = networkData.iloc[0]['geospatial_lon_max']
@@ -682,13 +694,19 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
     #####
     # Update NRT_combined_flag for the combined radials                        
     #####
-                    # Update the local DataFrame if radials from all station contributed to making the total
                     if len(combRad) == numActiveStations:
-                        combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
+                        # Update the local DataFrame if radials from all station contributed to making the total
+                        if networkData.iloc[0]['network_id'] == 'HFR-WesternItaly':
+                            combRad['NRT_processed_flag_integrated_network'] = combRad['NRT_processed_flag_integrated_network'].replace(0,1)
+                        else:
+                            combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
                     
-                        # Update the radial_input_tb table on the EU HFR NODE database
+                        # Update the radial_input_tb table on the EU HFR NODE database if radials from all station contributed to making the total
                         try:
-                            combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
+                            if networkData.iloc[0]['network_id'] == 'HFR-WesternItaly':
+                                combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_processed_flag_integrated_network=1 WHERE filename=\'' + x.file_name + '\''))
+                            else:
+                                combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
                         except sqlalchemy.exc.DBAPIError as err:        
                             dMerr = True
                             logger.error('MySQL error ' + err._message())
@@ -772,6 +790,10 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             # Create the destination folder
             if not os.path.isdir(ncFilePath):
                 os.makedirs(ncFilePath)
+            
+            # Check if the netCDF file exists and remove it
+            if os.path.isfile(ncFile):
+                os.remove(ncFile)
             
             # Create netCDF from DataSet and save it
             R.xds.to_netcdf(ncFile, format=R.xds.attrs['netcdf_format'])            
@@ -1120,29 +1142,31 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
         
         # Rename indices with site codes
         indexMapper = dict(zip(groupedRad.index.values.tolist(),groupedRad['station_id'].to_list()))
-        groupedRad.rename(index=indexMapper,inplace=True)        
+        groupedRad.rename(index=indexMapper,inplace=True)    
+        
+        if networkID != 'HFR-WesternItaly':
         
         #####        
         # Update the last calibration date in station_tb table of teh database
         #####
         
-        groupedRad.apply(lambda x: updateLastCalibrationDate(x,stationData.loc[stationData['station_id'] == x.station_id],eng,logger),axis=1)
+            groupedRad.apply(lambda x: updateLastCalibrationDate(x,stationData.loc[stationData['station_id'] == x.station_id],eng,logger),axis=1)
         
         #####        
         # Apply QC to Radials
         #####
         
-        groupedRad['Radial'] = groupedRad.apply(lambda x: applyEHNradialQC(x,stationData.loc[stationData['station_id'] == x.station_id],vers,logger),axis=1)
+            groupedRad['Radial'] = groupedRad.apply(lambda x: applyEHNradialQC(x,stationData.loc[stationData['station_id'] == x.station_id],vers,logger),axis=1)
         
         #####        
         # Convert Radials to standard data format (netCDF)
         #####
         
-        # European standard data model
-        groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
-        
-        # Copernicus Marine Service In Situ TAC data model
-        groupedRad.apply(lambda x: applyINSTACradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
+            # European standard data model
+            groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
+            
+            # Copernicus Marine Service In Situ TAC data model
+            groupedRad.apply(lambda x: applyINSTACradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
                 
         #####
         # Combine Radials into Total
@@ -1255,10 +1279,12 @@ def selectRadials(networkID,startDate,eng,logger):
         # Set and execute the query for getting radials to be processed
         if networkID == 'HFR-WesternItaly':
             networkStr = '\'HFR-TirLig\' OR network_id=\'HFR-LaMMA\' OR network_id=\'HFR-ARPAS\''
+            conditionStr = 'NRT_processed_flag_integrated_network=0'
         else:
             networkStr = '\'' + networkID + '\''
+            conditionStr = '(NRT_processed_flag=0 OR NRT_combined_flag=0)'
         try:
-            radialSelectionQuery = 'SELECT * FROM radial_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=' + networkStr + ') AND (NRT_processed_flag=0 OR NRT_combined_flag=0) ORDER BY TIMESTAMP'
+            radialSelectionQuery = 'SELECT * FROM radial_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=' + networkStr + ') AND ' + conditionStr + ' ORDER BY TIMESTAMP'
             radialsToBeProcessed = pd.read_sql(radialSelectionQuery, con=eng)
         except sqlalchemy.exc.DBAPIError as err:        
             sRerr = True
@@ -1735,12 +1761,16 @@ def processNetwork(networkID,memory,sqlConfig):
         # Input radial data
         if 'HFR-US' in networkID:
             pass
+        elif networkID == 'HFR-WesternItaly':
+            pass
         else:
             inputRadials(networkID, stationData, startDate, eng, logger)
         
         # Input total data
         if 'HFR-US' in networkID:
             inputUStotals(networkID, networkData, stationData, startDate, vers, eng, logger)
+        elif networkID == 'HFR-WesternItaly':
+            pass
         else:
             if networkData.iloc[0]['radial_combination'] == 0:
                 inputTotals(networkID, networkData, startDate, eng, logger)
@@ -1759,8 +1789,7 @@ def processNetwork(networkID,memory,sqlConfig):
         # Process radials
         if 'HFR-US' in networkID:
             pass
-        else:
-            
+        else:            
             logger.info('Radial processing started for ' + networkID + ' network') 
             radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,vers,eng,logger))
         
