@@ -180,6 +180,9 @@ def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
                              dims={'DEPTH': 1},
                              coords={'DEPTH': [0]})
     
+    # Remove DEPTH variable
+    instacDS = instacDS.drop_vars('DEPTH')
+    
     # Remove encoding for data variables
     for vv in instacDS:
         if 'char_dim_name' in instacDS[vv].encoding.keys():
@@ -204,11 +207,16 @@ def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
     for cc in instacDS.coords:
         instacDS[cc].attrs = totVariables[cc]
     
-    # Update QC variable attribute "comment" for inserting test thresholds and attribute "flag_values" for assigning the right data type
+    # Update QC variable attribute "comment" for inserting test thresholds
     for qcv in list(tDS.keys()):
         if 'QC' in qcv:
             if not qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
                 instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + tDS[qcv].attrs['comment']            
+            
+    # Update QC variable attribute "flag_values" for assigning the right data type
+    for qcv in instacDS:
+        if 'QC' in qcv:
+            instacDS[qcv].attrs['flag_values'] = list(np.int_(instacDS[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
     
     # Evaluate time coverage start, end, resolution and duration
     timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=networkData.iloc[0]['temporal_resolution']/2)
@@ -272,7 +280,7 @@ def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
             if 'dtype' in dataPacking[vv]:
                 instacDS[vv].encoding['dtype'] = dataPacking[vv]['dtype']
             if 'scale_factor' in dataPacking[vv]:
-                instacDS[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']                
+                instacDS[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']    
             if 'add_offset' in dataPacking[vv]:
                 instacDS[vv].encoding['add_offset'] = dataPacking[vv]['add_offset']
             if 'fill_value' in dataPacking[vv]:

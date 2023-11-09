@@ -182,16 +182,16 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 # Apply the Copernicus Marine Service In Situ TAC data model
                 instacDS = convertEHNtoINSTACtotalDatamodel(dailyDS, networkData, stationData, vers)
                 
-                # Enable compression
-                enc = {}
-                for vv in instacDS.data_vars:
-                    if instacDS[vv].ndim < 2:
-                        continue
+                # # Enable compression
+                # enc = {}
+                # for vv in instacDS.data_vars:
+                #     if instacDS[vv].ndim < 2:
+                #         continue
                 
-                    enc[vv] = instacDS[vv].encoding
-                    enc[vv]['zlib'] = True
-                    enc[vv]['complevel'] = 9
-                    enc[vv]['fletcher32'] = True
+                #     enc[vv] = instacDS[vv].encoding
+                #     enc[vv]['zlib'] = True
+                #     enc[vv]['complevel'] = 9
+                #     enc[vv]['fletcher32'] = True
                 
                 # Set the filename (with full path) for the aggregated netCDF file
                 ncFilePathInstac = buildINSTACtotalFolder(instacBuffer,networkData.iloc[0]['network_id'],vers)
@@ -207,7 +207,8 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                     os.remove(ncFileInstac)
                 
                 # Create netCDF wih compression from DataSet and save it
-                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
+                # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)    # IF COMPRESION ENABLED
+                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4')                    # IF COMPRESSION NOT ENABLED
                 
                 # Modify the units attribute of TIME variable for including timezone digit
                 ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
@@ -221,7 +222,10 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
 
         except Exception as err:
             dmErr = True
-            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file ' + ncFilenameInstac)
+            if 'ncFilenameInstac' in locals():
+                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file ' + ncFilenameInstac)
+            else:
+                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file for timestamp ' + T.time.strftime('%Y-%m-%d %H:%M:%S'))
             return
             
     #####
@@ -311,16 +315,16 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                 # Apply the Copernicus Marine Service In Situ TAC data model
                 instacDS = convertEHNtoINSTACradialDatamodel(dailyDS, networkData, radSiteData, vers)
                 
-                # Enable compression
-                enc = {}
-                for vv in instacDS.data_vars:
-                    if instacDS[vv].ndim < 2:
-                        continue
+                # # Enable compression
+                # enc = {}
+                # for vv in instacDS.data_vars:
+                #     if instacDS[vv].ndim < 2:
+                #         continue
                 
-                    enc[vv] = instacDS[vv].encoding
-                    enc[vv]['zlib'] = True
-                    enc[vv]['complevel'] = 9
-                    enc[vv]['fletcher32'] = True
+                #     enc[vv] = instacDS[vv].encoding
+                #     enc[vv]['zlib'] = True
+                #     enc[vv]['complevel'] = 9
+                #     enc[vv]['fletcher32'] = True
                 
                 # Set the filename (with full path) for the aggregated netCDF file
                 ncFilePathInstac = buildINSTACradialFolder(instacBuffer,radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],vers)
@@ -336,7 +340,8 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                     os.remove(ncFileInstac)
                 
                 # Create netCDF wih compression from DataSet and save it
-                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)  
+                # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)    # IF COMPRESSION ENABLED
+                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4')                    # IF COMPRESSION NOT ENABLED
                 
                 # Modify the units attribute of TIME variable for including timezone digit
                 ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
@@ -350,7 +355,10 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             
         except Exception as err:
             dmErr = True
-            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file ' + ncFilenameInstac)
+            if 'ncFilenameInstac' in locals():
+                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file ' + ncFilenameInstac)
+            else:
+                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file for timestamp ' + R.time.strftime('%Y-%m-%d %H:%M:%S'))
             return
             
     #####

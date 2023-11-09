@@ -149,6 +149,9 @@ def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
                              dims={'DEPTH': 1},
                              coords={'DEPTH': [0]})
     
+    # Remove DEPTH variable
+    instacDS = instacDS.drop_vars('DEPTH')
+    
     # Remove encoding for data variables
     for vv in instacDS:
         if 'char_dim_name' in instacDS[vv].encoding.keys():
@@ -173,11 +176,16 @@ def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
     for cc in instacDS.coords:
         instacDS[cc].attrs = radVariables[cc]
     
-    # Update QC variable attribute "comment" for inserting test thresholds and attribute "flag_values" for assigning the right data type
+    # Update QC variable attribute "comment" for inserting test thresholds
     for qcv in list(rDS.keys()):
         if 'QC' in qcv:
             if not qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
-                instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + rDS[qcv].attrs['comment']            
+                instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + rDS[qcv].attrs['comment']   
+    
+    # Update QC variable attribute "flag_values" for assigning the right data type
+    for qcv in instacDS:
+        if 'QC' in qcv:
+            instacDS[qcv].attrs['flag_values'] = list(np.int_(instacDS[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
     
     # Evaluate time coverage start, end, resolution and duration
     timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
