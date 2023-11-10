@@ -141,6 +141,27 @@ def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
     instacDS = rDS
     instacDS.encoding = {}
     
+    # Evaluate time coverage start, end, resolution and duration
+    timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
+    timeCoverageEnd = pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime() + relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
+    
+    timeCoverageDuration = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
+    
+    # Build the file id
+    ID = 'GL_RV_HF_' + rDS.attrs['platform_code'] + '_' + pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime().strftime('%Y%m%d')
+    
+    # Get the TIME variable values
+    xdsTime = instacDS.TIME.values
+    # Convert them to datetime datetimes
+    dtTime = np.array([pd.Timestamp(t).to_pydatetime() for t in xdsTime])
+    
+    # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
+    timeDelta = dtTime - dt.datetime.strptime('1950-01-01T00:00:00Z','%Y-%m-%dT%H:%M:%SZ')
+    ncTime = np.array([t.days + t.seconds / (60*60*24) for t in timeDelta])
+    
+    # Replace TIME variable values with timestamp as number of days since 1950-01-01T00:00:00Z
+    instacDS = instacDS.assign_coords(TIME=ncTime)
+    
     # Rename DEPTH_QC variable to DEPH_QC
     instacDS = instacDS.rename({'DEPTH_QC':'DEPH_QC'})  
     
@@ -186,15 +207,6 @@ def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
     for qcv in instacDS:
         if 'QC' in qcv:
             instacDS[qcv].attrs['flag_values'] = list(np.int_(instacDS[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
-    
-    # Evaluate time coverage start, end, resolution and duration
-    timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
-    timeCoverageEnd = pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime() + relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
-    
-    timeCoverageDuration = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
-    
-    # Build the file id
-    ID = 'GL_RV_HF_' + rDS.attrs['platform_code'] + '_' + pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime().strftime('%Y%m%d')
         
     # Fill global attributes
     globalAttributes['site_code'] = rDS.attrs['site_code']

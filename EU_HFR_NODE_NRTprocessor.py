@@ -213,6 +213,7 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 # Modify the units attribute of TIME variable for including timezone digit
                 ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
                 ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+                ncf.variables['TIME'].calendar = 'standard'
                 ncf.close()
             
                 logger.info(ncFilenameInstac + ' total netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
@@ -346,6 +347,7 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
                 # Modify the units attribute of TIME variable for including timezone digit
                 ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
                 ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+                ncf.variables['TIME'].calendar = 'standard'
                 ncf.close()
             
                 logger.info(ncFilenameInstac + ' radial netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
