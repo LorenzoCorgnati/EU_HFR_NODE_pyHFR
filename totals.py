@@ -1149,7 +1149,6 @@ class Total(fileParser):
             
         # extract longitudes and latitude from grid GeoSeries and insert them into numpy arrays
         lon_dim = np.unique(gridGS.x.to_numpy())
-        # lat_dim = np.flipud(np.unique(gridGS.y.to_numpy()))
         lat_dim = np.unique(gridGS.y.to_numpy())
         # manage antimeridian crossing
         lon_dim = np.concatenate((lon_dim[lon_dim>=0],lon_dim[lon_dim<0]))
