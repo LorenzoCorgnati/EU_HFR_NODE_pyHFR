@@ -824,13 +824,13 @@ class Radial(fileParser):
             gridGS = createLonLatGridFromTopLeftPointWera(topLeftLon, topLeftLat, cellSize, cellsLon, cellsLat)
             # extract longitudes and latitude from grid GeoSeries and insert them into numpy arrays
             lon_dim = np.unique(gridGS.x.to_numpy())
-            lat_dim = np.flipud(np.unique(gridGS.y.to_numpy()))
+            lat_dim = np.unique(gridGS.y.to_numpy())
             # manage antimeridian crossing
             lon_dim = np.concatenate((lon_dim[lon_dim>=0],lon_dim[lon_dim<0]))
             
             # Get the longitude and latitude values of the radial measurements
             unqLon = np.sort(np.unique(self.data['LOND']))
-            unqLat = np.flipud(np.sort(np.unique(self.data['LATD'])))
+            unqLat = np.sort(np.unique(self.data['LATD']))
             
             # Insert unqLon and unqLat values to replace the closest in lon_dim and lat_dim 
             replaceIndLon = abs(unqLon[None, :] - lon_dim[:, None]).argmin(axis=0).tolist()
@@ -1100,7 +1100,8 @@ class Radial(fileParser):
         globalAttributes['calibration_type'] = station_data.iloc[0]['calibration_type']
         globalAttributes['last_calibration_date'] = station_data.iloc[0]['last_calibration_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['calibration_link'] = station_data.iloc[0]['calibration_link']
-        globalAttributes['title'] = network_data.iloc[0]['title']
+        # globalAttributes['title'] = network_data.iloc[0]['title']
+        globalAttributes['title'] = 'Near Real Time Surface Ocean Radial Velocity by ' + globalAttributes['platform_code']
         globalAttributes['summary'] = station_data.iloc[0]['summary']
         globalAttributes['institution'] = station_data.iloc[0]['institution_name']
         globalAttributes['institution_edmo_code'] = str(station_data.iloc[0]['EDMO_code'])

@@ -1155,7 +1155,7 @@ class Total(fileParser):
         
         # Get the longitude and latitude values of the total measurements
         unqLon = np.sort(np.unique(self.data['LOND']))
-        unqLat = np.flipud(np.sort(np.unique(self.data['LATD'])))
+        unqLat = np.sort(np.unique(self.data['LATD']))
         
         # Insert unqLon and unqLat values to replace the closest in lon_dim and lat_dim 
         replaceIndLon = abs(unqLon[None, :] - lon_dim[:, None]).argmin(axis=0).tolist()
@@ -1425,7 +1425,8 @@ class Total(fileParser):
             globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date'].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%SZ'))],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
             globalAttributes['last_calibration_date'] = globalAttributes['last_calibration_date'].replace('1-01-01T00:00:00Z', 'N/A')
         globalAttributes['calibration_link'] = ', '.join(station_data[["station_id", "calibration_link"]].apply(": ".join, axis=1))
-        globalAttributes['title'] = network_data.iloc[0]['title']
+        # globalAttributes['title'] = network_data.iloc[0]['title']
+        globalAttributes['title'] = 'Near Real Time Surface Ocean Total Velocity by ' + globalAttributes['platform_code']
         globalAttributes['summary'] = network_data.iloc[0]['summary']
         globalAttributes['institution'] = ', '.join(pd.concat([network_data['institution_name'],station_data['institution_name']]).unique().tolist())
         globalAttributes['institution_edmo_code'] = ', '.join([str(x) for x in pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique().tolist()])
