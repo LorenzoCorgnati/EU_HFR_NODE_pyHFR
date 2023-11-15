@@ -1959,7 +1959,7 @@ def main(argv):
                 if pp.exitcode != None:
                     trm[pp] = prcs[pp]
                     
-            # Close the terminated processes and appen them to the queue
+            # Close the terminated processes and append them to the queue
             for tt in trm.keys():
                 # Close the process
                 tt.close()
