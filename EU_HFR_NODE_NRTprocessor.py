@@ -1676,12 +1676,12 @@ def processNetwork(networkID,memory,sqlConfig):
     The second processing step consists in reading the EU HFR NODE EU HFR NODE database for collecting
     information about the radial data files to be combined into totals and in
     combining and generating radial and total data files according to the European
-    standard data model.
+    standard data model and to the Copernicus Marine Service In-Situ TAC data model.
     
     The third processing step consists in reading the EU HFR NODE EU HFR NODE database for collecting
     information about the total data files to be converted into the European standard
     data model and in the generating total data files according to the European
-    standard data model.
+    standard data model and to the Copernicus MArine Service In-Situ TAC data model.
     
     INPUTS:
         networkID: network ID of the network to be processed
@@ -1911,24 +1911,6 @@ def main(argv):
 # Process launch and monitor
 #####
 
-    # try:
-        
-    #     while True:
-    #         for ntw in networkIDs:
-    #             try:
-    #                 logger.info('Processing for ' + ntw + ' network started')
-    #                 processNetwork(ntw, memory, sqlConfig)
-    #                 logger.info('Processing for ' + ntw + ' network successfully executed')
-    #             except Exception as err:
-    #                 EHNerr = True
-    #                 logger.error(err.args[0])
-    #                 logger.info('Processing for ' + ntw + ' network exited with errors')
-            
-    
-    # except Exception as err:
-    #     EHNerr = True
-    #     logger.error(err.args[0])
-        
     try:
         # Set the queue containing the network IDs
         networkQueue = networkIDs
