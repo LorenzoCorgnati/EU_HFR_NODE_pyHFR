@@ -828,15 +828,15 @@ class Radial(fileParser):
             # manage antimeridian crossing
             lon_dim = np.concatenate((lon_dim[lon_dim>=0],lon_dim[lon_dim<0]))
             
-            # Get the longitude and latitude values of the radial measurements
-            unqLon = np.sort(np.unique(self.data['LOND']))
-            unqLat = np.sort(np.unique(self.data['LATD']))
+            # # Get the longitude and latitude values of the radial measurements
+            # unqLon = np.sort(np.unique(self.data['LOND']))
+            # unqLat = np.sort(np.unique(self.data['LATD']))
             
-            # Insert unqLon and unqLat values to replace the closest in lon_dim and lat_dim 
-            replaceIndLon = abs(unqLon[None, :] - lon_dim[:, None]).argmin(axis=0).tolist()
-            replaceIndLat = abs(unqLat[None, :] - lat_dim[:, None]).argmin(axis=0).tolist()
-            lon_dim[replaceIndLon] = unqLon
-            lat_dim[replaceIndLat] = unqLat            
+            # # Insert unqLon and unqLat values to replace the closest in lon_dim and lat_dim 
+            # replaceIndLon = abs(unqLon[None, :] - lon_dim[:, None]).argmin(axis=0).tolist()
+            # replaceIndLat = abs(unqLat[None, :] - lat_dim[:, None]).argmin(axis=0).tolist()
+            # lon_dim[replaceIndLon] = unqLon
+            # lat_dim[replaceIndLat] = unqLat            
     
             # Create radial grid from longitude and latitude
             [longitudes, latitudes] = np.meshgrid(lon_dim, lat_dim)
