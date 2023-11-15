@@ -9,9 +9,13 @@
 
 # This application inserts into the EU HFR NODE EU HFR NODE database the information about 
 # radial and total HFR files (both Codar and WERA) pushed by the data providers,
-# combines radials into totals and generates HFR radial and total data to netCDF 
+# combines radials into totals, generates HFR radial and total data to netCDF 
 # files according to the European standard data model for data distribution towards
+# EMODnet Physics portal and  generates HFR radial and total data to netCDF 
+# files according to the Copernicus Marine Service data model for data distribution towards
 # Copernicus Marine Service In Situ component.
+
+# This application works for Near Real Time operations.
 
 # When calling the application it is possible to specify the number of days in 
 # the past when to start processing (default to 3).
