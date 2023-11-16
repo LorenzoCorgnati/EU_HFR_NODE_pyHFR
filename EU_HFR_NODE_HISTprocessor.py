@@ -195,7 +195,7 @@ def createTotalFromUStds(ts,pts,USxds,networkData,stationData,vers,logger):
     
     return
 
-def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
+def applyINSTACtotalDataModel(dmTot,networkData,stationData,instacBuffer,vers,logger):
     """
     This function aggregates all the total netCDF files related to data measured in the day of the 
     Total object timestamp, applies the Copernicus Marine Service In Situ TAC standard data model 
@@ -206,8 +206,9 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
         dmTot: Series containing the total to be processed with the related information
         networkData: DataFrame containing the information of the network producing the total
         stationData: DataFrame containing the information of the radial sites belonging to the network
+        instacBuffer: full path of the folder where to save data for Copernicus Marine Service 
+                    (if None, no files for Copernicus Marine Service are produced)
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -221,9 +222,6 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     # Initialize error flag
     dmErr = False 
     
-    # Set the path to the CMEMS INSTAC buffer
-    instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
-    
     # Get the Total object
     T = dmTot['Total']
     
@@ -236,101 +234,77 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     ncFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'],T.time,vers)
     ncFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.nc')
     
-    # Check if the file was already sent to Copernicus Marine Service In Situ TAC buffer
-    try:
-        totalInstacQuery = 'SELECT * FROM total_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
-        totalInstacData = pd.read_sql(totalInstacQuery, con=eng)
-        
-    except sqlalchemy.exc.DBAPIError as err:        
-        dmErr = True
-        logger.error('MySQL error ' + err._message())    
-    
-    if totalInstacData.iloc[0]['sent_to_instac'] == 0:
-    
-        try:        
+    try:        
         
     #####
     # Open the netCDF files of the day in an aggregated dataset
     #####
     
-            # List all netCDF files in the current day folder
-            hourlyFiles = [file for file in glob.glob(os.path.join(ncFilePath,'**/*.nc'), recursive = True)]
+        # List all netCDF files in the current day folder
+        hourlyFiles = [file for file in glob.glob(os.path.join(ncFilePath,'**/*.nc'), recursive = True)]
 
-            if len(hourlyFiles)>0:
-                # Open all netCDF files in the current day folder
-                # dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
-                dailyDS = xr.open_mfdataset(hourlyFiles,combine='by_coords',compat='broadcast_equals')
-                
-        #####        
-        # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
-        #####
+        if len(hourlyFiles)>0:
+            # Open all netCDF files in the current day folder
+            # dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+            dailyDS = xr.open_mfdataset(hourlyFiles,combine='by_coords',compat='broadcast_equals')
             
-                # Apply the Copernicus Marine Service In Situ TAC data model
-                instacDS = convertEHNtoINSTACtotalDatamodel(dailyDS, networkData, stationData, vers)
-                
-                # # Enable compression
-                # enc = {}
-                # for vv in instacDS.data_vars:
-                #     if instacDS[vv].ndim < 2:
-                #         continue
-                
-                #     enc[vv] = instacDS[vv].encoding
-                #     enc[vv]['zlib'] = True
-                #     enc[vv]['complevel'] = 9
-                #     enc[vv]['fletcher32'] = True
-                
-                # Set the filename (with full path) for the aggregated netCDF file
-                ncFilePathInstac = buildINSTACtotalFolder(instacBuffer,networkData.iloc[0]['network_id'],vers)
-                ncFilenameInstac = buildINSTACtotalFilename(networkData.iloc[0]['network_id'],T.time,'.nc')
-                ncFileInstac = ncFilePathInstac + ncFilenameInstac 
-                
-                # Create the destination folder
-                if not os.path.isdir(ncFilePathInstac):
-                    os.makedirs(ncFilePathInstac)
-                    
-                # Check if the netCDF file exists and remove it
-                if os.path.isfile(ncFileInstac):
-                    os.remove(ncFileInstac)
-                
-                # Create netCDF wih compression from DataSet and save it
-                # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)    # IF COMPRESION ENABLED
-                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4')                    # IF COMPRESSION NOT ENABLED
-                
-                # Modify the units attribute of TIME variable for including timezone digit
-                ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
-                ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
-                ncf.variables['TIME'].calendar = 'standard'
-                ncf.close()
-            
-                logger.info(ncFilenameInstac + ' total netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
-                
-            else:
-                return
-
-        except Exception as err:
-            dmErr = True
-            if 'ncFilenameInstac' in locals():
-                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file ' + ncFilenameInstac)
-            else:
-                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file for timestamp ' + T.time.strftime('%Y-%m-%d %H:%M:%S'))
-            return
-            
-    #####
-    # Update sent_to_instac on the EU HFR NODE database for the generated total netCDF
+    #####        
+    # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
     #####
         
-        if not dmErr:
-            # Update the total_HFRnetCDF_tb table on the EU HFR NODE database
-            try:
-                totalUpdateQuery = 'UPDATE total_HFRnetCDF_tb SET sent_to_instac=1 WHERE filename=\'' + ncFilename + '\''
-                eng.execute(totalUpdateQuery) 
-            except sqlalchemy.exc.DBAPIError as err:        
-                dMerr = True
-                logger.error('MySQL error ' + err._message())        
+            # Apply the Copernicus Marine Service In Situ TAC data model
+            instacDS = convertEHNtoINSTACtotalDatamodel(dailyDS, networkData, stationData, vers)
+            
+            # # Enable compression
+            # enc = {}
+            # for vv in instacDS.data_vars:
+            #     if instacDS[vv].ndim < 2:
+            #         continue
+            
+            #     enc[vv] = instacDS[vv].encoding
+            #     enc[vv]['zlib'] = True
+            #     enc[vv]['complevel'] = 9
+            #     enc[vv]['fletcher32'] = True
+            
+            # Set the filename (with full path) for the aggregated netCDF file
+            ncFilePathInstac = buildINSTACtotalFolder(instacBuffer,networkData.iloc[0]['network_id'],vers)
+            ncFilenameInstac = buildINSTACtotalFilename(networkData.iloc[0]['network_id'],T.time,'.nc')
+            ncFileInstac = ncFilePathInstac + ncFilenameInstac 
+            
+            # Create the destination folder
+            if not os.path.isdir(ncFilePathInstac):
+                os.makedirs(ncFilePathInstac)
+                
+            # Check if the netCDF file exists and remove it
+            if os.path.isfile(ncFileInstac):
+                os.remove(ncFileInstac)
+            
+            # Create netCDF wih compression from DataSet and save it
+            # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)    # IF COMPRESION ENABLED
+            instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4')                    # IF COMPRESSION NOT ENABLED
+            
+            # Modify the units attribute of TIME variable for including timezone digit
+            ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
+            ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+            ncf.variables['TIME'].calendar = 'standard'
+            ncf.close()
+        
+            logger.info(ncFilenameInstac + ' total netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+            
+        else:
+            return
+
+    except Exception as err:
+        dmErr = True
+        if 'ncFilenameInstac' in locals():
+            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file ' + ncFilenameInstac)
+        else:
+            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC total file for timestamp ' + T.time.strftime('%Y-%m-%d %H:%M:%S'))
+        return     
     
     return
 
-def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
+def applyINSTACradialDataModel(dmRad,networkData,radSiteData,instacBuffer,vers,logger):
     """
     This function aggregates all the radial netCDF files related to data measured in the day of the 
     Radial object timestamp, applies the Copernicus Marine Service In Situ TAC standard data model 
@@ -341,8 +315,9 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
         dmRad: Series containing the radial to be processed with the related information
         networkData: DataFrame containing the information of the network to which the radial site belongs
         radSiteData: DataFrame containing the information of the radial site that produced the radial
+        instacBuffer: full path of the folder where to save data for Copernicus Marine Service 
+                    (if None, no files for Copernicus Marine Service are produced)
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -356,9 +331,6 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     # Initialize error flag
     dmErr = False
     
-    # Set the path to the CMEMS INSTAC buffer
-    instacBuffer = '/home/radarcombine/INSTAC_NRT_BUFFER/'
-    
     # Get the Radial object
     R = dmRad['Radial']
     
@@ -371,101 +343,77 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
     ncFilePath = buildEHNradialFolder(radSiteData.iloc[0]['radial_HFRnetCDF_folder_path'],radSiteData.iloc[0]['station_id'],R.time,vers)
     ncFilename = buildEHNradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
     
-    # Check if the file was already sent to Copernicus Marine Service In Situ TAC buffer
-    try:
-        radialInstacQuery = 'SELECT * FROM radial_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
-        radialInstacData = pd.read_sql(radialInstacQuery, con=eng)
-        
-    except sqlalchemy.exc.DBAPIError as err:        
-        dmErr = True
-        logger.error('MySQL error ' + err._message())    
-    
-    if radialInstacData.iloc[0]['sent_to_instac'] == 0:
-    
-        try:        
+    try:        
         
     #####
     # Open the netCDF files of the day in an aggregated dataset
     #####
     
-            # List all netCDF files in the current day folder
-            hourlyFiles = [file for file in glob.glob(os.path.join(ncFilePath,'**/*.nc'), recursive = True)]
+        # List all netCDF files in the current day folder
+        hourlyFiles = [file for file in glob.glob(os.path.join(ncFilePath,'**/*.nc'), recursive = True)]
 
-            if len(hourlyFiles)>0:
-                # Open all netCDF files in the current day folder
-                # dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
-                dailyDS = xr.open_mfdataset(hourlyFiles,combine='by_coords',compat='broadcast_equals')
+        if len(hourlyFiles)>0:
+            # Open all netCDF files in the current day folder
+            # dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME')
+            dailyDS = xr.open_mfdataset(hourlyFiles,combine='by_coords',compat='broadcast_equals')
                 
-        #####        
-        # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
-        #####
-            
-                # Apply the Copernicus Marine Service In Situ TAC data model
-                instacDS = convertEHNtoINSTACradialDatamodel(dailyDS, networkData, radSiteData, vers)
-                
-                # # Enable compression
-                # enc = {}
-                # for vv in instacDS.data_vars:
-                #     if instacDS[vv].ndim < 2:
-                #         continue
-                
-                #     enc[vv] = instacDS[vv].encoding
-                #     enc[vv]['zlib'] = True
-                #     enc[vv]['complevel'] = 9
-                #     enc[vv]['fletcher32'] = True
-                
-                # Set the filename (with full path) for the aggregated netCDF file
-                ncFilePathInstac = buildINSTACradialFolder(instacBuffer,radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],vers)
-                ncFilenameInstac = buildINSTACradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
-                ncFileInstac = ncFilePathInstac + ncFilenameInstac 
-                
-                # Create the destination folder
-                if not os.path.isdir(ncFilePathInstac):
-                    os.makedirs(ncFilePathInstac)
-                    
-                # Check if the netCDF file exists and remove it
-                if os.path.isfile(ncFileInstac):
-                    os.remove(ncFileInstac)
-                
-                # Create netCDF wih compression from DataSet and save it
-                # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)    # IF COMPRESSION ENABLED
-                instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4')                    # IF COMPRESSION NOT ENABLED
-                
-                # Modify the units attribute of TIME variable for including timezone digit
-                ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
-                ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
-                ncf.variables['TIME'].calendar = 'standard'
-                ncf.close()
-            
-                logger.info(ncFilenameInstac + ' radial netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
-                
-            else:
-                return
-            
-        except Exception as err:
-            dmErr = True
-            if 'ncFilenameInstac' in locals():
-                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file ' + ncFilenameInstac)
-            else:
-                logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file for timestamp ' + R.time.strftime('%Y-%m-%d %H:%M:%S'))
-            return
-            
-    #####
-    # Update sent_to_instac on the EU HFR NODE database for the generated radial netCDF
+    #####        
+    # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
     #####
         
-        if not dmErr:
-            # Update the radial_HFRnetCDF_tb table on the EU HFR NODE database
-            try:
-                radialUpdateQuery = 'UPDATE radial_HFRnetCDF_tb SET sent_to_instac=1 WHERE filename=\'' + ncFilename + '\''
-                eng.execute(radialUpdateQuery) 
-            except sqlalchemy.exc.DBAPIError as err:        
-                dMerr = True
-                logger.error('MySQL error ' + err._message())        
+            # Apply the Copernicus Marine Service In Situ TAC data model
+            instacDS = convertEHNtoINSTACradialDatamodel(dailyDS, networkData, radSiteData, vers)
+            
+            # # Enable compression
+            # enc = {}
+            # for vv in instacDS.data_vars:
+            #     if instacDS[vv].ndim < 2:
+            #         continue
+            
+            #     enc[vv] = instacDS[vv].encoding
+            #     enc[vv]['zlib'] = True
+            #     enc[vv]['complevel'] = 9
+            #     enc[vv]['fletcher32'] = True
+            
+            # Set the filename (with full path) for the aggregated netCDF file
+            ncFilePathInstac = buildINSTACradialFolder(instacBuffer,radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],vers)
+            ncFilenameInstac = buildINSTACradialFilename(radSiteData.iloc[0]['network_id'],radSiteData.iloc[0]['station_id'],R.time,'.nc')
+            ncFileInstac = ncFilePathInstac + ncFilenameInstac 
+            
+            # Create the destination folder
+            if not os.path.isdir(ncFilePathInstac):
+                os.makedirs(ncFilePathInstac)
+                
+            # Check if the netCDF file exists and remove it
+            if os.path.isfile(ncFileInstac):
+                os.remove(ncFileInstac)
+            
+            # Create netCDF wih compression from DataSet and save it
+            # instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)    # IF COMPRESSION ENABLED
+            instacDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4')                    # IF COMPRESSION NOT ENABLED
+            
+            # Modify the units attribute of TIME variable for including timezone digit
+            ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
+            ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+            ncf.variables['TIME'].calendar = 'standard'
+            ncf.close()
+        
+            logger.info(ncFilenameInstac + ' radial netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+            
+        else:
+            return
+        
+    except Exception as err:
+        dmErr = True
+        if 'ncFilenameInstac' in locals():
+            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file ' + ncFilenameInstac)
+        else:
+            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file for timestamp ' + R.time.strftime('%Y-%m-%d %H:%M:%S'))
+        return     
     
     return
 
-def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
+def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,logger):
     """
     This function applies the European standard data model to Total object and saves
     the resulting netCDF file. The Total object is also saved as .ttl file via pickle
@@ -478,7 +426,6 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
         networkData: DataFrame containing the information of the network producing the total
         stationData: DataFrame containing the information of the radial sites belonging to the network
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -529,38 +476,6 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             T.xds.to_netcdf(ncFile, format=T.xds.attrs['netcdf_format'])            
             logger.info(ncFilename + ' total netCDF file succesfully created and stored (' + vers + ').')
             
-    #####        
-    # Insert information about the created total netCDF into EU HFR NODE database 
-    #####
-    
-            try:
-                # Delete the entry with the same filename from total_HFRnetCDF_tb table, if present
-                totalDeleteQuery = 'DELETE FROM total_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
-                eng.execute(totalDeleteQuery)  
-                
-                # Prepare data to be inserted into EU HFR NODE database
-                if T.is_combined:
-                    dataTotalNC = {'filename': [ncFilename], \
-                                    'network_id': [networkData.iloc[0]['network_id']], \
-                                    'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
-                                    'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                    'filesize': [os.path.getsize(ncFile)/1024], 'ttl_filename': T.file_name, 'sent_to_instac': [0]}
-                else:                    
-                    dataTotalNC = {'filename': [ncFilename], \
-                                    'network_id': [networkData.iloc[0]['network_id']], \
-                                    'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
-                                    'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                    'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': T.file_name, 'sent_to_instac': [0]}
-                dfTotalNC = pd.DataFrame(dataTotalNC)
-                
-                # Insert data into total_HFRnetCDF_tb table
-                dfTotalNC.to_sql('total_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfTotalNC.columns)
-                logger.info(ncFilename + ' total netCDF file information inserted into EU HFR NODE database.')
-                
-            except sqlalchemy.exc.DBAPIError as err:        
-                dMerr = True
-                logger.error('MySQL error ' + err._message())        
-    
     #####
     # Save Total object as .ttl file with pickle
     #####
@@ -585,16 +500,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
         
         if not dmErr:
             # Update the local DataFrame
-            dmTot['NRT_processed_flag'] = 1
-            
-            # Update the total_input_tb table on the EU HFR NODE database
-            if not T.is_combined:
-                try:
-                    totalUpdateQuery = 'UPDATE total_input_tb SET NRT_processed_flag=1 WHERE filename=\'' + T.file_name + '\''
-                    eng.execute(totalUpdateQuery) 
-                except sqlalchemy.exc.DBAPIError as err:        
-                    dMerr = True
-                    logger.error('MySQL error ' + err._message())        
+            dmTot['NRT_processed_flag'] = 1      
     
     return  dmTot
 
@@ -678,7 +584,7 @@ def applyEHNtotalQC(qcTot,networkData,vers,logger):
     
     return T
 
-def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logger):
+def performRadialCombination(combRad,networkData,numActiveStations,vers,logger):
     """
     This function performs the least square combination of the input Radials and creates
     a Total object containing the resulting total current data. 
@@ -692,7 +598,6 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
         networkData: DataFrame containing the information of the network to which the radial site belongs
         numActiveStations: number of operational radial sites
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -788,26 +693,6 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                         pickle.dump(T, ttlFile)
                     logger.info(ttlFilename + ' combined total ttl file succesfully created and stored (' + vers + ').')
                         
-    #####
-    # Update NRT_combined_flag for the combined radials                        
-    #####
-                    if len(combRad) == numActiveStations:
-                        # Update the local DataFrame if radials from all station contributed to making the total
-                        if networkData.iloc[0]['network_id'] == 'HFR-WesternItaly':
-                            combRad['NRT_processed_flag_integrated_network'] = combRad['NRT_processed_flag_integrated_network'].replace(0,1)
-                        else:
-                            combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
-                    
-                        # Update the radial_input_tb table on the EU HFR NODE database if radials from all station contributed to making the total
-                        try:
-                            if networkData.iloc[0]['network_id'] == 'HFR-WesternItaly':
-                                combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_processed_flag_integrated_network=1 WHERE filename=\'' + x.file_name + '\''))
-                            else:
-                                combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
-                        except sqlalchemy.exc.DBAPIError as err:        
-                            dMerr = True
-                            logger.error('MySQL error ' + err._message())
-                        
                 else:
                     logger.info(warn + ' for network ' + networkData.iloc[0]['network_id'] + ' at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
                     return combTot            
@@ -818,7 +703,7 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                  
     return combTot
 
-def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
+def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,logger):
     """
     This function applies the European standard data model to radial object and saves
     the resulting netCDF file. The Radial object is also saved as .rdl file via pickle
@@ -830,7 +715,6 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
         networkData: DataFrame containing the information of the network to which the radial site belongs
         radSiteData: DataFrame containing the information of the radial site that produced the radial
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -896,31 +780,6 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             R.xds.to_netcdf(ncFile, format=R.xds.attrs['netcdf_format'])            
             logger.info(ncFilename + ' radial netCDF file succesfully created and stored (' + vers + ').')
             
-    #####        
-    # Insert information about the created radial netCDF into EU HFR NODE database 
-    #####
-    
-            try:
-                # Delete the entry with the same filename from radial_HFRnetCDF_tb table, if present
-                radialDeleteQuery = 'DELETE FROM radial_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
-                eng.execute(radialDeleteQuery)           
-                
-                # Prepare data to be inserted into EU HFR NODE database
-                dataRadialNC = {'filename': [ncFilename], \
-                                'network_id': [radSiteData.iloc[0]['network_id']], 'station_id': [radSiteData.iloc[0]['station_id']], \
-                                'timestamp': [R.time.strftime('%Y %m %d %H %M %S')], 'datetime': [R.time.strftime('%Y-%m-%d %H:%M:%S')], \
-                                'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': [R.file_name], 'sent_to_instac': [0]}
-                dfRadialNC = pd.DataFrame(dataRadialNC)
-                
-                # Insert data into radial_HFRnetCDF_tb table
-                dfRadialNC.to_sql('radial_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfRadialNC.columns)
-                logger.info(ncFilename + ' radial netCDF file information inserted into EU HFR NODE database.')
-                
-            except sqlalchemy.exc.DBAPIError as err:        
-                dMerr = True
-                logger.error('MySQL error ' + err._message())        
-    
     #####
     # Save Radial object as .rdl file with pickle
     #####
@@ -945,15 +804,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
         
         if not dmErr:
             # Update the local DataFrame
-            dmRad['NRT_processed_flag'] = 1
-            
-            # Update the radial_input_tb table on the EU HFR NODE database
-            try:
-                radialUpdateQuery = 'UPDATE radial_input_tb SET NRT_processed_flag=1 WHERE filename=\'' + R.file_name + '\''
-                eng.execute(radialUpdateQuery) 
-            except sqlalchemy.exc.DBAPIError as err:        
-                dMerr = True
-                logger.error('MySQL error ' + err._message())        
+            dmRad['NRT_processed_flag'] = 1      
     
     return dmRad
 
@@ -1043,57 +894,7 @@ def applyEHNradialQC(qcRad,radSiteData,vers,logger):
     
     return  R 
 
-def updateLastCalibrationDate(lcdRad,radSiteData,eng,logger):
-    """
-    This function updates, if necessary, the last_calibration_date field of the 
-    station_tb table of the EU HFR NODE database based on the input radial file
-    metadata.
-    
-    INPUTS:
-        lcdRad: Series containing the radial to be processed with the related information
-        radSiteData: DataFrame containing the information of the radial site that produced the radial
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
-        logger: logger object of the current processing
-
-        
-    OUTPUTS:
-        
-    """
-    #####
-    # Setup
-    #####
-    
-    # Initialize error flag
-    lcdErr = False
-    
-    try:
-        
-        # Get the Radial object
-        R = lcdRad['Radial']
-            
-    # Check if the Radial object contains the last pattern date
-        if not R.is_wera:
-            # Get the last calibration date from Radial object metadata
-            lcdFromFile = dt.datetime.strptime(R.metadata['PatternDate'],'%Y %m %d %H %M %S').date()
-            # Check if the last calibration date is to be updated
-            if lcdFromFile > radSiteData.iloc[0]['last_calibration_date']:
-                # Update the station_tb table on the EU HFR NODE database
-                try:
-                    stationUpdateQuery = 'UPDATE station_tb SET last_calibration_date=\'' + lcdFromFile.strftime('%Y-%m-%d') + '\' WHERE station_id=\'' + radSiteData.iloc[0]['station_id'] + '\''
-                    eng.execute(stationUpdateQuery)
-                    logger.info('Last calibration date updated for station ' + radSiteData.iloc[0]['station_id'])
-                except sqlalchemy.exc.DBAPIError as err:        
-                    lcdErr = True
-                    logger.error('MySQL error ' + err._message())   
-                
-    except Exception as err:
-        lcdErr = True
-        logger.error(err.args[0] + ' for radial file ' + R.file_name)
-        return
-    
-    return
-
-def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,logger):
+def processTotals(dfTot,networkID,networkData,stationData,instacFolder,vers,logger):
     """
     This function processes the input total files pushed by the HFR data providers 
     according to the workflow of the EU HFR NODE.
@@ -1108,9 +909,9 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,log
         networkData: DataFrame containing the information of the network to be processed
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
-        startDate: string containing the datetime of the starting date of the processing period
+        instacFolder: full path of the folder where to save data for Copernicus Marine Service 
+                    (if None, no files for Copernicus Marine Service are produced)
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -1172,10 +973,11 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,log
         #####
         
         # European standard data model
-        dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+        dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,logger),axis=1)
         
-        # Copernicus Marine Service In Situ TAC data model
-        dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+        if instacFolder:
+            # Copernicus Marine Service In Situ TAC data model
+            dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,instacFolder,vers,logger),axis=1)
         
     except Exception as err:
         pTerr = True
@@ -1183,7 +985,7 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,log
     
     return
     
-def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,eng,logger):
+def processRadials(groupedRad,networkID,networkData,stationData,instacFolder,vers,logger):
     """
     This function processes the input radial files pushed by the HFR data providers 
     according to the workflow of the EU HFR NODE.
@@ -1201,9 +1003,9 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
         networkData: DataFrame containing the information of the network to be processed
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
-        startDate: string containing the datetime of the starting date of the processing period
+        instacFolder: full path of the folder where to save data for Copernicus Marine Service 
+                    (if None, no files for Copernicus Marine Service are produced)
         vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
         logger: logger object of the current processing
 
         
@@ -1216,9 +1018,6 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
     
     # Initialize error flag
     pRerr = False
-    
-    # Retrieve the number of operational stations
-    numActiveStations = stationData['operational_to'].isna().sum() 
     
     try:
         
@@ -1244,12 +1043,6 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
         if networkID != 'HFR-WesternItaly':
         
         #####        
-        # Update the last calibration date in station_tb table of teh database
-        #####
-        
-            groupedRad.apply(lambda x: updateLastCalibrationDate(x,stationData.loc[stationData['station_id'] == x.station_id],eng,logger),axis=1)
-        
-        #####        
         # Apply QC to Radials
         #####
         
@@ -1260,10 +1053,11 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
         #####
         
             # European standard data model
-            groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
+            groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,logger),axis=1)
             
-            # Copernicus Marine Service In Situ TAC data model
-            groupedRad.apply(lambda x: applyINSTACradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
+            if instacFolder:
+                # Copernicus Marine Service In Situ TAC data model
+                groupedRad.apply(lambda x: applyINSTACradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],instacFolder,vers,logger),axis=1)
                 
         #####
         # Combine Radials into Total
@@ -1273,7 +1067,7 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
         if networkData.iloc[0]['radial_combination'] == 1:
             # Check if at least two Radials are available for combination
             if len(groupedRad) > 1:
-                dfTot = performRadialCombination(groupedRad,networkData,numActiveStations,vers,eng,logger)                
+                dfTot = performRadialCombination(groupedRad,networkData,vers,logger)                
             
             if 'dfTot' in locals():
             
@@ -1288,10 +1082,11 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
             #####
             
                 # European standard data model
-                dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+                dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,logger),axis=1)
                 
-                # Copernicus Marine Service In Situ TAC data model
-                dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+                if instacFolder:
+                    # Copernicus Marine Service In Situ TAC data model
+                    dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,instacFolder,vers,logger),axis=1)
         
     except Exception as err:
         pRerr = True
@@ -1758,14 +1553,14 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             stationData = stationData.apply(lambda x: modifyStationDataFolders(x,dataFolder,logger),axis=1)
             
             
-        # Select radials to be preocessed
+        # Select radials to be processed
         if 'HFR-US' in networkID:
             pass
         else:
             radialsToBeProcessed = selectRadials(networkID, stationData, startDate, endDate, logger)
             logger.info('Radials to be processed successfully selected for network ' + networkID)
         
-        # Select totals to be preocessed
+        # Select totals to be processed
         if 'HFR-US' in networkID:
             totalsToBeProcessed = selectUStotals(networkID, networkData, stationData, startDate, vers, logger)
         elif networkID == 'HFR-WesternItaly':
@@ -1784,11 +1579,11 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             pass
         else:            
             logger.info('Radial processing started for ' + networkID + ' network') 
-            radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,vers,eng,logger))
+            radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,instacFolder,vers,eng,logger))
         
         # Process totals
             logger.info('Total processing started for ' + networkID + ' network') 
-            totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
+            totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,eng,logger))
             
         # Wait a bit (useful for multiprocessing management)
         time.sleep(30)
