@@ -204,6 +204,12 @@ def convertEHNtoINSTACtotalDatamodel(tDS, networkData, stationData, version):
     # Remove DEPTH variable
     instacDS = instacDS.drop_vars('DEPTH')
     
+    # Remove crs variable (it's time-varying because of the temporal aggregation)
+    instacDS = instacDS.drop_vars('crs')
+    
+    # Add time-independent crs variable
+    instacDS['crs'] = xr.DataArray(int(0), )
+    
     # Remove encoding for data variables
     for vv in instacDS:
         if 'char_dim_name' in instacDS[vv].encoding.keys():
