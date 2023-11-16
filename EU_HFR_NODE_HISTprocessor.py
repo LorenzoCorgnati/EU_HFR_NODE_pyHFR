@@ -48,10 +48,81 @@ from multiprocessing import Process
 import time
 import xarray as xr
 import netCDF4 as nc4
+import shutil
 
 ######################
 # PROCESSING FUNCTIONS
 ######################
+
+def cleanDataFolders(ntwDF, staDF, startDate, endDate, vers, logger):
+    """
+    This function removes the data folders for radial rdl and netCDF data and
+    for total ttl and netCDF data for the processing time interval.
+    
+    INPUT:
+        ntwDF: Series containing the information of the network
+        staDF: Series containing the information of the radial station
+        startDate: datetime of the initial date of the processing period
+        endDate: datetime of the final date of the processing period
+        vers: version of the data model
+        logger: logger object of the current processing
+        
+    OUTPUT:
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    cfErr = False
+    
+    # Create the pandas Series used for deleting folders
+    rmFolders = pd.Series(dtype='object')
+    
+    try:
+    
+    #####
+    # Build the data folder paths
+    #####  
+    
+        # Evaluate the timestamps for the processing period
+        allTS = [startDate + dt.timedelta(days=i) for i in range((endDate - startDate).days + 1)]
+        # Create the pandas DataFrame containing the timestamps
+        tsDF = pd.DataFrame(data=allTS,columns=['datetime'])
+        
+        # Generate the total netCDF folder paths
+        ncTotFolders = tsDF['datetime'].apply(lambda x: buildEHNtotalFolder(ntwDF.iloc[0]['total_HFRnetCDF_folder_path'],x,vers))
+        
+        # Generate the total ttl folder paths
+        ttlFolders = tsDF['datetime'].apply(lambda x: buildEHNtotalFolder(ntwDF.iloc[0]['total_HFRnetCDF_folder_path'].replace('nc','ttl'),x,vers))
+        
+        # Insert total folder paths into the DataFrame used for removing folders
+        rmFolders = pd.concat([rmFolders, ncTotFolders, ttlFolders])
+        
+        # Generate the radial data folders
+        for st in range(len(staDF)):
+            # Generate the radial netCDF folder paths
+            ncRadFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'],staDF.iloc[st]['station_id'],x,vers))
+            
+            # Generate the radial rdl folder paths
+            rdlFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'].replace('nc','rdl'),staDF.iloc[st]['station_id'],x,vers))
+            
+            # Insert total folder paths into the DataFrame used for removing folders
+            rmFolders = pd.concat([rmFolders, ncRadFolders, rdlFolders])
+            
+    #####
+    # Remove the data folders
+    #####  
+    
+        rmFolders.apply(lambda x: shutil.rmtree(x) if os.path.isdir(x) else x)
+        
+    
+    except Exception as err:
+        cfErr = True
+        logger.error(err.args[0] + ' in cleaning data folders for network ' + ntwDF.loc['network_id'])
+    
+    return
 
 def modifyNetworkDataFolders(ntwDF,dataFolder,logger):
     """
@@ -584,7 +655,7 @@ def applyEHNtotalQC(qcTot,networkData,vers,logger):
     
     return T
 
-def performRadialCombination(combRad,networkData,numActiveStations,vers,logger):
+def performRadialCombination(combRad,networkData,vers,logger):
     """
     This function performs the least square combination of the input Radials and creates
     a Total object containing the resulting total current data. 
@@ -1223,7 +1294,7 @@ def selectUStotals(networkID,networkData,stationData,startDate,endDate,vers,logg
                             dfTotal = pd.DataFrame(dataTotal)
                             
                             # Insert into the output DataFrame
-                            totalsToBeProcessed = pd.concat([totalsToBeProcessed, dfTotal])
+                            totalsToBeProcessed = pd.concat([totalsToBeProcessed, dfTotal],ignore_index=True)
                                 
                     except Exception as err:
                         sTerr = True
@@ -1318,7 +1389,7 @@ def selectTotals(networkID,networkData,startDate,endDate,logger):
                             dfTotal = pd.DataFrame(dataTotal)
                                 
                             # Insert into the output DataFrame
-                            totalsToBeProcessed = pd.concat([totalsToBeProcessed, dfTotal])
+                            totalsToBeProcessed = pd.concat([totalsToBeProcessed, dfTotal],ignore_index=True)
                                 
                     except Exception as err:
                         sTerr = True
@@ -1422,7 +1493,7 @@ def selectRadials(networkID,stationData,startDate,endDate,logger):
                                 dfRadial = pd.DataFrame(dataRadial)
                                 
                                 # Insert into the output DataFrame
-                                radialsToBeProcessed = pd.concat([radialsToBeProcessed, dfRadial])
+                                radialsToBeProcessed = pd.concat([radialsToBeProcessed, dfRadial],ignore_index=True)
 
                         except Exception as err:
                             sRerr = True
@@ -1539,12 +1610,13 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
         logger.error('MySQL error ' + err._message())
         logger.info('Exited with errors.')
         return pNerr
-        
-    #####
-    # Select HFR data
-    #####
     
     try:
+        
+    #####
+    # Manage data folders
+    #####
+        
         # Modify data folders (if needed)
         if dataFolder:
             # Modify total data folder paths
@@ -1552,7 +1624,13 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             # Modify radial data folder paths
             stationData = stationData.apply(lambda x: modifyStationDataFolders(x,dataFolder,logger),axis=1)
             
+        # Clean data folders (remove possibly existing netCDF, rdl and ttl files)
+        cleanDataFolders(networkData, stationData, startDate, endDate, vers, logger)
             
+    #####
+    # Select HFR data
+    #####
+        
         # Select radials to be processed
         if 'HFR-US' in networkID:
             pass
@@ -1562,7 +1640,7 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
         
         # Select totals to be processed
         if 'HFR-US' in networkID:
-            totalsToBeProcessed = selectUStotals(networkID, networkData, stationData, startDate, vers, logger)
+            totalsToBeProcessed = selectUStotals(networkID, networkData, stationData, startDate, endDate, vers, logger)
         elif networkID == 'HFR-WesternItaly':
             pass
         else:
@@ -1579,11 +1657,11 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             pass
         else:            
             logger.info('Radial processing started for ' + networkID + ' network') 
-            radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,instacFolder,vers,eng,logger))
+            radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,instacFolder,vers,logger))
         
         # Process totals
             logger.info('Total processing started for ' + networkID + ' network') 
-            totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,eng,logger))
+            totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,logger))
             
         # Wait a bit (useful for multiprocessing management)
         time.sleep(30)
