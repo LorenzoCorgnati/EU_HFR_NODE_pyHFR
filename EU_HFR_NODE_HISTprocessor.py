@@ -102,14 +102,15 @@ def cleanDataFolders(ntwDF, staDF, startDate, endDate, vers, logger):
         
         # Generate the radial data folders
         for st in range(len(staDF)):
-            # Generate the radial netCDF folder paths
-            ncRadFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'],staDF.iloc[st]['station_id'],x,vers))
-            
-            # Generate the radial rdl folder paths
-            rdlFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'].replace('nc','rdl'),staDF.iloc[st]['station_id'],x,vers))
-            
-            # Insert total folder paths into the DataFrame used for removing folders
-            rmFolders = pd.concat([rmFolders, ncRadFolders, rdlFolders])
+            if staDF.iloc[st]['radial_HFRnetCDF_folder_path']:
+                # Generate the radial netCDF folder paths
+                ncRadFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'],staDF.iloc[st]['station_id'],x,vers))
+                
+                # Generate the radial rdl folder paths
+                rdlFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'].replace('nc','rdl'),staDF.iloc[st]['station_id'],x,vers))
+                
+                # Insert total folder paths into the DataFrame used for removing folders
+                rmFolders = pd.concat([rmFolders, ncRadFolders, rdlFolders])
             
     #####
     # Remove the data folders
@@ -1195,6 +1196,10 @@ def selectUStotals(networkID,networkData,stationData,startDate,endDate,vers,logg
     # Initialize error flag
     sTerr = False
     
+    # Convert initial and final dates from datetime to numpy datetime64
+    startTS = pd.to_datetime(startDate)
+    endTS = pd.to_datetime(endDate)
+    
     # Create output total Series
     totalsToBeProcessed = pd.DataFrame(columns=['filename', 'filepath', 'network_id', 'timestamp', 'datetime', 'reception_date', \
                                                 'filesize', 'extension', 'NRT_processed_flag'])
@@ -1217,7 +1222,9 @@ def selectUStotals(networkID,networkData,stationData,startDate,endDate,vers,logg
     #####
     
         # Find the indices of the dataset timestamps in the time interval to be processed
-        idxToBeInserted = np.searchsorted(UStdsDS['time'].to_numpy(),UStdsDS['time'].where((UStdsDS.time>=startDate and UStdsDS.time<=endDate), drop=True).to_numpy())
+        idxAfterStart = np.searchsorted(UStdsDS['time'].to_numpy(),UStdsDS['time'].where(UStdsDS.time>=startTS, drop=True).to_numpy())
+        idxBeforeEnd = np.searchsorted(UStdsDS['time'].to_numpy(),UStdsDS['time'].where(UStdsDS.time<=endTS, drop=True).to_numpy())
+        idxToBeInserted = np.intersect1d(idxAfterStart,idxBeforeEnd)
         
         # Select data for the timestamps to be inserted
         USxds = UStdsDS.isel(time=idxToBeInserted)
@@ -1660,8 +1667,8 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,instacFolder,vers,logger))
         
         # Process totals
-            logger.info('Total processing started for ' + networkID + ' network') 
-            totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,logger))
+        logger.info('Total processing started for ' + networkID + ' network') 
+        totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,logger))
             
         # Wait a bit (useful for multiprocessing management)
         time.sleep(30)
@@ -1734,7 +1741,7 @@ def main(argv):
             # Check date format
             try:
                 dateCheck = dt.datetime.strptime(arg, '%Y-%m-%d')
-                endDate = dateCheck
+                endDate = dateCheck + dt.timedelta(hours=23,minutes=59)
             except ValueError:
                 print("Incorrect format for final date, should be yyyy-mm-dd (i.e. ISO8601 UTC date representation)")
                 sys.exit(2)
