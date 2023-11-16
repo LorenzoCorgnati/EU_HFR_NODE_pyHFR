@@ -53,6 +53,84 @@ import netCDF4 as nc4
 # PROCESSING FUNCTIONS
 ######################
 
+def modifyNetworkDataFolders(ntwDF,dataFolder,logger):
+    """
+    This function replaces the data folder paths in the total_input_folder_path and in the 
+    total_HFRnetCDF_folder_path fields of the DataFrame containing information about the network
+    according to the data folder path specified by the user.
+    
+    INPUT:
+        ntwDF: Series containing the information of the network
+        dataFolder: full path of the folder containing network data
+        logger: logger object of the current processing
+        
+    OUTPUT:
+        ntwDF: Series containing the information of the network
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    mfErr = False
+    
+    try:
+        # Check if the total_input_folder_path field is specified
+        if ntwDF.loc['total_input_folder_path']:
+            # Modify the total_input_folder_path
+            ntwDF.loc['total_input_folder_path'] = os.path.join(dataFolder,ntwDF.loc['network_id'],ntwDF.loc['total_input_folder_path'].split('/')[-1])
+            
+        # Check if the total_HFRnetCDF_folder_path field is specified
+        if ntwDF.loc['total_HFRnetCDF_folder_path']:
+            # Modify the total_HFRnetCDF_folder_path
+            ntwDF.loc['total_HFRnetCDF_folder_path'] = os.path.join(dataFolder,ntwDF.loc['network_id'],'Totals_nc')
+        
+    except Exception as err:
+        mfErr = True
+        logger.error(err.args[0] + ' in modifying total folder paths for network ' + ntwDF.loc['network_id'])
+    
+    return ntwDF
+
+def modifyStationDataFolders(staDF,dataFolder,logger):
+    """
+    This function replaces the data folder paths in the radial_input_folder_path and in the 
+    radial_HFRnetCDF_folder_path fields of the DataFrame containing information about the radial
+    stations according to the data folder path specified by the user.
+    
+    INPUT:
+        staDF: Series containing the information of the radial station
+        dataFolder: full path of the folder containing network data
+        logger: logger object of the current processing
+        
+    OUTPUT:
+        staDF: Series containing the information of the radial station
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    mfErr = False
+    
+    try:
+        # Check if the radial_input_folder_path field is specified
+        if staDF.loc['radial_input_folder_path']:
+            # Modify the radial_input_folder_path
+            staDF.loc['radial_input_folder_path'] = os.path.join(dataFolder,staDF.loc['network_id'],staDF.loc['radial_input_folder_path'].split('/')[-2],staDF.loc['radial_input_folder_path'].split('/')[-1])
+            
+        # Check if the radial_HFRnetCDF_folder_path field is specified
+        if staDF.loc['radial_HFRnetCDF_folder_path']:
+            # Modify the radial_HFRnetCDF_folder_path
+            staDF.loc['radial_HFRnetCDF_folder_path'] = os.path.join(dataFolder,staDF.loc['network_id'],'Radials_nc')
+        
+    except Exception as err:
+        mfErr = True
+        logger.error(err.args[0] + ' in modifying radial folder paths for ' + staDF.loc['network_id'] + '-' + staDF.loc['station_id'] + ' station')
+    
+    return staDF
+
 def createTotalFromUStds(ts,pts,USxds,networkData,stationData,vers,logger):
     """
     This function creates a Total object for each timestamp from the input aggregated xarray dataset read
@@ -1221,15 +1299,21 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
     
     return
 
-def selectTotals(networkID,startDate,eng,logger):
+def selectUStotals(networkID,networkData,stationData,startDate,endDate,vers,logger):
     """
-    This function selects the totals to be processed for the input network by reading
-    from the total_input_tb table of the EU HFR NODE database.
-        
+    This function reads data from HFR US network via OpenDAP, selects the data subset to be processed
+    according to the processing time interval, produces and stores hourly Total objects from hourly 
+    subsets of the selected data and creates the DataFrame containing the information needed for the 
+    generation of the total data files into the European standard data model.
+    
     INPUTS:
         networkID: network ID of the network to be processed
-        startDate: string containing the datetime of the starting date of the processing period
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE database
+        networkData: DataFrame containing the information of the network to be processed
+        stationData: DataFrame containing the information of the stations belonging 
+                     to the network to be processed
+        startDate: datetime of the initial date of the processing period
+        endDate: datetime of the final date of the processing period
+        vers: version of the data model
         logger: logger object of the current processing
 
         
@@ -1245,109 +1329,9 @@ def selectTotals(networkID,startDate,eng,logger):
     # Initialize error flag
     sTerr = False
     
-    try:
-       
-        #####
-        # Select totals to be processed
-        #####
-        
-        # Set and execute the query for getting totals to be processed
-        try:
-            totalSelectionQuery = 'SELECT * FROM total_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=\'' + networkID + '\') AND (NRT_processed_flag=0) ORDER BY TIMESTAMP'
-            totalsToBeProcessed = pd.read_sql(totalSelectionQuery, con=eng)
-        except sqlalchemy.exc.DBAPIError as err:        
-            sTerr = True
-            logger.error('MySQL error ' + err._message())
-                
-    except Exception as err:
-        sTerr = True
-        logger.error(err.args[0] + ' for network ' + networkID)
-            
-    return totalsToBeProcessed
-
-def selectRadials(networkID,startDate,eng,logger):
-    """
-    This function selects the radials to be processed for the input network by reading
-    from the radial_input_tb table of the EU HFR NODE EU HFR NODE database.
-        
-    INPUTS:
-        networkID: network ID of the network to be processed
-        startDate: string containing the datetime of the starting date of the processing period
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
-        logger: logger object of the current processing
-
-        
-    OUTPUTS:
-        radialsToBeProcessed: DataFrame containing all the radials to be processed for the input 
-                              network with the related information
-        
-    """
-    #####
-    # Setup
-    #####
-    
-    # Initialize error flag
-    sRerr = False
-    
-    try:
-       
-        #####
-        # Select radials to be processed
-        #####
-        
-        # Set and execute the query for getting radials to be processed
-        if networkID == 'HFR-WesternItaly':
-            networkStr = '\'HFR-TirLig\' OR network_id=\'HFR-LaMMA\' OR network_id=\'HFR-ARPAS\''
-            conditionStr = 'NRT_processed_flag_integrated_network=0'
-        else:
-            networkStr = '\'' + networkID + '\''
-            conditionStr = '(NRT_processed_flag=0 OR NRT_combined_flag=0)'
-        try:
-            radialSelectionQuery = 'SELECT * FROM radial_input_tb WHERE datetime>=\'' + startDate + '\' AND (network_id=' + networkStr + ') AND ' + conditionStr + ' ORDER BY TIMESTAMP'
-            radialsToBeProcessed = pd.read_sql(radialSelectionQuery, con=eng)
-        except sqlalchemy.exc.DBAPIError as err:        
-            sRerr = True
-            logger.error('MySQL error ' + err._message())
-                
-    except Exception as err:
-        sRerr = True
-        logger.error(err.args[0] + ' for network ' + networkID)
-            
-    return radialsToBeProcessed
-
-def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
-    """
-    This function reads data from HFR US network via OpenDAP, selects the data subset to be processed
-    according to the processing time interval, produces and stores hourly Total objects from hourly 
-    subsets of the selected data and inserts into the EU HFR NODE EU HFR NODE database the information 
-    needed for the generation of the total data files into the European standard data model.
-    
-    INPUTS:
-        networkID: network ID of the network to be processed
-        networkData: DataFrame containing the information of the network to be processed
-        stationData: DataFrame containing the information of the stations belonging 
-                     to the network to be processed
-        startDate: string containing the datetime of the starting date of the processing period
-        vers: version of the data model
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
-        logger: logger object of the current processing
-
-        
-    OUTPUTS:
-        
-    """
-    #####
-    # Setup
-    #####
-    
-    # Initialize error flag
-    iTerr = False
-    
-    # Convert starting date from string to numpy datetime64
-    startTS = pd.to_datetime(startDate)
-    
-    # Convert starting date from string to timestamp
-    mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
+    # Create output total Series
+    totalsToBeProcessed = pd.DataFrame(columns=['filename', 'filepath', 'network_id', 'timestamp', 'datetime', 'reception_date', \
+                                                'filesize', 'extension', 'NRT_processed_flag'])
     
     #####
     # Load totals from the TDS catalog
@@ -1363,24 +1347,12 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
         UStdsDS=xr.open_dataset(TDSrootURL,decode_times=True)        
         
     #####
-    # Select the total data to be inserted by checking the timestamps and the database
+    # Select the total data by checking the timestamps
     #####
     
-        # Get the timestamps of the totals already present in the database (i.e. timestamps of the totals already processed)
-        try:
-            tsPresenceQuery = 'SELECT datetime FROM total_input_tb WHERE datetime>=\'' + startDate + '\' AND network_id=\'' + networkID + '\''
-            tsPresenceData = pd.read_sql(tsPresenceQuery, con=eng)['datetime'].to_numpy()        
-        except sqlalchemy.exc.DBAPIError as err:        
-            iTerr = True
-            logger.error('MySQL error ' + err._message())
-            
         # Find the indices of the dataset timestamps in the time interval to be processed
-        idxToBeInserted = np.searchsorted(UStdsDS['time'].to_numpy(),UStdsDS['time'].where(UStdsDS.time>=startTS, drop=True).to_numpy())
-        # Find the indices of the dataset timestamps that were already processed
-        idxAlreadyInserted = np.searchsorted(UStdsDS['time'].to_numpy(),tsPresenceData)
-        # Find the indices of the dataset timestamps to be inserted into database
-        idxToBeInserted = [item for item in idxToBeInserted if item not in idxAlreadyInserted]
-       
+        idxToBeInserted = np.searchsorted(UStdsDS['time'].to_numpy(),UStdsDS['time'].where((UStdsDS.time>=startDate and UStdsDS.time<=endDate), drop=True).to_numpy())
+        
         # Select data for the timestamps to be inserted
         USxds = UStdsDS.isel(time=idxToBeInserted)
     
@@ -1424,67 +1396,68 @@ def inputUStotals(networkID,networkData,stationData,startDate,vers,eng,logger):
             else:
                 # Consider file type for totals from US networks
                 usTypeWildcard = '**/*.ttl'
-                # List input files (only in the processing period)
-                inputFiles = [file for file in glob.glob(os.path.join(inputFolder,usTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]                    
+                # List all total files
+                inputFiles = [file for file in glob.glob(os.path.join(inputFolder,usTypeWildcard), recursive = True)]                    
                 for inputFile in inputFiles:
                     try:
                         # Get file parts
                         filePath = os.path.dirname(inputFile)
                         fileName = os.path.basename(inputFile)
                         fileExt = os.path.splitext(inputFile)[1]
-                        # Check if the file is already present in the EU HFR NODE database
-                        try:
-                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE filename=\'' + fileName + '\''
-                            totalPresenceData = pd.read_sql(totalPresenceQuery, con=eng)
-                            numPresentTotals = totalPresenceData.shape[0]
-                            if numPresentTotals==0:    # the current file is not present in the EU HFR NODE database
-                                # Get file timestamp
-                                with open(inputFile, 'rb') as ttlFile:
-                                    total = pickle.load(ttlFile)
-                                timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
-                                dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
-                                # Get file size in Kbytes
-                                fileSize = os.path.getsize(inputFile)/1024    
-    #####
-    # Insert total information into EU HFR NODE database
-    #####
-                                # Prepare data to be inserted into EU HFR NODE database
-                                dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
-                                             'datetime': [dateTime], 'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                              'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
-                                dfTotal = pd.DataFrame(dataTotal)
+                        
+                        # Get file timestamp
+                        with open(inputFile, 'rb') as ttlFile:
+                            total = pickle.load(ttlFile)
+                        timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
+                        dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
+                        
+                        # Get file size in Kbytes
+                        fileSize = os.path.getsize(inputFile)/1024   
                                 
-                                # Insert data into EU HFR NODE database
-                                dfTotal.to_sql('total_input_tb', con=eng, if_exists='append', index=False, index_label=dfTotal.columns)
-                                logger.info(fileName + ' total file information inserted into EU HFR NODE database.')  
-                        except sqlalchemy.exc.DBAPIError as err:        
-                            iTerr = True
-                            logger.error('MySQL error ' + err._message())
+    #####
+    # Insert total information into the output DataFrame
+    #####
+    
+                        # Check if the radial falls into the processing time interval
+                        if ((total.time >= startDate) and (total.time <= endDate)):
+                            
+                            # Prepare data to be inserted into the output DataFrame
+                            dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
+                                     'datetime': [dateTime], 'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                      'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
+                            dfTotal = pd.DataFrame(dataTotal)
+                            
+                            # Insert into the output DataFrame
+                            totalsToBeProcessed = pd.concat([totalsToBeProcessed, dfTotal])
+                                
                     except Exception as err:
-                        iTerr = True
+                        sTerr = True
                         logger.error(err.args[0] + ' for file ' + fileName)
                     
     except Exception as err:
-        iTerr = True
+        sTerr = True
         logger.error(err.args[0])
     
-    return
+    return totalsToBeProcessed
 
-def inputTotals(networkID,networkData,startDate,eng,logger):
+def selectTotals(networkID,networkData,startDate,endDate,logger):
     """
     This function lists the input total files pushed by the HFR data providers 
-    and inserts into the EU HFR NODE EU HFR NODE database the information needed for the 
-    generation of the total data files into the European standard data model.
+    that falls into the processing time interval and creates the DataFrame containing 
+    the information needed for the generation of the total data files into the 
+    European standard data model.
     
     INPUTS:
         networkID: network ID of the network to be processed
         networkData: DataFrame containing the information of the network to be processed
-        startDate: string containing the datetime of the starting date of the processing period
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
+        startDate: datetime of the initial date of the processing period
+        endDate: datetime of the final date of the processing period
         logger: logger object of the current processing
 
         
     OUTPUTS:
+        totalsToBeProcessed: DataFrame containing all the totals to be processed for the input 
+                              network with the related information
         
     """
     #####
@@ -1492,10 +1465,11 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
     #####
     
     # Initialize error flag
-    iTerr = False
+    sTerr = False
     
-    # Convert starting date from string to timestamp
-    mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
+    # Create output total Series
+    totalsToBeProcessed = pd.DataFrame(columns=['filename', 'filepath', 'network_id', 'timestamp', 'datetime', 'reception_date', \
+                                                'filesize', 'extension', 'NRT_processed_flag'])
     
     #####
     # List totals from the network
@@ -1516,9 +1490,9 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
                 # Consider file types for Codar and WERA systems
                 codarTypeWildcard = '**/*.tuv'      # Codar systems
                 weraTypeWildcard = '**/*.cur_asc'   # WERA systems                
-                # List input files (only in the processing period)
-                codarInputFiles = [file for file in glob.glob(os.path.join(inputFolder,codarTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]                    
-                weraInputFiles = [file for file in glob.glob(os.path.join(inputFolder,weraTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]
+                # List all total files
+                codarInputFiles = [file for file in glob.glob(os.path.join(inputFolder,codarTypeWildcard), recursive = True)]                    
+                weraInputFiles = [file for file in glob.glob(os.path.join(inputFolder,weraTypeWildcard), recursive = True)]
                 inputFiles = codarInputFiles + weraInputFiles
                 for inputFile in inputFiles:
                     try:
@@ -1526,60 +1500,60 @@ def inputTotals(networkID,networkData,startDate,eng,logger):
                         filePath = os.path.dirname(inputFile)
                         fileName = os.path.basename(inputFile)
                         fileExt = os.path.splitext(inputFile)[1]
-                        # Check if the file is already present in the EU HFR NODE database
-                        try:
-                            totalPresenceQuery = 'SELECT * FROM total_input_tb WHERE filename=\'' + fileName + '\''
-                            totalPresenceData = pd.read_sql(totalPresenceQuery, con=eng)
-                            numPresentTotals = totalPresenceData.shape[0]
-                            if numPresentTotals==0:    # the current file is not present in the EU HFR NODE database
-                                # Get file timestamp
-                                total = Total(inputFile)
-                                timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
-                                dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
-                                # Get file size in Kbytes
-                                fileSize = os.path.getsize(inputFile)/1024    
+                        
+                        # Get file timestamp
+                        total = Total(inputFile)
+                        timeStamp = total.time.strftime("%Y %m %d %H %M %S")                    
+                        dateTime = total.time.strftime("%Y-%m-%d %H:%M:%S")  
+                        
+                        # Get file size in Kbytes
+                        fileSize = os.path.getsize(inputFile)/1024   
+                        
     #####
-    # Insert total information into EU HFR NODE database
+    # Insert total information into the output DataFrame
     #####
-                                # Prepare data to be inserted into EU HFR NODE database
-                                dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
-                                             'datetime': [dateTime], 'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                              'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
-                                dfTotal = pd.DataFrame(dataTotal)
+    
+                        # Check if the radial falls into the processing time interval
+                        if ((total.time >= startDate) and (total.time <= endDate)):
+
+                            # Prepare data to be inserted into the output DataFrame
+                            dataTotal = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], 'timestamp': [timeStamp], \
+                                         'datetime': [dateTime], 'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                          'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0]}
+                            dfTotal = pd.DataFrame(dataTotal)
                                 
-                                # Insert data into EU HFR NODE database
-                                dfTotal.to_sql('total_input_tb', con=eng, if_exists='append', index=False, index_label=dfTotal.columns)
-                                logger.info(fileName + ' total file information inserted into EU HFR NODE database.')  
-                        except sqlalchemy.exc.DBAPIError as err:        
-                            iTerr = True
-                            logger.error('MySQL error ' + err._message())
+                            # Insert into the output DataFrame
+                            totalsToBeProcessed = pd.concat([totalsToBeProcessed, dfTotal])
+                                
                     except Exception as err:
-                        iTerr = True
+                        sTerr = True
                         logger.error(err.args[0] + ' for file ' + fileName)
                     
     except Exception as err:
-        iTerr = True
+        sTerr = True
         logger.error(err.args[0])
     
-    return
+    return totalsToBeProcessed
 
-def inputRadials(networkID,stationData,startDate,eng,logger):
+def selectRadials(networkID,stationData,startDate,endDate,logger):
     """
     This function lists the input radial files pushed by the HFR data providers 
-    and inserts into the EU HFR NODE EU HFR NODE database the information needed for the 
-    combination of radial files into totals and for the generation of the 
-    radial and total data files into the European standard data model.
+    that falls into the processing time interval and creates the DataFrame containing 
+    the information needed for the combination of radial files into totals and for the
+    generation of the radial and total data files into the European standard data model.
     
     INPUTS:
         networkID: network ID of the network to be processed
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
-        startDate: string containing the datetime of the starting date of the processing period
-        eng: SQLAlchemy engine for connecting to the Mysql EU HFR NODE EU HFR NODE database
+        startDate: datetime of the initial date of the processing period
+        endDate: datetime of the final date of the processing period
         logger: logger object of the current processing
 
         
     OUTPUTS:
+        radialsToBeProcessed: DataFrame containing all the radials to be processed for the input 
+                              network with the related information
         
     """
     #####
@@ -1587,10 +1561,12 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
     #####
     
     # Initialize error flag
-    iRerr = False
+    sRerr = False
     
-    # Convert starting date from string to timestamp
-    mTime = dt.datetime.strptime(startDate,"%Y-%m-%d").timestamp()
+    # Create output total Series
+    radialsToBeProcessed = pd.DataFrame(columns=['filename', 'filepath', 'network_id', 'station_id', \
+                                                 'timestamp', 'datetime', 'reception_date', 'filesize', 'extension', \
+                                                 'NRT_processed_flag', 'NRT_processed_flag_integrated_network', 'NRT_combined_flag'])
     
     #####
     # List radials from stations
@@ -1618,52 +1594,50 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                         fileTypeWildcard = '**/*.ruv'
                     elif 'wera' in manufacturer:
                         fileTypeWildcard = '**/*.crad_ascii'                
-                    # List input files (only in the processing period)
-                    inputFiles = [file for file in glob.glob(os.path.join(inputFolder,fileTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]                    
+                    # List all radial files
+                    inputFiles = [file for file in glob.glob(os.path.join(inputFolder,fileTypeWildcard), recursive = True)]                    
                     for inputFile in inputFiles:
                         try:
                             # Get file parts
                             filePath = os.path.dirname(inputFile)
                             fileName = os.path.basename(inputFile)
                             fileExt = os.path.splitext(inputFile)[1]
-                            # Check if the file is already present in the EU HFR NODE database
-                            try:
-                                radialPresenceQuery = 'SELECT * FROM radial_input_tb WHERE filename=\'' + fileName + '\''
-                                radialPresenceData = pd.read_sql(radialPresenceQuery, con=eng)
-                                numPresentRadials = radialPresenceData.shape[0]
-                                if numPresentRadials==0:    # the current file is not present in the EU HFR NODE database
-                                    # Get file timestamp
-                                    radial = Radial(inputFile)
-                                    timeStamp = radial.time.strftime("%Y %m %d %H %M %S")                    
-                                    dateTime = radial.time.strftime("%Y-%m-%d %H:%M:%S")  
-                                    # Get file size in Kbytes
-                                    fileSize = os.path.getsize(inputFile)/1024 
+                            
+                            # Get file timestamp
+                            radial = Radial(inputFile)
+                            timeStamp = radial.time.strftime("%Y %m %d %H %M %S")                    
+                            dateTime = radial.time.strftime("%Y-%m-%d %H:%M:%S")  
+                            
+                            # Get file size in Kbytes
+                            fileSize = os.path.getsize(inputFile)/1024 
+                            
     #####
-    # Insert radial information into EU HFR NODE database
+    # Insert radial information into the output DataFrame
     #####
-                                    # Prepare data to be inserted into EU HFR NODE database
-                                    dataRadial = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], \
-                                                  'station_id': [stationID], 'timestamp': [timeStamp], 'datetime': [dateTime], \
-                                                  'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                                  'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0], \
-                                                  'NRT_processed_flag_integrated_network': [0], 'NRT_combined_flag': [0]}
-                                    dfRadial = pd.DataFrame(dataRadial)
-                                    
-                                    # Insert data into EU HFR NODE database
-                                    dfRadial.to_sql('radial_input_tb', con=eng, if_exists='append', index=False, index_label=dfRadial.columns)
-                                    logger.info(fileName + ' radial file information inserted into EU HFR NODE database.')   
-                            except sqlalchemy.exc.DBAPIError as err:        
-                                iRerr = True
-                                logger.error('MySQL error ' + err._message())
+    
+                            # Check if the radial falls into the processing time interval
+                            if ((radial.time >= startDate) and (radial.time <= endDate)):
+    
+                                # Prepare data to be inserted into the output DataFrame
+                                dataRadial = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], \
+                                              'station_id': [stationID], 'timestamp': [timeStamp], 'datetime': [dateTime], \
+                                              'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                              'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0], \
+                                              'NRT_processed_flag_integrated_network': [0], 'NRT_combined_flag': [0]}
+                                dfRadial = pd.DataFrame(dataRadial)
+                                
+                                # Insert into the output DataFrame
+                                radialsToBeProcessed = pd.concat([radialsToBeProcessed, dfRadial])
+
                         except Exception as err:
-                            iRerr = True
+                            sRerr = True
                             logger.error(err.args[0] + ' for file ' + fileName)
                         
         except Exception as err:
-            iRerr = True
+            sRerr = True
             logger.error(err.args[0] + ' for station ' + stationID)
     
-    return
+    return radialsToBeProcessed
 
 def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig):
     """
@@ -1707,18 +1681,18 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
     
     try:
         # Create the folder for the network log
-        networkLogFolder = '/var/log/EU_HFR_NODE_NRT/' + networkID
+        networkLogFolder = '/var/log/EU_HFR_NODE_HIST/' + networkID
         if not os.path.isdir(networkLogFolder):
             os.mkdir(networkLogFolder)
                
         # Create logger
-        logger = logging.getLogger('EU_HFR_NODE_NRT_' + networkID)
+        logger = logging.getLogger('EU_HFR_NODE_HIST_' + networkID)
         logger.setLevel(logging.INFO)
         # Create console handler and set level to DEBUG
         ch = logging.StreamHandler()
         ch.setLevel(logging.DEBUG)
         # Create logfile handler
-        lfh = logging.FileHandler(networkLogFolder + '/EU_HFR_NODE_NRT_' + networkID + '.log')
+        lfh = logging.FileHandler(networkLogFolder + '/EU_HFR_NODE_HIST_' + networkID + '.log')
         lfh.setLevel(logging.INFO)
         # Create formatter
         formatter = logging.Formatter('[%(asctime)s] -- %(levelname)s -- %(module)s - %(funcName)s - %(message)s', datefmt = '%d-%m-%Y %H:%M:%S')
@@ -1731,9 +1705,6 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
         
         # Initialize error flag
         pNerr = False
-        
-        # Set datetime of the starting date of the processing period
-        startDate = (dt.datetime.utcnow()- relativedelta(days=memory)).strftime("%Y-%m-%d")
         
     except Exception as err:
         pNerr = True
@@ -1775,37 +1746,38 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
         return pNerr
         
     #####
-    # Input HFR data
+    # Select HFR data
     #####
     
     try:
-        # Input radial data
+        # Modify data folders (if needed)
+        if dataFolder:
+            # Modify total data folder paths
+            networkData = networkData.apply(lambda x: modifyNetworkDataFolders(x,dataFolder,logger),axis=1)
+            # Modify radial data folder paths
+            stationData = stationData.apply(lambda x: modifyStationDataFolders(x,dataFolder,logger),axis=1)
+            
+            
+        # Select radials to be preocessed
         if 'HFR-US' in networkID:
-            pass
-        elif networkID == 'HFR-WesternItaly':
             pass
         else:
-            inputRadials(networkID, stationData, startDate, eng, logger)
+            radialsToBeProcessed = selectRadials(networkID, stationData, startDate, endDate, logger)
+            logger.info('Radials to be processed successfully selected for network ' + networkID)
         
-        # Input total data
+        # Select totals to be preocessed
         if 'HFR-US' in networkID:
-            inputUStotals(networkID, networkData, stationData, startDate, vers, eng, logger)
+            totalsToBeProcessed = selectUStotals(networkID, networkData, stationData, startDate, vers, logger)
         elif networkID == 'HFR-WesternItaly':
             pass
         else:
             if networkData.iloc[0]['radial_combination'] == 0:
-                inputTotals(networkID, networkData, startDate, eng, logger)
+                totalsToBeProcessed = selectTotals(networkID, networkData, startDate, logger)
+                logger.info('Totals to be processed successfully selected for network ' + networkID)
         
     #####
     # Process HFR data
     #####
-        
-        # Select radials to be processed
-        if 'HFR-US' in networkID:
-            pass
-        else:
-            radialsToBeProcessed = selectRadials(networkID,startDate,eng,logger)
-            logger.info('Radials to be processed successfully selected for network ' + networkID)
         
         # Process radials
         if 'HFR-US' in networkID:
@@ -1814,11 +1786,6 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             logger.info('Radial processing started for ' + networkID + ' network') 
             radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,startDate,vers,eng,logger))
         
-        # Select totals to be processed
-        if networkData.iloc[0]['radial_combination'] == 0:
-            totalsToBeProcessed = selectTotals(networkID,startDate,eng,logger)
-            logger.info('Totals to be processed successfully selected for network ' + networkID)
-            
         # Process totals
             logger.info('Total processing started for ' + networkID + ' network') 
             totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
@@ -1865,7 +1832,7 @@ def main(argv):
                   + '-e <final date for processing formatted as yyyy-mm-dd (ISO8601 UTC date representation)> ' \
                       + '-d <full path of the folder containing network data (if not specified, data folder paths read from the database are used)> ' \
                           + '-i <full path of the folder where to save data for Copernicus Marine Service (if not specified, no files for Copernicus Marine Service are produced)>')
-        sys.exit()
+        sys.exit(2)
         
     # Initialize optional arguments
     ntw = None
@@ -1900,8 +1867,21 @@ def main(argv):
                 sys.exit(2)
         elif opt in ("-d", "--data-folder"):
             dataFolder = arg.strip()
+            # Check if the data folder path exists
+            if not os.path.isdir(dataFolder):
+                print('The specified data folder does not exist.')
+                sys.exit(2)
         elif opt in ("-i", "--instac-folder"):
             instacFolder = arg.strip()
+            # Check if the INSTAC folder path exists
+            if not os.path.isdir(instacFolder):
+                print('The specified folder for Copernicus Marine Service data does not exist.')
+                sys.exit(2)
+            
+    # Check that initial date is before end date
+    if not startDate<endDate:
+        print("Wrong time interval specified: initial date is later then end date")
+        sys.exit(2)
           
     # Create logger
     logger = logging.getLogger('EU_HFR_NODE_HIST')
