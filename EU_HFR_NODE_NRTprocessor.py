@@ -1093,8 +1093,9 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,log
         # European standard data model
         dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
         
-        # Copernicus Marine Service In Situ TAC data model
-        dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+        if (networkID != 'HFR-WesternItaly') and (networkID != 'HFR-LaMMA'):
+            # Copernicus Marine Service In Situ TAC data model
+            dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
         
     except Exception as err:
         pTerr = True
@@ -1181,8 +1182,9 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
             # European standard data model
             groupedRad = groupedRad.apply(lambda x: applyEHNradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
             
-            # Copernicus Marine Service In Situ TAC data model
-            groupedRad.apply(lambda x: applyINSTACradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
+            if networkID != 'HFR-LaMMA':
+                # Copernicus Marine Service In Situ TAC data model
+                groupedRad.apply(lambda x: applyINSTACradialDataModel(x,networkData,stationData.loc[stationData['station_id'] == x.station_id],vers,eng,logger),axis=1)
                 
         #####
         # Combine Radials into Total
@@ -1209,8 +1211,9 @@ def processRadials(groupedRad,networkID,networkData,stationData,startDate,vers,e
                 # European standard data model
                 dfTot = dfTot.apply(lambda x: applyEHNtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
                 
-                # Copernicus Marine Service In Situ TAC data model
-                dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
+                if (networkID != 'HFR-WesternItaly') and (networkID != 'HFR-LaMMA'):
+                    # Copernicus Marine Service In Situ TAC data model
+                    dfTot = dfTot.apply(lambda x: applyINSTACtotalDataModel(x,networkData,stationData,vers,eng,logger),axis=1)
         
     except Exception as err:
         pRerr = True
