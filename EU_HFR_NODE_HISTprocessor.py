@@ -43,7 +43,7 @@ from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRad
 from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from common import addBoundingBoxMetadata
 import pickle
-from multiprocessing import Process, Pool
+from concurrent import futures
 import time
 import xarray as xr
 import netCDF4 as nc4
@@ -1828,22 +1828,59 @@ def main(argv):
             processNetwork(ntw, startDate, endDate, dataFolder, instacFolder, sqlConfig)
         # Process all networks if no specific network is specified for processing
         else:
-            # Set the chunck size
+            # Set the queue containing the network IDs
+            networkQueue = networkIDs[:]
+            
+            # Set the batch size
             numCPU = os.cpu_count()
-            chunkSize = np.ceil(len(networkIDs)/(numCPU-2))
-            
-            # Create the iterable containing the arguments to be passed to the target function in multiprocessing
-            argsIterable = [(ntw, startDate, endDate, dataFolder, instacFolder, sqlConfig) for ntw in networkIDs]
-            
-            # create the multiprocessing pool
-            with Pool() as pool:
-                # issue tasks
-                pool.starmap(processNetwork, argsIterable, chunksize=chunkSize)            
+            if len(networkIDs) < numCPU -1:
+                batchDim = len(networkIDs)
+            else:
+                batchDim = numCPU - 2
+                
+            # Set the process pool executor for parallel processing
+            with futures.ProcessPoolExecutor() as ex:      
+                # Set the dictionary of the running processes (contaning processes and related network IDs)
+                pool = {}
+                # Start a process per each network in the batch
+                for ntw in networkIDs[0:batchDim]:
+                    # Wait a bit (useful for multiprocessing management)
+                    time.sleep(10)
+                    # Start the process and insert process and the related network ID into the dictionary of the running processs
+                    pool[ex.submit(processNetwork, ntw, startDate, endDate, dataFolder, instacFolder, sqlConfig)] = ntw
+                    logger.info('Processing for ' + ntw + ' network started')
+                    # Pop the network from the queue
+                    networkQueue.remove(ntw)
+                
+                # Check for terminated processes and launch remaining ones
+                while pool:
+                    # Get the terminated processes
+                    done = futures.as_completed(pool)
+                    
+                    # Relaunch remaining processes
+                    for future in done:
+                        # Get the ID of the newtork whose process is terminated
+                        trmNtw = pool[future]
+                        print('Processing for ' + trmNtw + ' network ended')
+                        # Pop the process from the dictionary of running processes
+                        pool.pop(future)
+                        
+                        # Check if networks waiting for processing are present in the queue
+                        if networkQueue:
+                            # Get the next network to be processed from the queue
+                            nxtNtw = networkQueue[0]
+                            
+                            # Wait a bit (useful for multiprocessing management)
+                            time.sleep(10)
+                            # Start the process and insert process and the related network ID into the dictionary of the running processs
+                            pool[ex.submit(processNetwork, nxtNtw, startDate, endDate, dataFolder, instacFolder, sqlConfig)] = nxtNtw
+                            print('Processing for ' + nxtNtw + ' network started')
+                            # Pop the network from the queue
+                            networkQueue.remove(nxtNtw)            
     
     except Exception as err:
         EHNerr = True
-        logger.error(err.args[0])
-    
+        logger.error(err.args[0])    
     
     
 ####################
