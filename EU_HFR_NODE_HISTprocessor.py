@@ -37,14 +37,13 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 import sqlalchemy
-from sqlalchemy import text
 from dateutil.relativedelta import relativedelta
 from radials import Radial, buildEHNradialFolder, buildEHNradialFilename, convertEHNtoINSTACradialDatamodel, buildINSTACradialFolder, buildINSTACradialFilename
 from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials, convertEHNtoINSTACtotalDatamodel, buildINSTACtotalFolder, buildINSTACtotalFilename, buildUStotal
 from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 from common import addBoundingBoxMetadata
 import pickle
-from multiprocessing import Process
+from multiprocessing import Process, Pool
 import time
 import xarray as xr
 import netCDF4 as nc4
@@ -1655,7 +1654,7 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             pass
         else:
             if networkData.iloc[0]['radial_combination'] == 0:
-                totalsToBeProcessed = selectTotals(networkID, networkData, startDate, logger)
+                totalsToBeProcessed = selectTotals(networkID, networkData, startDate, endDate, logger)
                 logger.info('Totals to be processed successfully selected for network ' + networkID)
         
     #####
@@ -1762,7 +1761,7 @@ def main(argv):
                 sys.exit(2)
             
     # Check that initial date is before end date
-    if not startDate<endDate:
+    if not startDate<=endDate:
         print("Wrong time interval specified: initial date is later then end date")
         sys.exit(2)
           
@@ -1829,59 +1828,17 @@ def main(argv):
             processNetwork(ntw, startDate, endDate, dataFolder, instacFolder, sqlConfig)
         # Process all networks if no specific network is specified for processing
         else:
-            # Set the queue containing the network IDs
-            networkQueue = networkIDs
-        
-            # Set the batch size
+            # Set the chunck size
             numCPU = os.cpu_count()
-            if len(networkIDs) < numCPU -1:
-                batchDim = len(networkIDs)
-            else:
-                batchDim = numCPU - 2
+            chunkSize = np.ceil(len(networkIDs)/(numCPU-2))
             
-            # Start a process per each network in the batch
-            prcs = {}       # dictionary of the running processes contanig processes and related network IDs
-            for ntw in networkQueue[0:batchDim]:
-                # Wait a bit (useful for multiprocessing management)
-                time.sleep(10)
-                # Start the process
-                p = Process(target=processNetwork, args=(ntw, startDate, endDate, dataFolder, instacFolder, sqlConfig,))
-                p.start()
-                # Insert process and the related network ID into the dictionary of the running processs
-                prcs[p] = ntw
-                logger.info('Processing for ' + ntw + ' network started')
-                
-            while True:
-                # check which processes are terminated and append the processed network names to the dictionary of terminated processes
-                trm = {}        # dictionary of the terminated processes 
-                for pp in prcs.keys():
-                    if pp.exitcode != None:
-                        trm[pp] = prcs[pp]
-                        
-                # Close the terminated processes and append them to the queue
-                for tt in trm.keys():
-                    # Close the process
-                    tt.close()
-                    prcs.pop(tt)
-                    logger.info('Processing for ' + trm[tt] + ' network ended')
-                    # Pop the network from the queue
-                    networkQueue.remove(trm[tt])
-                    # Add the tne network at the end of the queue
-                    networkQueue.append(trm[tt])
-                    
-                    # Start a new process for the first network of the queue not in the dictionary of the running processes
-                    for ntw in networkQueue:
-                        if ntw not in prcs.values():
-                            break
-                    # Wait a bit (useful for multiprocessing management)
-                    time.sleep(10)
-                    # Start the process
-                    p = Process(target=processNetwork, args=(ntw, startDate, endDate, dataFolder, instacFolder, sqlConfig,))
-                    p.start()
-                    # Insert process and the related network ID into the dictionary of the running processes
-                    prcs[p] = ntw
-                    logger.info('Processing for ' + ntw + ' network started')
+            # Create the iterable containing the arguments to be passed to the target function in multiprocessing
+            argsIterable = [(ntw, startDate, endDate, dataFolder, instacFolder, sqlConfig) for ntw in networkIDs]
             
+            # create the multiprocessing pool
+            with Pool() as pool:
+                # issue tasks
+                pool.starmap(processNetwork, argsIterable, chunksize=chunkSize)            
     
     except Exception as err:
         EHNerr = True
