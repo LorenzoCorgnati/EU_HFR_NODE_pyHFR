@@ -525,6 +525,9 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,logger):
     # Convert to standard data format (netCDF)  
     #####
         
+            # Check for the presence of the mandatry data variables
+            T.check_ehn_mandatory_variables()
+            
             # Apply the standard data model
             T.apply_ehn_datamodel(networkData,stationData,vers)
             
@@ -829,6 +832,9 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,logger):
     # Convert to standard data format (netCDF)  
     #####
         
+            # Check for the presence of the mandatry data variables
+            R.check_ehn_mandatory_variables()
+            
             # Apply the standard data model
             R.apply_ehn_datamodel(networkData,radSiteData,vers)
             

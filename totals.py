@@ -556,12 +556,14 @@ def makeTotalVector(rBins,rDF):
         # loop over contributing radial indices for collecting velocities and angles
         contributions = pd.DataFrame()
         for idx in contrRad.index:
-            contrVel = rDF.loc[idx]['Radial'].data.VELO[contrRad[idx]]                                  # pandas Series
+            contrVel = rDF.loc[idx]['Radial'].data.VELO[contrRad[idx]]                                      # pandas Series
             contrHead = rDF.loc[idx]['Radial'].data.HEAD[contrRad[idx]]                                     # pandas Series
             if 'ETMP' in rDF.loc[idx]['Radial'].data.columns:
                 contrStd = rDF.loc[idx]['Radial'].data.ETMP[contrRad[idx]]                                  # pandas Series
             elif 'HCSS' in rDF.loc[idx]['Radial'].data.columns:
                 contrStd = rDF.loc[idx]['Radial'].data.HCSS[contrRad[idx]]                                  # pandas Series   
+            else:
+                contrStd = np.nan                                                                           # pandas Series 
             contributions = pd.concat([contributions, pd.concat([contrVel,contrHead,contrStd], axis=1)])    # pandas DataFrame        
                     
         # Rename ETMP column to STD (Codar radial case)
@@ -590,7 +592,7 @@ def makeTotalVector(rBins,rDF):
                 totalData.loc[4] = math.sqrt(C[0,0])                            # UQAL
                 totalData.loc[5] = math.sqrt(C[1,1])                            # VQAL
                 totalData.loc[6] = C[0,1]                                       # CQAL
-                totalData.loc[7] = math.sqrt(np.abs(Cgdop.trace()))                     # GDOP
+                totalData.loc[7] = math.sqrt(np.abs(Cgdop.trace()))             # GDOP
                 totalData.loc[8] = len(contributions.index)                     # NRAD
             
     return totalData
@@ -1237,6 +1239,30 @@ class Total(fileParser):
         # Attach the dictionary to the Total object
         self.xdr = xdr
         
+        return
+    
+    def check_ehn_mandatory_variables(self):
+        """
+        This function checks if the Total object contains all the mandatory data variables
+        (i.e. not coordinate variables) required by the European standard data model developed in the framework of the 
+        EuroGOOS HFR Task Team.
+        Missing variables are appended to the DataFrame containing data, filled with NaNs.
+        
+        INPUT:            
+            
+        OUTPUT:
+        """
+        # Set mandatory variables based on the HFR manufacturer
+        if self.is_wera:
+            chkVars = ['VELU', 'VELV', 'VELO', 'UACC', 'VACC', 'GDOP']
+        else:
+            chkVars = ['VELU', 'VELV', 'UQAL', 'VQAL', 'CQAL', 'GDOP']
+            
+        # Check variables and add missing ones
+        for vv in chkVars:
+            if vv not in self.data.columns:
+                self.data[vv] = np.nan
+                
         return
     
     

@@ -953,6 +953,31 @@ class Radial(fileParser):
         
         return
     
+    def check_ehn_mandatory_variables(self):
+        """
+        This function checks if the Radial object contains all the mandatory data variables
+        (i.e. not coordinate variables) required by the European standard data model developed in the framework of the 
+        EuroGOOS HFR Task Team.
+        Missing variables are appended to the DataFrame containing data, filled with NaNs.
+        
+        INPUT:            
+            
+        OUTPUT:
+        """
+        # Set mandatory variables based on the HFR manufacturer
+        if self.is_wera:
+            chkVars = ['VELU', 'VELV', 'VELO', 'HEAD', 'HCSS', 'EACC']
+        else:
+            chkVars = ['VELU', 'VELV', 'ESPC', 'ETMP', 'MAXV', 'MINV', 'ERSC', 'ERTC', 'XDST', 'YDST', 'VELO', 'HEAD', 'SPRC']
+            
+        # Check variables and add missing ones
+        for vv in chkVars:
+            if vv not in self.data.columns:
+                self.data[vv] = np.nan
+        
+        return
+    
+    
     def apply_ehn_datamodel(self, network_data, station_data, version):
         """
         This function applies the European standard data model developed in the
