@@ -1821,7 +1821,7 @@ def processNetwork(networkID,memory,sqlConfig):
             totalsToBeProcessed = selectTotals(networkID,startDate,eng,logger)
             logger.info('Totals to be processed successfully selected for network ' + networkID)
             
-        # Process totals
+            # Process totals
             logger.info('Total processing started for ' + networkID + ' network') 
             totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,startDate,vers,eng,logger))
             

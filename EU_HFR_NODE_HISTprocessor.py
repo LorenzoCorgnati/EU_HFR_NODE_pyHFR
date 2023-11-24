@@ -1673,8 +1673,9 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,instacFolder,vers,logger))
         
         # Process totals
-        logger.info('Total processing started for ' + networkID + ' network') 
-        totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,logger))
+        if ('HFR-US' in networkID) or (networkData.iloc[0]['radial_combination'] == 0):
+            logger.info('Total processing started for ' + networkID + ' network') 
+            totalsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,logger))
             
         # Wait a bit (useful for multiprocessing management)
         time.sleep(30)
