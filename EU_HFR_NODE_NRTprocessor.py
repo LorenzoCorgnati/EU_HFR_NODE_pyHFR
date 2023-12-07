@@ -634,103 +634,127 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
     try:
         # Check if the combination is to be performed
         if networkData.iloc[0]['radial_combination'] == 1:
-            # Check if the radials were already combined
+            # Check if radials from all stations were already combined
             if ((networkData.iloc[0]['network_id'] != 'HFR-WesternItaly') and (0 in combRad['NRT_combined_flag'].values)) or ((networkData.iloc[0]['network_id'] == 'HFR-WesternItaly') and (0 in combRad['NRT_processed_flag_integrated_network'].values)):
-                # Get the lat/lons of the bounding box
-                lonMin = networkData.iloc[0]['geospatial_lon_min']
-                lonMax = networkData.iloc[0]['geospatial_lon_max']
-                latMin = networkData.iloc[0]['geospatial_lat_min']
-                latMax = networkData.iloc[0]['geospatial_lat_max']
-                
-                # Get the grid resolution in meters
-                gridResolution = networkData.iloc[0]['grid_resolution'] * 1000      # Grid resolution is stored in km in the EU HFR NODE database
-                
-                # Create the geographical grid
-                exts = combRad.extension.unique().tolist()
-                if (len(exts) == 1):
-                    if exts[0] == '.ruv':
-                        gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
-                    elif exts[0] == '.crad_ascii':
-                        gridGS = createLonLatGridFromBBwera(lonMin, lonMax, latMin, latMax, gridResolution)
-                else:
-                    gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
-                    
-                # Scale velocities and variances of WERA radials in case of combination with CODAR radials
-                if (len(exts) > 1):
-                    for idx in combRad.loc[combRad['extension'] == '.crad_ascii'].loc[:]['Radial'].index:
-                        combRad.loc[idx]['Radial'].data.VELO *= 100
-                        combRad.loc[idx]['Radial'].data.HCSS *= 10000
-                
-                # Get the combination search radius in meters
-                searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the EU HFR NODE database
-                
                 # Get the timestamp
                 timeStamp = dt.datetime.strptime(str(combRad.iloc[0]['datetime']),'%Y-%m-%d %H:%M:%S')
                 
-                # Generate the combined Total
-                T, warn = combineRadials(combRad,gridGS,searchRadius,gridResolution,timeStamp)
+                # Set the filename (with full path) for the ttl file
+                ttlFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'].replace('nc','ttl'),timeStamp,vers)
+                ttlFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],timeStamp,'.ttl')
+                ttlFile = ttlFilePath + ttlFilename 
                 
-                # Add metadata related to bounding box
-                T = addBoundingBoxMetadata(T,lonMin,lonMax,latMin,latMax,gridResolution/1000)
+                # Get the contributing radials in case the total for the current timestamp was already obtained
+                if os.path.isfile(ttlFile):
+                    # Load Total object from .ttl file with pickle
+                    with open(ttlFile, 'rb') as tT:
+                        existingTot = pickle.load(tT)
+                    
+                    # Get the contributing radials for the existing Total
+                    combinedRad = existingTot.site_source.Name.to_list()
+                    
+                    # Get the current contributing radials
+                    currRad = combRad.index.to_list()
+                    
+                    # Compare the already combined radials with the current ones
+                    if sorted(combinedRad) == sorted(currRad):
+                        goComb = False
+                        # Add the existing Total object to the DataFrame
+                        combTot = pd.concat([combTot, pd.DataFrame([{'Total': existingTot, 'NRT_processed_flag':1}])])
+                    else:
+                        goComb = True
+                else:
+                    goComb = True
                 
-                # Update is_combined attribute
-                T.is_combined = True
-                
-                # Add is_wera attribute
-                if (len(exts) == 1):
-                    if exts[0] == '.ruv':
+                # Check if the any new radial is present, in case the total was already obtained
+                if goComb:                
+                    # Get the lat/lons of the bounding box
+                    lonMin = networkData.iloc[0]['geospatial_lon_min']
+                    lonMax = networkData.iloc[0]['geospatial_lon_max']
+                    latMin = networkData.iloc[0]['geospatial_lat_min']
+                    latMax = networkData.iloc[0]['geospatial_lat_max']
+                    
+                    # Get the grid resolution in meters
+                    gridResolution = networkData.iloc[0]['grid_resolution'] * 1000      # Grid resolution is stored in km in the EU HFR NODE database
+                    
+                    # Create the geographical grid
+                    exts = combRad.extension.unique().tolist()
+                    if (len(exts) == 1):
+                        if exts[0] == '.ruv':
+                            gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
+                        elif exts[0] == '.crad_ascii':
+                            gridGS = createLonLatGridFromBBwera(lonMin, lonMax, latMin, latMax, gridResolution)
+                    else:
+                        gridGS = createLonLatGridFromBB(lonMin, lonMax, latMin, latMax, gridResolution)
+                        
+                    # Scale velocities and variances of WERA radials in case of combination with CODAR radials
+                    if (len(exts) > 1):
+                        for idx in combRad.loc[combRad['extension'] == '.crad_ascii'].loc[:]['Radial'].index:
+                            combRad.loc[idx]['Radial'].data.VELO *= 100
+                            combRad.loc[idx]['Radial'].data.HCSS *= 10000
+                    
+                    # Get the combination search radius in meters
+                    searchRadius = networkData.iloc[0]['combination_search_radius'] * 1000      # Combination search radius is stored in km in the EU HFR NODE database
+                    
+                    # Generate the combined Total
+                    T, warn = combineRadials(combRad,gridGS,searchRadius,gridResolution,timeStamp)
+                    
+                    # Add metadata related to bounding box
+                    T = addBoundingBoxMetadata(T,lonMin,lonMax,latMin,latMax,gridResolution/1000)
+                    
+                    # Update is_combined attribute
+                    T.is_combined = True
+                    
+                    # Add is_wera attribute
+                    if (len(exts) == 1):
+                        if exts[0] == '.ruv':
+                            T.is_wera = False
+                        elif exts[0] == '.crad_ascii':
+                            T.is_wera = True
+                    else:
                         T.is_wera = False
-                    elif exts[0] == '.crad_ascii':
-                        T.is_wera = True
-                else:
-                    T.is_wera = False
-                
-                # Add the Total object to the DataFrame
-                combTot = pd.concat([combTot, pd.DataFrame([{'Total': T, 'NRT_processed_flag':0}])])
-                
-                if warn=='':                    
-                    # Set the filename (with full path) for the ttl file
-                    ttlFilePath = buildEHNtotalFolder(networkData.iloc[0]['total_HFRnetCDF_folder_path'].replace('nc','ttl'),T.time,vers)
-                    ttlFilename = buildEHNtotalFilename(networkData.iloc[0]['network_id'],T.time,'.ttl')
-                    ttlFile = ttlFilePath + ttlFilename 
                     
-                    # Add filename and filepath to the Total object
-                    T.file_path = ttlFilePath
-                    T.file_name = ttlFilename
-                    T.full_file = ttlFile
+                    # Add the Total object to the DataFrame
+                    combTot = pd.concat([combTot, pd.DataFrame([{'Total': T, 'NRT_processed_flag':0}])])
                     
-                    # Create the destination folder
-                    if not os.path.isdir(ttlFilePath):
-                        os.makedirs(ttlFilePath)
-                    
-                    # Save Total object as .ttl file with pickle
-                    with open(ttlFile, 'wb') as ttlFile:
-                        pickle.dump(T, ttlFile)
-                    logger.info(ttlFilename + ' combined total ttl file succesfully created and stored (' + vers + ').')
+                    if warn=='':                    
+                        # Add filename and filepath to the Total object
+                        T.file_path = ttlFilePath
+                        T.file_name = ttlFilename
+                        T.full_file = ttlFile
                         
-    #####
-    # Update NRT_combined_flag for the combined radials                        
-    #####
-                    if len(combRad) == numActiveStations:
-                        # Update the local DataFrame if radials from all station contributed to making the total
-                        if networkData.iloc[0]['network_id'] == 'HFR-WesternItaly':
-                            combRad['NRT_processed_flag_integrated_network'] = combRad['NRT_processed_flag_integrated_network'].replace(0,1)
-                        else:
-                            combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
-                    
-                        # Update the radial_input_tb table on the EU HFR NODE database if radials from all station contributed to making the total
-                        try:
+                        # Create the destination folder
+                        if not os.path.isdir(ttlFilePath):
+                            os.makedirs(ttlFilePath)
+                        
+                        # Save Total object as .ttl file with pickle
+                        with open(ttlFile, 'wb') as ttlFile:
+                            pickle.dump(T, ttlFile)
+                        logger.info(ttlFilename + ' combined total ttl file succesfully created and stored (' + vers + ').')
+                            
+        #####
+        # Update NRT_combined_flag for the combined radials                        
+        #####
+                        if len(combRad) == numActiveStations:
+                            # Update the local DataFrame if radials from all station contributed to making the total
                             if networkData.iloc[0]['network_id'] == 'HFR-WesternItaly':
-                                combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_processed_flag_integrated_network=1 WHERE filename=\'' + x.file_name + '\''))
+                                combRad['NRT_processed_flag_integrated_network'] = combRad['NRT_processed_flag_integrated_network'].replace(0,1)
                             else:
-                                combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
-                        except sqlalchemy.exc.DBAPIError as err:        
-                            dMerr = True
-                            logger.error('MySQL error ' + err._message())
+                                combRad['NRT_combined_flag'] = combRad['NRT_combined_flag'].replace(0,1)
                         
-                else:
-                    logger.info(warn + ' for network ' + networkData.iloc[0]['network_id'] + ' at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
-                    return combTot            
+                            # Update the radial_input_tb table on the EU HFR NODE database if radials from all station contributed to making the total
+                            try:
+                                if networkData.iloc[0]['network_id'] == 'HFR-WesternItaly':
+                                    combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_processed_flag_integrated_network=1 WHERE filename=\'' + x.file_name + '\''))
+                                else:
+                                    combRad['Radial'].apply(lambda x: eng.execute('UPDATE radial_input_tb SET NRT_combined_flag=1 WHERE filename=\'' + x.file_name + '\''))
+                            except sqlalchemy.exc.DBAPIError as err:        
+                                dMerr = True
+                                logger.error('MySQL error ' + err._message())
+                            
+                    else:
+                        logger.info(warn + ' for network ' + networkData.iloc[0]['network_id'] + ' at timestamp ' + timeStamp.strftime('%Y-%m-%d %H:%M:%S'))
+                        return combTot         
         
     except Exception as err:
         crErr = True
@@ -1688,7 +1712,7 @@ def processNetwork(networkID,memory,sqlConfig):
     The third processing step consists in reading the EU HFR NODE EU HFR NODE database for collecting
     information about the total data files to be converted into the European standard
     data model and in the generating total data files according to the European
-    standard data model and to the Copernicus MArine Service In-Situ TAC data model.
+    standard data model and to the Copernicus Marine Service In-Situ TAC data model.
     
     INPUTS:
         networkID: network ID of the network to be processed
