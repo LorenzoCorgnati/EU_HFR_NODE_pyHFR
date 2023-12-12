@@ -647,21 +647,25 @@ def performRadialCombination(combRad,networkData,numActiveStations,vers,eng,logg
                 # Get the contributing radials in case the total for the current timestamp was already obtained
                 if os.path.isfile(ttlFile):
                     # Load Total object from .ttl file with pickle
-                    with open(ttlFile, 'rb') as tT:
-                        existingTot = pickle.load(tT)
+                    try:
+                        with open(ttlFile, 'rb') as tT:
+                            existingTot = pickle.load(tT)
                     
-                    # Get the contributing radials for the existing Total
-                    combinedRad = existingTot.site_source.Name.to_list()
-                    
-                    # Get the current contributing radials
-                    currRad = combRad.index.to_list()
-                    
-                    # Compare the already combined radials with the current ones
-                    if sorted(combinedRad) == sorted(currRad):
-                        goComb = False
-                        # Add the existing Total object to the DataFrame
-                        combTot = pd.concat([combTot, pd.DataFrame([{'Total': existingTot, 'NRT_processed_flag':1}])])
-                    else:
+                        # Get the contributing radials for the existing Total
+                        combinedRad = existingTot.site_source.Name.to_list()
+                        
+                        # Get the current contributing radials
+                        currRad = combRad.index.to_list()
+                        
+                        # Compare the already combined radials with the current ones
+                        if sorted(combinedRad) == sorted(currRad):
+                            goComb = False
+                            # Add the existing Total object to the DataFrame
+                            combTot = pd.concat([combTot, pd.DataFrame([{'Total': existingTot, 'NRT_processed_flag':1}])])
+                        else:
+                            goComb = True
+                    except Exception:
+                        os.remove(ttlFile)
                         goComb = True
                 else:
                     goComb = True
