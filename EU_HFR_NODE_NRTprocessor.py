@@ -311,7 +311,7 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
 
             if len(hourlyFiles)>0:
                 # Open all netCDF files in the current day folder
-                dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME',join='override')
+                dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME',coords='minimal',compat='override',join='override')
                 
         #####        
         # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
