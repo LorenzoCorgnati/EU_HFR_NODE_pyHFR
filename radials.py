@@ -218,7 +218,8 @@ def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
     globalAttributes['site_code'] = rDS.attrs['site_code']
     globalAttributes['platform_code'] = rDS.attrs['platform_code']
     globalAttributes['platform_name'] = globalAttributes['platform_code']
-    globalAttributes['wmo_platform_code'] = rDS.attrs['wmo_platform_code']
+    if 'wmo_platform_code' in rDS.attrs.keys():
+        globalAttributes['wmo_platform_code'] = rDS.attrs['wmo_platform_code']
     globalAttributes['doa_estimation_method'] = rDS.attrs['doa_estimation_method']
     globalAttributes['calibration_type'] = rDS.attrs['calibration_type']
     globalAttributes['last_calibration_date'] = rDS.attrs['last_calibration_date']
@@ -1128,9 +1129,10 @@ class Radial(fileParser):
         # Fill global attributeswmo_platform_code
         globalAttributes['site_code'] = siteCode.decode()
         globalAttributes['platform_code'] = platformCode.decode()
-        globalAttributes['oceanops_ref'] = station_data.iloc[0]['oceanops_ref']
-        globalAttributes['wmo_platform_code'] = station_data.iloc[0]['wmo_code']
-        globalAttributes['wigos_id'] = station_data.iloc[0]['wigos_id']
+        if globalAttributes['oceanops_ref'] != None:
+            globalAttributes['oceanops_ref'] = station_data.iloc[0]['oceanops_ref']
+            globalAttributes['wmo_platform_code'] = station_data.iloc[0]['wmo_code']
+            globalAttributes['wigos_id'] = station_data.iloc[0]['wigos_id']
         globalAttributes['doa_estimation_method'] = station_data.iloc[0]['DoA_estimation_method']
         globalAttributes['calibration_type'] = station_data.iloc[0]['calibration_type']
         globalAttributes['last_calibration_date'] = station_data.iloc[0]['last_calibration_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
