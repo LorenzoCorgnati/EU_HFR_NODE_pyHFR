@@ -1,6 +1,9 @@
 {
     "site_code": "",
     "platform_code": "",
+    "wmo_platform_code": "",
+    "wigos_id": "",
+    "oceanops_ref": "",
     "data_mode": "R",
     "doa_estimation_method": "",
     "calibration_type": "",

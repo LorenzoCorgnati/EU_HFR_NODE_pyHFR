@@ -1448,6 +1448,9 @@ class Total(fileParser):
         # Fill global attributes
         globalAttributes['site_code'] = siteCode.decode()
         globalAttributes['platform_code'] = platformCode.decode()
+        globalAttributes.pop('oceanops_ref')
+        globalAttributes.pop('wmo_platform_code')
+        globalAttributes.pop('wigos_id')
         globalAttributes['doa_estimation_method'] = ', '.join(station_data[["station_id", "DoA_estimation_method"]].apply(": ".join, axis=1))
         globalAttributes['calibration_type'] = ', '.join(station_data[["station_id", "calibration_type"]].apply(": ".join, axis=1))
         if 'HFR-US' in network_data.iloc[0]['network_id']:
