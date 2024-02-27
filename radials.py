@@ -1126,10 +1126,10 @@ class Radial(fileParser):
         if timeResRD.seconds !=0:
             timeCoverageResolution += str(int(timeResRD.seconds)) + 'S'        
             
-        # Fill global attributeswmo_platform_code
+        # Fill global attributes
         globalAttributes['site_code'] = siteCode.decode()
         globalAttributes['platform_code'] = platformCode.decode()
-        if globalAttributes['oceanops_ref'] != None:
+        if station_data.iloc[0]['oceanops_ref'] != None:
             globalAttributes['oceanops_ref'] = station_data.iloc[0]['oceanops_ref']
             globalAttributes['wmo_platform_code'] = station_data.iloc[0]['wmo_code']
             globalAttributes['wigos_id'] = station_data.iloc[0]['wigos_id']
