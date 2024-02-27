@@ -1866,7 +1866,7 @@ def main(argv):
                     for future in done:
                         # Get the ID of the newtork whose process is terminated
                         trmNtw = pool[future]
-                        print('Processing for ' + trmNtw + ' network ended')
+                        logger.info('Processing for ' + trmNtw + ' network ended')
                         # Pop the process from the dictionary of running processes
                         pool.pop(future)
                         
@@ -1879,7 +1879,7 @@ def main(argv):
                             time.sleep(10)
                             # Start the process and insert process and the related network ID into the dictionary of the running processs
                             pool[ex.submit(processNetwork, nxtNtw, startDate, endDate, dataFolder, instacFolder, sqlConfig)] = nxtNtw
-                            print('Processing for ' + nxtNtw + ' network started')
+                            logger.info('Processing for ' + nxtNtw + ' network started')
                             # Pop the network from the queue
                             networkQueue.remove(nxtNtw)            
     
