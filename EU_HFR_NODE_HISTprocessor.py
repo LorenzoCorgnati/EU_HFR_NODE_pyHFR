@@ -1638,7 +1638,7 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             stationData = stationData.apply(lambda x: modifyStationDataFolders(x,dataFolder,logger),axis=1)
             
         # Clean data folders (remove possibly existing netCDF, rdl and ttl files)
-        cleanDataFolders(networkData, stationData, startDate, endDate, vers, logger)
+        # cleanDataFolders(networkData, stationData, startDate, endDate, vers, logger)
             
     #####
     # Select HFR data
