@@ -561,25 +561,25 @@ class Radial(fileParser):
         # Get the bounding box limits
         if not lon_min:
             if 'BBminLongitude' in self.metadata:
-                lon_min = self.metadata['BBminLongitude']
+                lon_min = float(self.metadata['BBminLongitude'].split()[0])
             else:
                 lon_min = self.data.LOND.min() - 1
                 
         if not lon_max:
             if 'BBmaxLongitude' in self.metadata:
-                lon_max = self.metadata['BBmaxLongitude']
+                lon_max = float(self.metadata['BBmaxLongitude'].split()[0])
             else:
                 lon_max = self.data.LOND.max() + 1
                 
         if not lat_min:
             if 'BBminLatitude' in self.metadata:
-                lat_min = self.metadata['BBminLatitude']
+                lat_min = float(self.metadata['BBminLatitude'].split()[0])
             else:
                 lat_min = self.data.LATD.min() - 1
                 
         if not lat_max:
             if 'BBmaxLatitude' in self.metadata:
-                lat_max = self.metadata['BBmaxLatitude']
+                lat_max = float(self.metadata['BBmaxLatitude'].split()[0])
             else:
                 lat_max = self.data.LATD.max() + 1   
                 
