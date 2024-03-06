@@ -882,7 +882,7 @@ class Total(fileParser):
             return waterIndex
         
         
-    def plot(self, lon_min=None, lon_max=None, lat_min=None, lat_max=None, shade=False):
+    def plot(self, lon_min=None, lon_max=None, lat_min=None, lat_max=None, shade=False, show=True):
         """
         This function plots the current total velocity field (i.e. VELU and VELV components) on a 
         Cartesian grid. The grid is defined either from the input values or from the Total object
@@ -897,6 +897,8 @@ class Total(fileParser):
             lon_max: maximum longitude value in decimal degrees (if None it is taken from Total metadata)
             lat_min: minimum latitude value in decimal degrees (if None it is taken from Total metadata)
             lat_max: maximum latitude value in decimal degrees (if None it is taken from Total metadata)
+            shade: boolean for enabling/disabling shade plot
+            show: boolean for enabling/disabling plot visualization
             
         OUTPUT:
 
@@ -1016,7 +1018,8 @@ class Total(fileParser):
         # Add title
         plt.title(self.file_name + ' total velocity field', fontdict={'fontsize': 30, 'fontweight' : 'bold'})
                 
-        plt.show()
+        if show:
+            plt.show()
         
         return fig
         
