@@ -897,8 +897,8 @@ class Total(fileParser):
             lon_max: maximum longitude value in decimal degrees (if None it is taken from Total metadata)
             lat_min: minimum latitude value in decimal degrees (if None it is taken from Total metadata)
             lat_max: maximum latitude value in decimal degrees (if None it is taken from Total metadata)
-            shade: boolean for enabling/disabling shade plot
-            show: boolean for enabling/disabling plot visualization
+            shade: boolean for enabling/disabling shade plot (default False)
+            show: boolean for enabling/disabling plot visualization (default True)
             
         OUTPUT:
 
