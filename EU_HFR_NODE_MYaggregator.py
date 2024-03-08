@@ -47,7 +47,7 @@ import json
 # PROCESSING FUNCTIONS
 ######################
 
-def adjustToMYINSTACradialDatamodel(rDS, stationData):
+def adjustToMYINSTACtotalDatamodel(tDS, networkData):
     """
     This function adjusts the data model of the input aggregated radial dataset for complying with
     the Copernicus Marine Service data model for MY products.
@@ -58,9 +58,176 @@ def adjustToMYINSTACradialDatamodel(rDS, stationData):
     In Situ TAC data model for MY products.
     
     INPUT:
-        rDS: xarray DataSet containing radial (either non temporally aggregated or temporally aggregated)
-             data.  
-        stationData: DataFrame containing the information of the radial site that produced the radial
+        tDS: xarray DataSet containing temporally aggregated total data.  
+        radSite: DataFrame containing the information of the radial site that produced the radial
+        
+    OUTPUT:
+        instacDS: xarray dataset compliant with the Copernicus Marine Service In Situ TAC data model for MY products
+    """
+    
+    # Get data packing information per variable
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Totals/Total_Data_Packing.json')
+    dataPacking = json.loads(f.read())
+    f.close()
+    
+    # Get variable attributes
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Totals/Total_Variables.json')
+    totVariables = json.loads(f.read())
+    f.close()
+    
+    # Get global attributes
+    f = open('Data_Models/CMEMS_IN_SITU_TAC/Global_Attributes.json')
+    globalAttributes = json.loads(f.read())
+    f.close()
+    
+    # Create the output dataset
+    instacDS = tDS
+    instacDS.encoding = {}
+    
+    # Evaluate time coverage start, end, resolution and duration
+    timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=networkData.iloc[0]['temporal_resolution']/2)
+    timeCoverageEnd = pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime() + relativedelta(minutes=networkData.iloc[0]['temporal_resolution']/2)
+    
+    timeCoverageDuration = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
+    
+    # Build the file id
+    ID = 'GL_TV_HF_' + tDS.attrs['platform_code'] + '_' + timeCoverageStart.strftime('%Y%m%d') + '-' + timeCoverageEnd.strftime('%Y%m%d')
+    
+    # Get the attributes and the data type of crs variable
+    crsAttrs = instacDS.crs.attrs
+    crsDataType = instacDS.crs.encoding['dtype']
+    
+    # Remove crs variable (it's time-varying because of the temporal aggregation)
+    instacDS = instacDS.drop_vars('crs')
+    
+    # Add time-independent crs variable
+    instacDS['crs'] = xr.DataArray(int(0), )
+    instacDS['crs'].attrs = crsAttrs
+    instacDS['crs'].encoding['dtype'] = crsDataType
+    
+    # Remove encoding for data variables
+    for vv in instacDS:
+        if 'char_dim_name' in instacDS[vv].encoding.keys():
+            instacDS[vv] = instacDS[vv].astype(tDS[vv].encoding['char_dim_name'].replace('STRING','S'))
+            instacDS[vv].encoding = {'char_dim_name': tDS[vv].encoding['char_dim_name']}
+        else:
+            instacDS[vv].encoding = {}
+            
+    # Add data variable attributes to the DataSet
+    for vv in instacDS:
+        instacDS[vv].attrs = totVariables[vv]
+        
+    # Add coordinate variable attributes to the DataSet
+    for cc in instacDS.coords:
+        instacDS[cc].attrs = totVariables[cc]
+    
+    # Modify data_mode variable attribute for data variables
+    for vv in instacDS:
+        if 'data_mode' in instacDS[vv].attrs:
+            instacDS[vv].attrs['data_mode'] = 'D'
+            
+    # Modify data_mode variable attribute for coordinate variables
+    for cc in instacDS.coords:
+        if 'data_mode' in instacDS[cc].attrs:
+            instacDS[cc].attrs['data_mode'] = 'D'
+            
+    # Update QC variable attribute "comment" for inserting test thresholds
+    for qcv in list(tDS.keys()):
+        if 'QC' in qcv:
+            if not qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
+                instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + tDS[qcv].attrs['comment']   
+    
+    # Update QC variable attribute "flag_values" for assigning the right data type
+    for qcv in instacDS:
+        if 'QC' in qcv:
+            instacDS[qcv].attrs['flag_values'] = list(np.int_(instacDS[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
+        
+    # Modify some global attributes
+    instacDS.attrs['id'] = ID
+    instacDS.attrs['data_mode'] = 'D'
+    instacDS.attrs['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
+    instacDS.attrs['time_coverage_end'] = timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ')
+    instacDS.attrs['time_coverage_duration'] = timeCoverageDuration    
+    creationDate = dt.datetime.utcnow()
+    instacDS.attrs['date_created'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+    instacDS.attrs['date_modified'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+    instacDS.attrs['history'] = 'Data measured from ' + timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ') + ' to ' \
+                                + timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
+                                + creationDate.strftime('%Y-%m-%dT%H:%M:%SZ') + ' by the European HFR Node.'        
+    
+    # Encode data types, data packing and _FillValue for the data variables of the DataSet
+    for vv in instacDS:
+        if vv in dataPacking:
+            if 'dtype' in dataPacking[vv]:
+                instacDS[vv].encoding['dtype'] = dataPacking[vv]['dtype']
+            if 'scale_factor' in dataPacking[vv]:
+                instacDS[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']    
+            if 'add_offset' in dataPacking[vv]:
+                instacDS[vv].encoding['add_offset'] = dataPacking[vv]['add_offset']
+            if 'fill_value' in dataPacking[vv]:
+                if not vv in ['SCDR', 'SCDT']:
+                    instacDS[vv].encoding['_FillValue'] = nc4.default_fillvals[np.dtype(dataPacking[vv]['dtype']).kind + str(np.dtype(dataPacking[vv]['dtype']).itemsize)]
+                else:
+                    instacDS[vv].encoding['_FillValue'] = b' '
+                    
+            else:
+                instacDS[vv].encoding['_FillValue'] = None
+                
+    # Update valid_min and valid_max variable attributes according to data packing for data variables
+    for vv in instacDS:
+        if 'valid_min' in totVariables[vv]:
+            if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                instacDS[vv].attrs['valid_min'] = np.float_(((totVariables[vv]['valid_min'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+            else:
+                instacDS[vv].attrs['valid_min'] = np.float_(totVariables[vv]['valid_min']).astype(dataPacking[vv]['dtype'])
+        if 'valid_max' in totVariables[vv]:             
+            if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
+                instacDS[vv].attrs['valid_max'] = np.float_(((totVariables[vv]['valid_max'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+            else:
+                instacDS[vv].attrs['valid_max'] = np.float_(totVariables[vv]['valid_max']).astype(dataPacking[vv]['dtype'])
+                
+    # Encode data types, data packing and _FillValue for the coordinate variables of the DataSet
+    for cc in instacDS.coords:
+        if cc in dataPacking:
+            if 'dtype' in dataPacking[cc]:
+                instacDS[cc].encoding['dtype'] = dataPacking[cc]['dtype']
+            if 'scale_factor' in dataPacking[cc]:
+                instacDS[cc].encoding['scale_factor'] = dataPacking[cc]['scale_factor']                
+            if 'add_offset' in dataPacking[cc]:
+                instacDS[cc].encoding['add_offset'] = dataPacking[cc]['add_offset']
+            if 'fill_value' in dataPacking[cc]:
+                instacDS[cc].encoding['_FillValue'] = nc4.default_fillvals[np.dtype(dataPacking[cc]['dtype']).kind + str(np.dtype(dataPacking[cc]['dtype']).itemsize)]
+            else:
+                instacDS[cc].encoding['_FillValue'] = None
+        
+    # Update valid_min and valid_max variable attributes according to data packing for coordinate variables
+    for cc in instacDS.coords:
+        if 'valid_min' in totVariables[cc]:
+            if ('scale_factor' in dataPacking[cc]) and ('add_offset' in dataPacking[cc]):
+                instacDS[cc].attrs['valid_min'] = np.float_(((totVariables[cc]['valid_min'] - dataPacking[cc]['add_offset']) / dataPacking[cc]['scale_factor'])).astype(dataPacking[cc]['dtype'])
+            else:
+                instacDS[cc].attrs['valid_min'] = np.float_(totVariables[cc]['valid_min']).astype(dataPacking[cc]['dtype'])
+        if 'valid_max' in totVariables[cc]:             
+            if ('scale_factor' in dataPacking[cc]) and ('add_offset' in dataPacking[cc]):
+                instacDS[cc].attrs['valid_max'] = np.float_(((totVariables[cc]['valid_max'] - dataPacking[cc]['add_offset']) / dataPacking[cc]['scale_factor'])).astype(dataPacking[cc]['dtype'])
+            else:
+                instacDS[cc].attrs['valid_max'] = np.float_(totVariables[cc]['valid_max']).astype(dataPacking[cc]['dtype'])
+           
+    return instacDS
+
+def adjustToMYINSTACradialDatamodel(rDS, radSite):
+    """
+    This function adjusts the data model of the input aggregated radial dataset for complying with
+    the Copernicus Marine Service data model for MY products.
+    the input dataset must follow the Copernicus Marine Servvice In Situ TAC data model for 
+    NRT products.
+    
+    The function returns an xarray dataset compliant with the Copernicus Marine Service 
+    In Situ TAC data model for MY products.
+    
+    INPUT:
+        rDS: xarray DataSet containing temporally aggregated radial data.  
+        radSite: DataFrame containing the information of the radial site that produced the radial
         
     OUTPUT:
         instacDS: xarray dataset compliant with the Copernicus Marine Service In Situ TAC data model for MY products
@@ -86,25 +253,13 @@ def adjustToMYINSTACradialDatamodel(rDS, stationData):
     instacDS.encoding = {}
     
     # Evaluate time coverage start, end, resolution and duration
-    timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
-    timeCoverageEnd = pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime() + relativedelta(minutes=stationData.iloc[0]['temporal_resolution']/2)
+    timeCoverageStart = pd.Timestamp(instacDS['TIME'].values.min()).to_pydatetime() - relativedelta(minutes=radSite.iloc[0]['temporal_resolution']/2)
+    timeCoverageEnd = pd.Timestamp(instacDS['TIME'].values.max()).to_pydatetime() + relativedelta(minutes=radSite.iloc[0]['temporal_resolution']/2)
     
     timeCoverageDuration = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
     
     # Build the file id
     ID = 'GL_RV_HF_' + rDS.attrs['platform_code'] + '_' + timeCoverageStart.strftime('%Y%m%d') + '-' + timeCoverageEnd.strftime('%Y%m%d')
-    
-    # # Get the TIME variable values
-    # xdsTime = instacDS.TIME.values
-    # # Convert them to datetime datetimes
-    # dtTime = np.array([pd.Timestamp(t).to_pydatetime() for t in xdsTime])
-    
-    # # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
-    # timeDelta = dtTime - dt.datetime.strptime('1950-01-01T00:00:00Z','%Y-%m-%dT%H:%M:%SZ')
-    # ncTime = np.array([t.days + t.seconds / (60*60*24) for t in timeDelta])
-    
-    # # Replace TIME variable values with timestamp as number of days since 1950-01-01T00:00:00Z
-    # instacDS = instacDS.assign_coords(TIME=ncTime)
     
     # Get the attributes and the data type of crs variable
     crsAttrs = instacDS.crs.attrs
@@ -118,6 +273,14 @@ def adjustToMYINSTACradialDatamodel(rDS, stationData):
     instacDS['crs'].attrs = crsAttrs
     instacDS['crs'].encoding['dtype'] = crsDataType
     
+    # Remove encoding for data variables
+    for vv in instacDS:
+        if 'char_dim_name' in instacDS[vv].encoding.keys():
+            instacDS[vv] = instacDS[vv].astype(rDS[vv].encoding['char_dim_name'].replace('STRING','S'))
+            instacDS[vv].encoding = {'char_dim_name': rDS[vv].encoding['char_dim_name']}
+        else:
+            instacDS[vv].encoding = {}
+            
     # Add data variable attributes to the DataSet
     for vv in instacDS:
         instacDS[vv].attrs = radVariables[vv]
@@ -136,41 +299,16 @@ def adjustToMYINSTACradialDatamodel(rDS, stationData):
         if 'data_mode' in instacDS[cc].attrs:
             instacDS[cc].attrs['data_mode'] = 'D'
             
-    # Remove _FillValue for coordinate variables
-    for cc in instacDS.coords:
-        if cc in instacDS.dims:
-            instacDS[cc].encoding['_FillValue'] = None
+    # Update QC variable attribute "comment" for inserting test thresholds
+    for qcv in list(rDS.keys()):
+        if 'QC' in qcv:
+            if not qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
+                instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + rDS[qcv].attrs['comment']   
     
-    
-    # Remove encoding for data variables
-    for vv in instacDS:
-        if 'char_dim_name' in instacDS[vv].encoding.keys():
-            instacDS[vv].encoding = {'char_dim_name': instacDS[vv].encoding['char_dim_name']}
-            # instacDS[vv] = instacDS[vv].astype('S1')
-        else:
-            instacDS[vv].encoding = {}
-            
-    # # Remove attributes and encoding from coordinates variables
-    # for cc in instacDS.coords:
-    #     instacDS[cc].attrs = {}
-    #     instacDS[cc].encoding = {}
-        
-    # # Add units and calendar to encoding for coordinate TIME
-    # instacDS['TIME'].encoding['units'] = 'days since 1950-01-01T00:00:00Z'
-    # instacDS['TIME'].encoding['calendar'] = 'standard'
-    
-    
-    
-    # # Update QC variable attribute "comment" for inserting test thresholds
-    # for qcv in list(rDS.keys()):
-    #     if 'QC' in qcv:
-    #         if not qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
-    #             instacDS[qcv].attrs['comment'] = instacDS[qcv].attrs['comment'] + ' ' + rDS[qcv].attrs['comment']   
-    
-    # # Update QC variable attribute "flag_values" for assigning the right data type
-    # for qcv in instacDS:
-    #     if 'QC' in qcv:
-    #         instacDS[qcv].attrs['flag_values'] = list(np.int_(instacDS[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
+    # Update QC variable attribute "flag_values" for assigning the right data type
+    for qcv in instacDS:
+        if 'QC' in qcv:
+            instacDS[qcv].attrs['flag_values'] = list(np.int_(instacDS[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
         
     # Modify some global attributes
     instacDS.attrs['id'] = ID
@@ -185,12 +323,6 @@ def adjustToMYINSTACradialDatamodel(rDS, stationData):
                                 + timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
                                 + creationDate.strftime('%Y-%m-%dT%H:%M:%SZ') + ' by the European HFR Node.'        
     
-    # # Remove spatial_resolution global attribute (only admitted for totals)
-    # globalAttributes.pop('spatial_resolution')
-    
-    # # Add global attributes to the DataSet
-    # instacDS.attrs = globalAttributes
-        
     # Encode data types, data packing and _FillValue for the data variables of the DataSet
     for vv in instacDS:
         if vv in dataPacking:
@@ -251,8 +383,141 @@ def adjustToMYINSTACradialDatamodel(rDS, stationData):
            
     return instacDS
 
+def aggregateTotals(groupedTot,networkData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger):
+    """
+    This function performs the temporal aggregation of radial files into the MY netCDF files
+    according to the Copernicus Marine Service In Situ TAC data model.
+    The aggregation is performed according to the time interval specified in input.
     
-def aggregateRadials(groupedRad,networkID,stationData,instacFolder,monthly,yearly,history,compression,vers,logger):
+    INPUTS:
+        groupedTot: DataFrame containing the radials to be processed grouped by timestamp
+                    for the input network with the related information
+        networkData: DataFRame containing the information about the network to be processed
+        instacFolder: full path of the folder where to pick input data for Copernicus Marine Service 
+        outputFolder: full path of the folder where to save output data for Copernicus Marine Service 
+        monthly: boolean for enabling monthly aggregation
+        yearly: boolean for enabling yearly aggregation
+        history: boolean for enabling the aggregation of all present files
+        compression: boolean for enabling netCDF compression
+        vers: version of the data model
+        logger: logger object of the current processing
+
+        
+    OUTPUTS:
+        
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    aTerr = False
+    
+    try:
+        
+        #####
+        # Manage the output folders
+        #####
+        
+        # Get station id
+        networkID = groupedTot.iloc[0]['network_id']
+        
+        # Set the output folder path
+        outputFolder = os.path.join(outputFolder,'MY',networkID,'Totals',vers)
+        if not os.path.isdir(outputFolder):
+            os.makedirs(outputFolder)         
+        
+        #####        
+        # Open the netCDF files in an aggregated dataset
+        #####
+        
+        # Create the list of the total files to be aggregated
+        totalFiles = [os.path.join(groupedTot.iloc[idx]['filepath'],groupedTot.iloc[idx]['filename']) for idx in np.arange(len(groupedTot))]
+
+        if len(totalFiles)>0:
+            # Open all netCDF files to be aggregated
+            aggrDS = xr.open_mfdataset(totalFiles,combine='nested',concat_dim='TIME',coords='minimal',compat='override',join='override')
+            # aggrDS = xr.open_mfdataset(totalFiles,combine='nested',concat_dim='TIME',join='override')
+            
+        #####        
+        # Convert to Copernicus Marine Service In Situ TAC data format for MY products
+        #####
+            
+            # Apply the Copernicus Marine Service In Situ TAC data model
+            myDS = adjustToMYINSTACtotalDatamodel(aggrDS,networkData)
+            
+            # Perform compression, if needed
+            if compression:
+                enc = {}
+                for vv in myDS.data_vars:
+                    if myDS[vv].ndim < 2:
+                        continue                
+                    enc[vv] = myDS[vv].encoding
+                    enc[vv]['zlib'] = True
+                    enc[vv]['complevel'] = 9
+                    enc[vv]['fletcher32'] = True
+            
+            # Set the filename (with full path) for the aggregated netCDF file
+            if monthly:
+                timeStr = '_' + pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y%m')
+            elif yearly:
+                timeStr = '_' + pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y')
+            elif history:
+                timeStr = ''
+            else:
+                timeStr = '_' + pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y%m%d') + '-' + pd.Timestamp(myDS.TIME.values.max()).to_pydatetime().strftime('%Y%m%d')
+            ncFilenameInstac = 'GL_TV_HF_' + networkID + '_Total' + timeStr + '.nc'
+            ncFileInstac = os.path.join(outputFolder, ncFilenameInstac )
+            
+            # Modify ID global attribute if needed
+            if monthly or yearly :
+                myDS.attrs['id'] = 'GL_TV_HF_' + myDS.attrs['platform_code'] + '_' + timeStr
+            elif history:
+                myDS.attrs['id'] = 'GL_TV_HF_' + myDS.attrs['platform_code']
+            
+            # Check if the netCDF file exists and remove it
+            if os.path.isfile(ncFileInstac):
+                os.remove(ncFileInstac)
+            
+            # Create netCDF from DataSet and save it
+            if compression:
+                myDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4', encoding=enc)
+            else:
+                myDS.to_netcdf(ncFileInstac, format='NETCDF4_CLASSIC', engine='netcdf4')
+            
+            # Modify the units attribute of TIME variable for including timezone digit
+            ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
+            ncf.variables['TIME'].units = 'days since 1950-01-01T00:00:00Z'
+            ncf.variables['TIME'].calendar = 'standard'
+            ncf.close()
+            
+            # Remove 'coordinates' attribute from variables POSITION_QC, QCflag, VART_QC, GDOP_QC, DDNS_QC, CSPD_QC
+            ncf = nc4.Dataset(ncFileInstac,'r+',format='NETCDF4_CLASSIC')
+            ncf.variables['POSITION_QC'].delncattr('coordinates')
+            ncf.variables['QCflag'].delncattr('coordinates')
+            ncf.variables['VART_QC'].delncattr('coordinates')
+            ncf.variables['GDOP_QC'].delncattr('coordinates')
+            ncf.variables['DDNS_QC'].delncattr('coordinates')
+            ncf.variables['CSPD_QC'].delncattr('coordinates')
+            ncf.close()
+            
+            logger.info(ncFilenameInstac + ' total netCDF file succesfully created and stored in Copericus Marine Service In Situ TAC buffer (' + vers + ').')
+            
+        else:
+            return
+        
+    except Exception as err:
+        aTerr = True
+        if 'ncFilenameInstac' in locals():
+            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file ' + ncFilenameInstac)
+        else:
+            logger.error(err.args[0] + ' in creating Copernicus Marine Service In Situ TAC radial file for time interval ' + timeStr)
+        return     
+    
+    return  
+
+    
+def aggregateRadials(groupedRad,networkID,stationData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger):
     """
     This function performs the temporal aggregation of radial files into the MY netCDF files
     according to the Copernicus Marine Service In Situ TAC data model.
@@ -264,7 +529,8 @@ def aggregateRadials(groupedRad,networkID,stationData,instacFolder,monthly,yearl
         networkID: network ID of the network to be processed
         stationData: DataFrame containing the information of the stations belonging 
                      to the network to be processed
-        instacFolder: full path of the folder where to save data for Copernicus Marine Service 
+        instacFolder: full path of the folder where to pick input data for Copernicus Marine Service 
+        outputFolder: full path of the folder where to save output data for Copernicus Marine Service 
         monthly: boolean for enabling monthly aggregation
         yearly: boolean for enabling yearly aggregation
         history: boolean for enabling the aggregation of all present files
@@ -290,10 +556,10 @@ def aggregateRadials(groupedRad,networkID,stationData,instacFolder,monthly,yearl
         #####
         
         # Get station id
-        stationID = stationData.iloc[0]['station_id']
+        stationID = groupedRad.iloc[0]['station_id']
         
         # Set the output folder path
-        outputFolder = os.path.join(instacFolder,'MY',networkID,'Radials',vers,stationID)
+        outputFolder = os.path.join(outputFolder,'MY',networkID,'Radials',vers,stationID)
         if not os.path.isdir(outputFolder):
             os.makedirs(outputFolder)         
         
@@ -313,7 +579,7 @@ def aggregateRadials(groupedRad,networkID,stationData,instacFolder,monthly,yearl
         #####
             
             # Apply the Copernicus Marine Service In Situ TAC data model
-            myDS = adjustToMYINSTACradialDatamodel(aggrDS,stationData)
+            myDS = adjustToMYINSTACradialDatamodel(aggrDS,stationData.loc[stationData['station_id'] == stationID])
             
             # Perform compression, if needed
             if compression:
@@ -328,19 +594,21 @@ def aggregateRadials(groupedRad,networkID,stationData,instacFolder,monthly,yearl
             
             # Set the filename (with full path) for the aggregated netCDF file
             if monthly:
-                timeStr = pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y%m')
+                timeStr = '_' + pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y%m')
             elif yearly:
-                timestr = pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y')
+                timeStr = '_' + pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y')
             elif history:
-                timeStr = '_history'
+                timeStr = ''
             else:
-                timeStr = myDS.TIME
-            ncFilenameInstac = 'GL_RV_HF_' + networkID + '-' + stationID + '_' + timeStr + '.nc'
+                timeStr = '_' + pd.Timestamp(myDS.TIME.values.min()).to_pydatetime().strftime('%Y%m%d') + '-' + pd.Timestamp(myDS.TIME.values.max()).to_pydatetime().strftime('%Y%m%d')
+            ncFilenameInstac = 'GL_RV_HF_' + networkID + '-' + stationID + timeStr + '.nc'
             ncFileInstac = os.path.join(outputFolder, ncFilenameInstac )
             
             # Modify ID global attribute if needed
-            if monthly or yearly or history:
+            if monthly or yearly :
                 myDS.attrs['id'] = 'GL_RV_HF_' + myDS.attrs['platform_code'] + '_' + timeStr
+            elif history:
+                myDS.attrs['id'] = 'GL_RV_HF_' + myDS.attrs['platform_code']
             
             # Check if the netCDF file exists and remove it
             if os.path.isfile(ncFileInstac):
@@ -556,7 +824,7 @@ def selectRadials(networkID, stationData, startDate, endDate, instacFolder, vers
     
     return radialsToBeAggregated
 
-def aggregateNetwork(networkID, startDate, endDate, monthly, yearly, history, compression, instacFolder, sqlConfig):
+def aggregateNetwork(networkID, startDate, endDate, monthly, yearly, history, compression, instacFolder, outputFolder, sqlConfig):
     """
     This function processes the radial and total files of a single HFR network
     for temporally aggregating netCDF files according to the Copernicus Marine 
@@ -576,7 +844,8 @@ def aggregateNetwork(networkID, startDate, endDate, monthly, yearly, history, co
         yearly: boolean for enabling yearly aggregation
         history: boolean for enabling the aggregation of all present files
         compression: boolean for enabling netCDF compression
-        instacFolder: full path of the folder where to save data for Copernicus Marine Service
+        instacFolder: full path of the folder where to pick input data for Copernicus Marine Service
+        outputFolder: full path of the folder where to save output data for Copernicus Marine Service
         sqlConfig: parameters for connecting to the Mysql EU HFR NODE EU HFR NODE database
 
         
@@ -680,16 +949,23 @@ def aggregateNetwork(networkID, startDate, endDate, monthly, yearly, history, co
             logger.info('Radial aggregation started for ' + networkID + ' network')
             if monthly:
                 radialsToBeAggregated.index=pd.to_datetime(radialsToBeAggregated['datetime'])
-                radialsToBeAggregated.groupby(by=[radialsToBeAggregated.index.month, 'station_id'], group_keys=False).apply(lambda x:aggregateRadials(x,networkID,stationData,instacFolder,monthly,yearly,history,compression,vers,logger))
+                radialsToBeAggregated.groupby(by=['station_id', radialsToBeAggregated.index.year, radialsToBeAggregated.index.month], group_keys=False).apply(lambda x:aggregateRadials(x,networkID,stationData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger))
             elif yearly:
-                bbb
+                radialsToBeAggregated.index=pd.to_datetime(radialsToBeAggregated['datetime'])
+                radialsToBeAggregated.groupby(by=['station_id', radialsToBeAggregated.index.year], group_keys=False).apply(lambda x:aggregateRadials(x,networkID,stationData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger))
             else:
-                radialsToBeAggregated.groupby('station_id', group_keys=False).apply(lambda x:aggregateRadials(x,networkID,networkData,stationData,instacFolder,vers,logger))
+                radialsToBeAggregated.groupby('station_id', group_keys=False).apply(lambda x:aggregateRadials(x,networkID,stationData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger))
         
-        # Process totals
-        if ('HFR-US' in networkID) or (networkData.iloc[0]['radial_combination'] == 0):
-            logger.info('Total processing started for ' + networkID + ' network') 
-            totalsToBeAggregated.groupby('datetime', group_keys=False).apply(lambda x:processTotals(x,networkID,networkData,stationData,instacFolder,vers,logger))
+        # Aggregate totals
+        logger.info('Total aggregation started for ' + networkID + ' network')
+        if monthly:
+            totalsToBeAggregated.index=pd.to_datetime(totalsToBeAggregated['datetime'])
+            totalsToBeAggregated.groupby(by=[totalsToBeAggregated.index.year, totalsToBeAggregated.index.month], group_keys=False).apply(lambda x:aggregateTotals(x,networkData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger))
+        elif yearly:
+            totalsToBeAggregated.index=pd.to_datetime(totalsToBeAggregated['datetime'])
+            totalsToBeAggregated.groupby(by=[totalsToBeAggregated.index.year], group_keys=False).apply(lambda x:aggregateTotals(x,networkData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger))
+        else:
+            totalsToBeAggregated.groupby('network_id', group_keys=False).apply(lambda x:aggregateTotals(x,networkData,instacFolder,outputFolder,monthly,yearly,history,compression,vers,logger))
             
         # Wait a bit (useful for multiprocessing management)
         time.sleep(30)
@@ -714,7 +990,7 @@ def main(argv):
        
     # Set the argument structure
     try:
-        opts, args = getopt.getopt(argv,"n:s:e:m:y:a:i:c:h",["network=","start-date=","end-date=","monthly","yearly","all","instac-folder=","compression","help"])
+        opts, args = getopt.getopt(argv,"n:s:e:myai:o:ch",["network=","start-date=","end-date=","monthly","yearly","all","instac-folder=","output-folder","compression","help"])
     except getopt.GetoptError:
         print('Usage: EU_HFR_NODE_MYaggregator.py -n <network ID of the network to be processed (if not specified, all the networks are processed)> ' \
               + '-s <initial date for processing formatted as yyyy-mm-dd (ISO8601 UTC date representation)> ' \
@@ -722,9 +998,10 @@ def main(argv):
                       + '-m <if specified enables the monthly aggregation (only one option among -m, -y, -a, [-s -e] must be specified)> ' \
                           + '-y <if specified enables the yearly aggregation (only one option among -m, -y, -a, [-s -e] must be specified)> ' \
                               + '-a <if specified enables the aggregation of all present files (only one option among -m, -y, -a, [-s -e] must be specified)> ' \
-                                  + '-i <full path of the folder where to save data for Copernicus Marine Service (if not specified, no files for Copernicus Marine Service are produced)>' \
-                                        + '-c <if specified enables the compression of the output netCDF files (disabled by default)> ' \
-                                            + '-h <shows help>')
+                                  + '-i <full path of the folder where to collect input data for Copernicus Marine Service>' \
+                                      + '-o <full path of the folder where to save data for Copernicus Marine Service (if not specified, no files for Copernicus Marine Service are produced)>' \
+                                          + '-c <if specified enables the compression of the output netCDF files (disabled by default)> ' \
+                                              + '-h <shows help>')
         sys.exit(2)
         
     if not argv:
@@ -763,6 +1040,10 @@ def main(argv):
         print("No input data folder specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
         sys.exit(2)
         
+    if (('-o' not in argv) and ('--output-folder' not in argv)):
+        print("No output data folder specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+        sys.exit(2)
+        
     # Initialize optional arguments
     ntw = None
     startDate = None
@@ -780,9 +1061,10 @@ def main(argv):
                           + '-m <if specified enables the monthly aggregation (only one option among -m, -y, -a, [-s -e] must be specified)> ' \
                               + '-y <if specified enables the yearly aggregation (only one option among -m, -y, -a, [-s -e] must be specified)> ' \
                                   + '-a <if specified enables the aggregation of all present files (only one option among -m, -y, -a, [-s -e] must be specified)> ' \
-                                      + '-i <full path of the folder where to save data for Copernicus Marine Service (if not specified, no files for Copernicus Marine Service are produced)>' \
-                                            + '-c <if specified enables the compression of the output netCDF files (disabled by default)> ' \
-                                                + '-h <shows help>')
+                                      + '-i <full path of the folder where to collect input data for Copernicus Marine Service>' \
+                                          + '-o <full path of the folder where to save data for Copernicus Marine Service (if not specified, no files for Copernicus Marine Service are produced)>' \
+                                              + '-c <if specified enables the compression of the output netCDF files (disabled by default)> ' \
+                                                  + '-h <shows help>')
             sys.exit()
         elif opt in ("-n", "--network"):
             ntw = arg
@@ -814,6 +1096,8 @@ def main(argv):
             if not os.path.isdir(instacFolder):
                 print('The specified folder for Copernicus Marine Service data does not exist.')
                 sys.exit(2)
+        elif opt in ("-o", "--output-folder"):
+            outputFolder = arg.strip()
         elif opt in ("-c", "--compression"):
             compression = True
             
@@ -885,7 +1169,7 @@ def main(argv):
     try:
         # Check if a specific network is selected for aggregation
         if ntw:
-            aggregateNetwork(ntw, startDate, endDate, monthly, yearly, history, compression, instacFolder, sqlConfig)
+            aggregateNetwork(ntw, startDate, endDate, monthly, yearly, history, compression, instacFolder, outputFolder, sqlConfig)
         # Process all networks if no specific network is specified for processing
         else:
             # Set the queue containing the network IDs
@@ -907,7 +1191,7 @@ def main(argv):
                     # Wait a bit (useful for multiprocessing management)
                     time.sleep(10)
                     # Start the process and insert process and the related network ID into the dictionary of the running processs
-                    pool[ex.submit(aggregateNetwork, ntw, startDate, endDate, monthly, yearly, history, compression, instacFolder, sqlConfig)] = ntw
+                    pool[ex.submit(aggregateNetwork, ntw, startDate, endDate, monthly, yearly, history, compression, instacFolder, outputFolder, sqlConfig)] = ntw
                     logger.info('MY temporal aggregation for ' + ntw + ' network started')
                     # Pop the network from the queue
                     networkQueue.remove(ntw)
@@ -933,7 +1217,7 @@ def main(argv):
                             # Wait a bit (useful for multiprocessing management)
                             time.sleep(10)
                             # Start the process and insert process and the related network ID into the dictionary of the running processs
-                            pool[ex.submit(aggregateNetwork, nxtNtw, startDate, endDate, monthly, yearly, history, compression, instacFolder, sqlConfig)] = nxtNtw
+                            pool[ex.submit(aggregateNetwork, nxtNtw, startDate, endDate, monthly, yearly, history, compression, instacFolder, outputFolder, sqlConfig)] = nxtNtw
                             logger.info('MY temporal aggregation for ' + nxtNtw + ' network started')
                             # Pop the network from the queue
                             networkQueue.remove(nxtNtw)            
