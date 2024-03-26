@@ -1667,7 +1667,7 @@ class Total(fileParser):
         
     def qc_ehn_data_density_threshold(self, minContrRad=2):
         """
-        This test labels total velocity vectors with a number of contributing radial velocities smaller 
+        This test labels total velocity vectors with a number of contributing radial velocities bigger 
         than the minimum number defined for normal operations with a “good data” flag. 
         Otherwise the vectors are labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
