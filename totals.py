@@ -679,6 +679,9 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
         # Fill Total with combination results
         Tcomb.data[['VELU', 'VELV','VELO','HEAD','UQAL','VQAL','CQAL','GDOP','NRAD']] = totData
         
+        # Mask out vectors on land
+        Tcomb.mask_over_land()
+        
         # Get the indexes of grid cells without total vectors
         indexNoVec = Tcomb.data[Tcomb.data['VELU'].isna()].index
         # Delete these row indexes from DataFrame
