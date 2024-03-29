@@ -47,6 +47,7 @@
         "ancillary_variables": "DEPTH_QC"
     },
     "LATITUDE": {
+        "axis": "Y",
         "standard_name": "latitude",
         "long_name": "Latitude",
         "units": "degree_north",
@@ -60,6 +61,7 @@
         "ancillary_variables": "POSITION_QC"
     },
     "LONGITUDE": {
+        "axis": "X",
         "standard_name": "longitude",
         "long_name": "Longitude",
         "units": "degree_east",

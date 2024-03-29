@@ -60,6 +60,7 @@
         "data_mode": "R"
     },
     "LATITUDE": {
+        "axis": "Y",
         "standard_name": "latitude",
         "long_name": "Latitude of each location",
         "units": "degree_north",
@@ -74,6 +75,7 @@
         "ancillary_variables": "POSITION_QC"
     },
     "LONGITUDE": {
+        "axis": "X",
         "standard_name": "longitude",
         "long_name": "Longitude of each location",
         "units": "degree_east",

@@ -203,6 +203,11 @@ def convertEHNtoINSTACradialDatamodel(rDS, networkData, stationData, version):
     for cc in instacDS.coords:
         instacDS[cc].attrs = radVariables[cc]
     
+    # Remove axis attributes from LONGITUDE and LATITUDE variables for polar geometry radials (i.e. Codar radials)
+    if 'BEAR' in instacDS.coords:
+        instacDS.LONGITUDE.attrs.pop('axis')
+        instacDS.LATITUDE.attrs.pop('axis')
+    
     # Update QC variable attribute "comment" for inserting test thresholds
     for qcv in list(rDS.keys()):
         if 'QC' in qcv:
@@ -1113,6 +1118,11 @@ class Radial(fileParser):
         # Add coordinate variable attributes to the DataSet
         for cc in self.xds.coords:
             self.xds[cc].attrs = radVariables[cc]
+        
+        # Remove axis attributes from LONGITUDE and LATITUDE variables for polar geometry radials (i.e. Codar radials)
+        if not self.is_wera:
+            self.xds.LONGITUDE.attrs.pop('axis')
+            self.xds.LATITUDE.attrs.pop('axis')
             
         # Evaluate measurement maximum depth
         vertMax = 3e8 / (8*np.pi * station_data.iloc[0]['transmit_central_frequency']*1e6)
