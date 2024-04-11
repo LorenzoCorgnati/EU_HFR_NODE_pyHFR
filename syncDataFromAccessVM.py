@@ -100,8 +100,12 @@ def main(argv):
             client.connect(hostname=sshConfig['alias'], username=sshConfig['username'])
             logger.info('SSH connection established with the remote server')
         except Exception as err:
-            logger.info('Cannot connect to the SSH server')
-            exit()
+            try:
+                client.connect(hostname=sshConfig['hostname'], username=sshConfig['username'])
+                logger.info('SSH connection established with the remote server')
+            except Exception as err:
+                logger.info('Cannot connect to the SSH server')
+                exit()
             
 #####
 # Retrieve the source folders for each network
@@ -117,7 +121,7 @@ def main(argv):
             if err:
                 logger.info(err)    
                 exit(1)
-            srcFolders = stdout.read().decode().split('\n')
+            allSrcFolders = stdout.read().decode().split('\n')
             logger.info('Source folders succesfully lsited from remote server')
             
         finally:
@@ -127,17 +131,19 @@ def main(argv):
 # Execute synchronization
 #####
 
-        if srcFolders:
-            # Manage source folder paths
-            srcFolders = [item for item in srcFolders if (('Radials' in item) or ('Totals' in item))]
+        if allSrcFolders:
+            # Manage source folder paths: keep only folder paths containing 'Radials' and 'Totals' strings
+            allSrcFolders = [item for item in allSrcFolders if (('Radials' in item) or ('Totals' in item))]
             
-            # ELIMINARE PATH CHE CONTENGONO SUBPATH PRESENTI NELLA LISTA
-            res = [item for item in srcFolders if(ele in test_string)]
-    
+            # Manage source folder paths: keep only folder paths that are not subpaths of others
+            srcFolders = []
+            for srcFolder in allSrcFolders:
+                res = [item for item in allSrcFolders if srcFolder in item]
+                if len(res) == 1:
+                    srcFolders.append(srcFolder)
+                    
+            # Synchronize files
             for srcFolder in srcFolders:
-                if srcFolder:
-                    
-                    
                     
                     # Build destination folder path
                     # SOSTITUIRE SUORCE BASE CON DEST BASE
