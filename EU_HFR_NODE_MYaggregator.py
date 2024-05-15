@@ -1008,41 +1008,42 @@ def main(argv):
         print("No options specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
         sys.exit(2)
         
-    if (('-m' in argv) or ('--monthly' in argv)):
-        if (('-y' in argv) or ('--yearly' in argv)) or (('-a' in argv) or ('--all' in argv)) or (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
-            print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
-            sys.exit(2)
+    if '-h' not in argv:        
+        if (('-m' in argv) or ('--monthly' in argv)):
+            if (('-y' in argv) or ('--yearly' in argv)) or (('-a' in argv) or ('--all' in argv)) or (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
+                print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+                sys.exit(2)
+            
+        if (('-y' in argv) or ('--yearly' in argv)):
+            if (('-m' in argv) or ('--monthly' in argv)) or (('-a' in argv) or ('--all' in argv)) or (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
+                print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+                sys.exit(2)
+                
+        if (('-a' in argv) or ('--all' in argv)):
+            if (('-y' in argv) or ('--yearly' in argv)) or (('-m' in argv) or ('--monthly' in argv)) or (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
+                print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+                sys.exit(2)
         
-    if (('-y' in argv) or ('--yearly' in argv)):
-        if (('-m' in argv) or ('--monthly' in argv)) or (('-a' in argv) or ('--all' in argv)) or (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
-            print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+        if (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
+            if (('-y' in argv) or ('--yearly' in argv)) or (('-a' in argv) or ('--all' in argv)) or (('-m' in argv) or ('--monthly' in argv)):
+                print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+                sys.exit(2)
+                
+        if (('-s' in argv) or ('--start-date' in argv)) and (('-e' not in argv) and ('--end-date' not in argv)):
+            print("No end date for aggregation specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
             sys.exit(2)
             
-    if (('-a' in argv) or ('--all' in argv)):
-        if (('-y' in argv) or ('--yearly' in argv)) or (('-m' in argv) or ('--monthly' in argv)) or (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
-            print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
-            sys.exit(2)
-    
-    if (('-s' in argv) or ('--start-date' in argv)) or (('-e' in argv) or ('--end-date' in argv)):
-        if (('-y' in argv) or ('--yearly' in argv)) or (('-a' in argv) or ('--all' in argv)) or (('-m' in argv) or ('--monthly' in argv)):
-            print("Too many aggregation intervals specified. Only one option among -m, -y, -a, [-s -e] must be specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+        if (('-e' in argv) or ('--end-date' in argv)) and (('-s' not in argv) and ('--start-date' not in argv)):
+            print("No start date for aggregation specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
             sys.exit(2)
             
-    if (('-s' in argv) or ('--start-date' in argv)) and (('-e' not in argv) and ('--end-date' not in argv)):
-        print("No end date for aggregation specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
-        sys.exit(2)
-        
-    if (('-e' in argv) or ('--end-date' in argv)) and (('-s' not in argv) and ('--start-date' not in argv)):
-        print("No start date for aggregation specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
-        sys.exit(2)
-        
-    if (('-i' not in argv) and ('--instac-folder' not in argv)):
-        print("No input data folder specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
-        sys.exit(2)
-        
-    if (('-o' not in argv) and ('--output-folder' not in argv)):
-        print("No output data folder specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
-        sys.exit(2)
+        if (('-i' not in argv) and ('--instac-folder' not in argv)):
+            print("No input data folder specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+            sys.exit(2)
+            
+        if (('-o' not in argv) and ('--output-folder' not in argv)):
+            print("No output data folder specified. Please type 'EU_HFR_NODE_MYaggregator.py -h' for help.")
+            sys.exit(2)
         
     # Initialize optional arguments
     ntw = None
@@ -1054,7 +1055,7 @@ def main(argv):
     compression = False
         
     for opt, arg in opts:
-        if opt == ("-h", "--help"):
+        if opt in ("-h", "--help"):
             print('Usage: EU_HFR_NODE_MYaggregator.py -n <network ID of the network to be processed (if not specified, all the networks are processed)> ' \
                   + '-s <initial date for processing formatted as yyyy-mm-dd (ISO8601 UTC date representation)> ' \
                       + '-e <final date for processing formatted as yyyy-mm-dd (ISO8601 UTC date representation)> ' \
