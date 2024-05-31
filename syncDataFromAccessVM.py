@@ -20,6 +20,7 @@ import sys
 import paramiko
 import getopt
 import logging
+import re
 
 ####################
 # MAIN DEFINITION
@@ -39,7 +40,7 @@ def main(argv):
         sys.exit(2)
         
     for opt, arg in opts:
-        if opt == '-h':
+        if opt in ("-h", "--help"):
             print('Usage: syncDataFromAccessVM.py')
             sys.exit()
             
@@ -79,11 +80,11 @@ def main(argv):
         # Set the destination base folder
         destBaseFolder = '/home/radarcombine/EU_HFR_NODE/'
         
-        # Set the source base folder
-        srcBaseFolder = '/home/hfr_*'
+        # Set the source base folder pattern
+        srcBasePattern = '/home/hfr_*'
         
         # Set the source folder path pattern
-        srcFolderPattern = os.path.join(srcBaseFolder, 'NRT_HFR_DATA', 'HFR-*')
+        srcFolderPattern = os.path.join(srcBasePattern, 'NRT_HFR_DATA', 'HFR-*')
     
 #####
 # Establish ssh connection to access VM
@@ -112,7 +113,7 @@ def main(argv):
 #####
 
         # Set the command for listing the source folders
-        findSrcFolderCommand = 'find ' + srcBaseFolder + ' -type d -wholename \"' + srcFolderPattern + '\" 2>&1 | grep -v \"Permission denied\"'
+        findSrcFolderCommand = 'find ' + srcBasePattern + ' -type d -wholename \"' + srcFolderPattern + '\" 2>&1 | grep -v \"Permission denied\"'
             
         # Execute the command for listing the source folders
         try:
@@ -142,16 +143,19 @@ def main(argv):
                 if len(res) == 1:
                     srcFolders.append(srcFolder)
                     
+            # Prepare the regular expression pattern for building the destination path
+            reSearchPattern = os.path.join(srcBasePattern, 'NRT_HFR_DATA/').replace('*','.+')
+            
             # Synchronize files
             for srcFolder in srcFolders:
+                # Get the source base path
+                srcBaseFolder = str(re.compile(reSearchPattern).search(srcFolder).group(0))
+                
+                # Build destination folder path
+                destFolder = srcFolder.replace(srcBaseFolder, destBaseFolder)
                     
-                    # Build destination folder path
-                    # SOSTITUIRE SUORCE BASE CON DEST BASE
-                    # destFolder = 
-                    
-                    # Execute rsync commands
-                    # SISTEMARE COMANDO RSYNC
-                    os.system('rsync -rltvz ' + sshConfig['username'] + '@' + sshConfig['alias'] +':' + os.path.join(srcFolder,'') + ' ' + os.path.join(destFolder,'') + ' --log-file=' + logFilename)
+                # Execute rsync commands
+                os.system('rsync -rltvz ' + sshConfig['username'] + '@' + sshConfig['alias'] +':' + os.path.join(srcFolder,'') + ' ' + os.path.join(destFolder,'') + ' --log-file=' + logFilename)
     
     except Exception as err:
         sDAerr = True
