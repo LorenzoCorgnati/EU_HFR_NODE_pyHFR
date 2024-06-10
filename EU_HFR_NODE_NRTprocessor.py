@@ -1099,7 +1099,7 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,log
         # Manage site codes for WERA networks
         #####
         
-        # HFR-NADr
+        # HFR-NAdr
         if networkID == 'HFR-NAdr':
             dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Izola','IZOL')
             dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Trieste Dam','TRI1')
@@ -1111,6 +1111,11 @@ def processTotals(dfTot,networkID,networkData,stationData,startDate,vers,eng,log
             dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Buesum','BUES')
             dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Sylt','SYLT')
             dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Wangerooge','WANG')
+            
+        # HFR-WHub
+        if networkID == 'HFR-WHub':
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Pendeen','PEND')
+            dfTot.iloc[0]['Total'].site_source['Name']=dfTot.iloc[0]['Total'].site_source['Name'].str.replace('Perranporth','PERR')
         
         #####        
         # Apply QC to Totals
