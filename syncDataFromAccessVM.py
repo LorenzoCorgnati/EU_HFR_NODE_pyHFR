@@ -48,7 +48,7 @@ def main(argv):
     logger = logging.getLogger('EU_HFR_NODE_NRT_synchDataFromAccessVM')
     logger.setLevel(logging.INFO)
     # Create logfile handler
-    logFilename = '/var/log/EU_HFR_NODE_HIST/EU_HFR_NODE_NRT_synchDataFromAccessVM.log'
+    logFilename = '/var/log/EU_HFR_NODE_NRT/EU_HFR_NODE_NRT_synchDataFromAccessVM.log'
     lfh = logging.FileHandler(logFilename)
     lfh.setLevel(logging.INFO)
     # Create formatter
