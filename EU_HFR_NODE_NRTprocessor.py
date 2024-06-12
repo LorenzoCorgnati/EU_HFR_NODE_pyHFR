@@ -1654,7 +1654,9 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                     if 'codar' in manufacturer:
                         fileTypeWildcard = '**/*.ruv'
                     elif 'wera' in manufacturer:
-                        fileTypeWildcard = '**/*.crad_ascii'                
+                        fileTypeWildcard = '**/*.crad_ascii' 
+                    elif 'lera' in manufacturer:
+                        fileTypeWildcard = '**/*.crad_ascii' 
                     # List input files (only in the processing period)
                     inputFiles = [file for file in glob.glob(os.path.join(inputFolder,fileTypeWildcard), recursive = True) if os.path.getmtime(file) >= mTime]                    
                     for inputFile in inputFiles:

@@ -1477,7 +1477,9 @@ def selectRadials(networkID,stationData,startDate,endDate,logger):
                     if 'codar' in manufacturer:
                         fileTypeWildcard = '**/*.ruv'
                     elif 'wera' in manufacturer:
-                        fileTypeWildcard = '**/*.crad_ascii'                
+                        fileTypeWildcard = '**/*.crad_ascii'    
+                    elif 'lera' in manufacturer:
+                        fileTypeWildcard = '**/*.crad_ascii' 
                     # List all radial files
                     inputFiles = [file for file in glob.glob(os.path.join(inputFolder,fileTypeWildcard), recursive = True)]                    
                     for inputFile in inputFiles:
