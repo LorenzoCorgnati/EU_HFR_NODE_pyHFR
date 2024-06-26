@@ -758,6 +758,9 @@ class Radial(fileParser):
                 range_step
             )
             
+            # Check that the constraint on maximum number of range cells is satisfied
+            range_dim = range_dim[range_dim<=range_max]
+            
             # Get bearing step
             if 'AngularResolution' in self.metadata:
                 bearing_step = float(self.metadata['AngularResolution'].split()[0])
