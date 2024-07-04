@@ -47,66 +47,44 @@ def addBoundingBoxMetadata(obj,lon_min,lon_max,lat_min,lat_max,grid_res=None):
     
     return obj
 
-def aggregate_netcdfs(files, save_dir, save_filename=None):
+def divide_chunks(iterable, chunksize):
     """
-    This function allows you to aggregate multiple netcdf files into a single file. It will concatenate on the coordinates of the netcdf files
-    :param files: list of files or regular expression to location of files you want to open
-    :param save_dir: directory to save aggregated netcdf file
-    :param save_filename: filename of aggregated netcdf file
-    :return:
+    Yield successive n-sized chunks from a list
+
+    Link: https://www.geeksforgeeks.org/break-list-chunks-size-n-python/
+
+    Args:
+        l (list): list to be broken down
+        n (int): integer of the size chunks you want from the list
+
+    Yields:
+        list: a list containing lists of size, n
     """
-    # Create save directory if it doesn't exist
-    create_dir(save_dir)
-
-    print('Aggregating the following datasets:')
-    pprint.pprint(files)
-
-    # Opening files lazily (not into memory) using xarray
-    ds = xr.open_mfdataset(files, combine='by_coords')
-    ds.attrs['time_coverage_start'] = pd.Timestamp(str(ds['time'].min().data)).strftime(datetime_format)
-    ds.attrs['time_coverage_end'] = pd.Timestamp(str(ds['time'].max().data)).strftime(datetime_format)
-
-    # Encode variables for efficiency reasons
-    encoding = make_encoding(ds)
-    for v in list(ds.coords):
-        encoding[v] = dict(zlib=False, _FillValue=False)
-
-    print('Saving aggregated datasets as netCDF4 file.')
-    ds.load()  # Load lazy arrays of open files into memory. Performance is better once loaded
-
-    if save_filename:
-        save_file = '{}/{}-{}_{}'.format(save_dir, ds.time_coverage_start, ds.time_coverage_end, save_filename)
-        ds.to_netcdf(save_file, encoding=encoding, format='netCDF4', engine='netcdf4', unlimited_dims=['time'])
-    else:
-        save_file = '{}/{}-{}_totals_aggregated.nc'.format(save_dir, ds.time_coverage_start, ds.time_coverage_end)
-        ds.to_netcdf(save_file, encoding=encoding, format='netCDF4', engine='netcdf4', unlimited_dims=['time'])
-    ds.close()
-    return save_file
-
-
-# Yield successive n-sized chunks from l.
-# Taken from https://www.geeksforgeeks.org/break-list-chunks-size-n-python/
-def divide_chunks(l, n):
     # looping till length l
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
-
-
-def create_dir(new_dir):
-    os.makedirs(new_dir, exist_ok=True)
+    for i in range(0, len(iterable), chunksize):
+        yield iterable[i: i + chunksize]
 
 
 def list_files(types, main_dir, sub_directories=()):
     """
+    Return a list of files given the directory of the files and extension type.
+    You may also provide a list of sub_directories for the function to avoid.
 
-    :param types: file extension that you want to find
-    :param main_dir: main directory that you want to recursively search for files
-    :param sub_directories: Tuple containing strings of subdirectories you want to avoid
-    :return:  file list
+    Args:
+        types (str): file extension that you want to find
+        main_dir (_type_): main directory that you want to recursively search for files
+        sub_directories (tuple, optional):  Tuple containing strings of subdirectories you want to avoid. Defaults to ().
+
+    Returns:
+        list: list of files
     """
     file_list = []  # create empty list for finding files
 
-    sub_dirs = [os.path.join(main_dir, o) for o in os.listdir(main_dir) if os.path.isdir(os.path.join(main_dir, o)) and o in sub_directories]
+    sub_dirs = [
+        os.path.join(main_dir, o)
+        for o in os.listdir(main_dir)
+        if os.path.isdir(os.path.join(main_dir, o)) and o in sub_directories
+    ]
 
     for sub in sub_dirs:
         for ext in types:
@@ -116,55 +94,39 @@ def list_files(types, main_dir, sub_directories=()):
 
 
 def list_to_dataframe(file_list):
-    df = pd.DataFrame(sorted(file_list), columns=['file'])
+    """
+    Convert a list of ctf files, that are named in the the standard format 'year_month_day_hours' to a pandas dataframe
+
+    Args:
+        file_list (list): a list of files
+
+    Returns:
+        pd.DataFrame: Pandas DataFrame containing a list of files
+    """
+    df = pd.DataFrame(sorted(file_list), columns=["file"])
     try:
-        df['time'] = df['file'].str.extract(r'(\d{4}_\d{2}_\d{2}_\d{4})')
-        df['time'] = df['time'].apply(lambda x: dt.datetime.strptime(x, '%Y_%m_%d_%H%M'))
-        df = df.set_index(['time']).sort_index()
+        df["time"] = df["file"].str.extract(r"(\d{4}_\d{2}_\d{2}_\d{4})")
+        df["time"] = df["time"].apply(lambda x: dt.datetime.strptime(x, "%Y_%m_%d_%H%M"))
+        df = df.set_index(["time"]).sort_index()
     except ValueError:
-        logging.error('Cannot pass empty file_list to function. Returning empty dataframe.')
+        logging.error("Cannot pass empty file_list to function. Returning empty dataframe.")
     return df
 
 
 def timestamp_from_lluv_filename(filename):
-    timestamp_regex = re.compile('\d{4}_\d{2}_\d{2}_\d{4}')
+    """
+    Convert the string timestamp represented in CTF file names into a dt.datetime.
+
+    Args:
+        filename (str): filename
+
+    Returns:
+        dt.datetime: a datetime representation of the time included in the ctf filename
+    """
+    timestamp_regex = re.compile(r"\d{4}_\d{2}_\d{2}_\d{4}")
     mat_time = timestamp_regex.search(filename).group()
-    timestamp = dt.datetime.strptime(mat_time, '%Y_%m_%d_%H%M')
+    timestamp = dt.datetime.strptime(mat_time, "%Y_%m_%d_%H%M")
     return timestamp
-
-
-def make_encoding(ds, time_start=None, comp_level=None, chunksize=None, fillvalue=None):
-    encoding = {}
-
-    time_start = time_start or 'seconds since 1970-01-01 00:00:00'
-    comp_level = comp_level or 4
-    chunksize = chunksize or 10000
-    fillvalue = fillvalue or -999.00
-
-    for k in ds.data_vars:
-        values = ds[k].values
-        shape = values.shape
-
-        encoding[k] = {'zlib': True, 'complevel': comp_level, '_FillValue': np.float32(fillvalue)}
-
-        if 0 not in shape:
-            if values.dtype.kind == 'O':
-                values = values.astype('str')
-
-            if values.dtype.kind == 'S':
-                size = values.dtype.itemsize
-                if size > 1:
-                    shape = shape + (size,)
-
-            dim0 = min(shape[0], chunksize)
-            shape = (dim0,) + shape[1:]
-            encoding[k]['chunksizes'] = shape
-
-    # add the encoding for time so xarray exports the proper time
-    encoding['time'] = dict(units=time_start, calendar='gregorian', zlib=False, _FillValue=None, dtype=np.double)
-    # encoding['site_code_flags'] = dict(zlib=True, _FillValue=int(0))
-
-    return encoding
 
 
 class fileParser(object):

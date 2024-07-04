@@ -1639,66 +1639,6 @@ class Radial(fileParser):
     #         if key not in present_keys:
     #             self.metadata[key] = None
 
-    # def create_netcdf(self, filename,
-    #                   user_attributes,
-    #                   nc_shape = 'netcdf-tabular',
-    #                   enhance = True):
-    #     """
-    #     Create a compressed netCDF4 (.nc) file from the radial instance
-    #     :param filename: User defined filename of radial file you want to save
-    #     :return:
-    #     """
-    #     if 'reference_time' in user_attributes:
-    #         reference_time = user_attributes['reference_time']
-    #         user_attributes.pop('reference_time')
-    #     else:
-    #         reference_time = 'seconds since 1970-01-01 00:00:00'
-
-    #     create_dir(os.path.dirname(filename))
-
-    #     if 'tabular' in nc_shape:
-    #         xds = self.to_xarray_tabular(enhance=True)
-    #     elif 'multidimensional' in nc_shape:
-    #         xds = self.to_xarray_multidimensional(enhance=True)
-
-    #     if enhance is True:
-    #         xds = self.enhance_xarray(xds)
-    #         xds = xr.decode_cf(xds)
-
-    #     encoding = make_encoding(xds, time_start=reference_time, comp_level=1, fillvalue=np.nan)
-
-    #     if 'multidimensional' in nc_shape:
-    #         encoding['bearing'] = dict(zlib=False, _FillValue=None)
-    #         encoding['range'] = dict(zlib=False, _FillValue=None)
-    #     # encoding['time'] = dict(zlib=False, _FillValue=None)
-
-    #     # Assign header data to global attributes
-    #     xds['site'] = self.metadata['Site'].strip('"').strip()
-    #     xds['site'] = xds['site'].assign_attrs(self.metadata)
-
-
-    #     # Grab min and max time in dataset for entry into global attributes for cf compliance
-    #     time_start = xds['time'].min().data
-    #     time_end = xds['time'].max().data
-
-    #     global_attributes = netcdf_global_attributes(user_attributes, time_start, time_end)
-
-    #     global_attributes['geospatial_lat_min'] = np.double(xds.lat.min())
-    #     global_attributes['geospatial_lat_max'] = np.double(xds.lat.max())
-    #     global_attributes['geospatial_lon_min'] = np.double(xds.lon.min())
-    #     global_attributes['geospatial_lon_max'] = np.double(xds.lon.max())
-
-    #     logging.debug('{} - Assigning global attributes to dataset'.format(self.file_name))
-    #     xds = xds.assign_attrs(global_attributes)
-
-    #     xds.to_netcdf(
-    #         filename,
-    #         encoding=encoding,
-    #         format='netCDF4',
-    #         engine='netcdf4',
-    #         unlimited_dims=['time']
-    #     )
-
     # def create_ruv(self, filename):
     #     """
     #     Create a CODAR Radial (.ruv) file from radial instance
