@@ -1,6 +1,5 @@
 import numpy as np
 import math
-import numba
 from pyproj import Geod
 from shapely.geometry import Point
 from geopandas import GeoSeries
