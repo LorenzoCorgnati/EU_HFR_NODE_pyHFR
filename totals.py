@@ -13,7 +13,7 @@ import re
 import io
 from common import fileParser, addBoundingBoxMetadata
 from collections import OrderedDict
-from calc import gridded_index, true2mathAngle, dms2dd, evaluateGDOP, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+from calc import true2mathAngle, dms2dd, evaluateGDOP, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
 import fnmatch
 import warnings
@@ -1546,30 +1546,6 @@ class Total(fileParser):
                
         return
 
-    
-    # def to_multi_dimensional(self, grid_file):
-    #     try:
-    #         # load grid file
-    #         grid = pd.read_csv(grid_file, sep=',', header=None, names=['lon', 'lat'], delim_whitespace=True)
-    #         logging.debug('{} - Grid file successfully loaded '.format(grid_file))
-    #     except Exception as err:
-    #         logging.error('{} - {}. Grid file could not be loaded.'.format(grid_file, err))
-    #         return
-
-    #     lon = np.unique(grid['lon'].values.astype(np.float32))
-    #     lat = np.unique(grid['lat'].values.astype(np.float32))
-    #     [x, y] = np.meshgrid(lon, lat)
-
-    #     logging.debug('{} - Gridding data to 2d grid'.format(grid_file))
-
-    #     # convert 1d data into 2d gridded form. data_dict must be a dictionary.
-    #     x_ind, y_ind = gridded_index(x, y, self.data.lon, self.data.lat)
-
-    #     coords = ('time', 'range', 'bearing')
-
-    #     # Intitialize empty xarray dataset
-    #     ds = xr.Dataset()
-    
     
     def initialize_qc(self):
         """

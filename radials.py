@@ -11,7 +11,7 @@ from shapely.geometry import Point
 import xarray as xr
 import netCDF4
 from common import fileParser, create_dir, make_encoding
-from calc import dms2dd, reckon, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+from calc import dms2dd, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
 import warnings
 from mpl_toolkits.basemap import Basemap
@@ -787,7 +787,6 @@ class Radial(fileParser):
     
             # Calculate lat/lons from origin, bearing, and ranges
             latlon = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", self.metadata['Origin'])]
-            # latd, lond = reckon(latlon[0], latlon[1], bearing, ranges)            
             bb = bearing.flatten()
             rr = ranges.flatten() * 1000        # distances to be expressed in meters for Geod
             lond, latd, backaz = g.fwd(len(bb)*[latlon[1]], len(bb)*[latlon[0]], bb, rr)
