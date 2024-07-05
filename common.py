@@ -416,8 +416,12 @@ class fileParser(object):
     def is_valid(self, table='1'):
         """
         Check if the data table for the file contains data
-        :param table: string containing the table number to validate. Defaults to the primary data table '1'
-        :return: True or False
+
+        Args:
+            table (str, optional): string containing the table number to validate. Defaults to '1'.
+
+        Returns:
+            bool: True or False if data is present
         """
         try:
             return not self._tables[table]['data'].empty
@@ -671,10 +675,8 @@ class fileParser(object):
 
     @abstractmethod
     def file_type(self):
-        """
-        Return a string representing the type of file this is.
-        """
-        pass
+        """Return a string representing the type of file this is."""
+        return self.metadata['FileType']
 
     def replace_invalid_values(self, values=[999.00, 1080.0]):
         """
