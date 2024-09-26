@@ -447,52 +447,60 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             
             # Create netCDF from DataSet and save it
             T.xds.to_netcdf(ncFile, format=T.xds.attrs['netcdf_format'])            
-            logger.info(ncFilename + ' total netCDF file succesfully created and stored (' + vers + ').')
+            
+            # Check if the file is corrupted
+            try:
+                Tcheck = xr.open_dataset(ncFile)
+                logger.info(ncFilename + ' total netCDF file succesfully created and stored (' + vers + ').')
             
     #####        
     # Insert information about the created total netCDF into EU HFR NODE database 
     #####
     
-            try:
-                # Delete the entry with the same filename from total_HFRnetCDF_tb table, if present
-                totalDeleteQuery = 'DELETE FROM total_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
-                eng.execute(totalDeleteQuery)  
-                
-                # Prepare data to be inserted into EU HFR NODE database
-                if T.is_combined:
-                    dataTotalNC = {'filename': [ncFilename], \
-                                    'network_id': [networkData.iloc[0]['network_id']], \
-                                    'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
-                                    'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                    'filesize': [os.path.getsize(ncFile)/1024], 'ttl_filename': T.file_name, 'sent_to_instac': [0]}
-                else:                    
-                    dataTotalNC = {'filename': [ncFilename], \
-                                    'network_id': [networkData.iloc[0]['network_id']], \
-                                    'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
-                                    'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                    'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': T.file_name, 'sent_to_instac': [0]}
-                dfTotalNC = pd.DataFrame(dataTotalNC)
-                
-                # Insert data into total_HFRnetCDF_tb table
-                dfTotalNC.to_sql('total_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfTotalNC.columns)
-                logger.info(ncFilename + ' total netCDF file information inserted into EU HFR NODE database.')
-                
-            except sqlalchemy.exc.DBAPIError as err:        
-                dMerr = True
-                logger.error('MySQL error ' + err._message())        
-    
+                try:
+                    # Delete the entry with the same filename from total_HFRnetCDF_tb table, if present
+                    totalDeleteQuery = 'DELETE FROM total_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
+                    eng.execute(totalDeleteQuery)  
+                    
+                    # Prepare data to be inserted into EU HFR NODE database
+                    if T.is_combined:
+                        dataTotalNC = {'filename': [ncFilename], \
+                                        'network_id': [networkData.iloc[0]['network_id']], \
+                                        'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
+                                        'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                        'filesize': [os.path.getsize(ncFile)/1024], 'ttl_filename': T.file_name, 'sent_to_instac': [0]}
+                    else:                    
+                        dataTotalNC = {'filename': [ncFilename], \
+                                        'network_id': [networkData.iloc[0]['network_id']], \
+                                        'timestamp': [T.time.strftime('%Y %m %d %H %M %S')], 'datetime': [T.time.strftime('%Y-%m-%d %H:%M:%S')], \
+                                        'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                        'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': T.file_name, 'sent_to_instac': [0]}
+                    dfTotalNC = pd.DataFrame(dataTotalNC)
+                    
+                    # Insert data into total_HFRnetCDF_tb table
+                    dfTotalNC.to_sql('total_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfTotalNC.columns)
+                    logger.info(ncFilename + ' total netCDF file information inserted into EU HFR NODE database.')
+                    
+                except sqlalchemy.exc.DBAPIError as err:        
+                    dMerr = True
+                    logger.error('MySQL error ' + err._message())        
+        
     #####
     # Save Total object as .ttl file with pickle
     #####
-    
-            # Create the destination folder
-            if not os.path.isdir(ncFilePath.replace('nc','ttl')):
-                os.makedirs(ncFilePath.replace('nc','ttl'))
+        
+                # Create the destination folder
+                if not os.path.isdir(ncFilePath.replace('nc','ttl')):
+                    os.makedirs(ncFilePath.replace('nc','ttl'))
+                    
+                # Save the ttl file
+                with open(ncFile.replace('nc','ttl'), 'wb') as ttlFile:
+                      pickle.dump(T, ttlFile) 
+                logger.info(ncFilename.replace('nc','ttl') + ' total ttl file succesfully created and stored (' + vers + ').')
                 
-            # Save the ttl file
-            with open(ncFile.replace('nc','ttl'), 'wb') as ttlFile:
-                  pickle.dump(T, ttlFile) 
-            logger.info(ncFilename.replace('nc','ttl') + ' total ttl file succesfully created and stored (' + vers + ').')
+            except Exception as err:
+                os.remove(ncFile)
+                logger.errro(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').')
             
         except Exception as err:
             dmErr = True
@@ -845,45 +853,53 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             
             # Create netCDF from DataSet and save it
             R.xds.to_netcdf(ncFile, format=R.xds.attrs['netcdf_format'])            
-            logger.info(ncFilename + ' radial netCDF file succesfully created and stored (' + vers + ').')
+            
+            # Check if the file is corrupted
+            try:
+                Rcheck = xr.open_dataset(ncFile)
+                logger.info(ncFilename + ' radial netCDF file succesfully created and stored (' + vers + ').')
             
     #####        
     # Insert information about the created radial netCDF into EU HFR NODE database 
     #####
     
-            try:
-                # Delete the entry with the same filename from radial_HFRnetCDF_tb table, if present
-                radialDeleteQuery = 'DELETE FROM radial_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
-                eng.execute(radialDeleteQuery)           
-                
-                # Prepare data to be inserted into EU HFR NODE database
-                dataRadialNC = {'filename': [ncFilename], \
-                                'network_id': [radSiteData.iloc[0]['network_id']], 'station_id': [radSiteData.iloc[0]['station_id']], \
-                                'timestamp': [R.time.strftime('%Y %m %d %H %M %S')], 'datetime': [R.time.strftime('%Y-%m-%d %H:%M:%S')], \
-                                'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': [R.file_name], 'sent_to_instac': [0]}
-                dfRadialNC = pd.DataFrame(dataRadialNC)
-                
-                # Insert data into radial_HFRnetCDF_tb table
-                dfRadialNC.to_sql('radial_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfRadialNC.columns)
-                logger.info(ncFilename + ' radial netCDF file information inserted into EU HFR NODE database.')
-                
-            except sqlalchemy.exc.DBAPIError as err:        
-                dMerr = True
-                logger.error('MySQL error ' + err._message())        
-    
+                try:
+                    # Delete the entry with the same filename from radial_HFRnetCDF_tb table, if present
+                    radialDeleteQuery = 'DELETE FROM radial_HFRnetCDF_tb WHERE filename=\'' + ncFilename + '\''
+                    eng.execute(radialDeleteQuery)           
+                    
+                    # Prepare data to be inserted into EU HFR NODE database
+                    dataRadialNC = {'filename': [ncFilename], \
+                                    'network_id': [radSiteData.iloc[0]['network_id']], 'station_id': [radSiteData.iloc[0]['station_id']], \
+                                    'timestamp': [R.time.strftime('%Y %m %d %H %M %S')], 'datetime': [R.time.strftime('%Y-%m-%d %H:%M:%S')], \
+                                    'creation_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
+                                    'filesize': [os.path.getsize(ncFile)/1024], 'input_filename': [R.file_name], 'sent_to_instac': [0]}
+                    dfRadialNC = pd.DataFrame(dataRadialNC)
+                    
+                    # Insert data into radial_HFRnetCDF_tb table
+                    dfRadialNC.to_sql('radial_HFRnetCDF_tb', con=eng, if_exists='append', index=False, index_label=dfRadialNC.columns)
+                    logger.info(ncFilename + ' radial netCDF file information inserted into EU HFR NODE database.')
+                    
+                except sqlalchemy.exc.DBAPIError as err:        
+                    dMerr = True
+                    logger.error('MySQL error ' + err._message())        
+        
     #####
     # Save Radial object as .rdl file with pickle
     #####
-    
-            # Create the destination folder
-            if not os.path.isdir(ncFilePath.replace('nc','rdl')):
-                os.makedirs(ncFilePath.replace('nc','rdl'))
+        
+                # Create the destination folder
+                if not os.path.isdir(ncFilePath.replace('nc','rdl')):
+                    os.makedirs(ncFilePath.replace('nc','rdl'))
+                    
+                # Save the rdl file
+                with open(ncFile.replace('nc','rdl'), 'wb') as rdlFile:
+                      pickle.dump(R, rdlFile) 
+                logger.info(ncFilename.replace('nc','rdl') + ' radial rdl file succesfully created and stored (' + vers + ').')
                 
-            # Save the rdl file
-            with open(ncFile.replace('nc','rdl'), 'wb') as rdlFile:
-                  pickle.dump(R, rdlFile) 
-            logger.info(ncFilename.replace('nc','rdl') + ' radial rdl file succesfully created and stored (' + vers + ').')
+            except Exception as err:
+                os.remove(ncFile)
+                logger.errro(ncFilename + ' radial netCDF file is corrupted and it is not stored (' + vers + ').')
             
         except Exception as err:
             dmErr = True

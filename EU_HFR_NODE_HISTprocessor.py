@@ -545,21 +545,29 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,logger):
                 os.remove(ncFile)
             
             # Create netCDF from DataSet and save it
-            T.xds.to_netcdf(ncFile, format=T.xds.attrs['netcdf_format'])            
-            logger.info(ncFilename + ' total netCDF file succesfully created and stored (' + vers + ').')
+            T.xds.to_netcdf(ncFile, format=T.xds.attrs['netcdf_format'])       
+            
+            # Check if the file is corrupted
+            try:
+                Tcheck = xr.open_dataset(ncFile)
+                logger.info(ncFilename + ' total netCDF file succesfully created and stored (' + vers + ').')
             
     #####
     # Save Total object as .ttl file with pickle
     #####
     
-            # Create the destination folder
-            if not os.path.isdir(ncFilePath.replace('nc','ttl')):
-                os.makedirs(ncFilePath.replace('nc','ttl'))
+                # Create the destination folder
+                if not os.path.isdir(ncFilePath.replace('nc','ttl')):
+                    os.makedirs(ncFilePath.replace('nc','ttl'))
+                    
+                # Save the ttl file
+                with open(ncFile.replace('nc','ttl'), 'wb') as ttlFile:
+                      pickle.dump(T, ttlFile) 
+                logger.info(ncFilename.replace('nc','ttl') + ' total ttl file succesfully created and stored (' + vers + ').')
                 
-            # Save the ttl file
-            with open(ncFile.replace('nc','ttl'), 'wb') as ttlFile:
-                  pickle.dump(T, ttlFile) 
-            logger.info(ncFilename.replace('nc','ttl') + ' total ttl file succesfully created and stored (' + vers + ').')
+            except Exception as err:
+                os.remove(ncFile)
+                logger.errro(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').')
             
         except Exception as err:
             dmErr = True
@@ -853,20 +861,28 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,logger):
             
             # Create netCDF from DataSet and save it
             R.xds.to_netcdf(ncFile, format=R.xds.attrs['netcdf_format'])            
-            logger.info(ncFilename + ' radial netCDF file succesfully created and stored (' + vers + ').')
+            
+            # Check if the file is corrupted
+            try:
+                Rcheck = xr.open_dataset(ncFile)
+                logger.info(ncFilename + ' radial netCDF file succesfully created and stored (' + vers + ').')
             
     #####
     # Save Radial object as .rdl file with pickle
     #####
     
-            # Create the destination folder
-            if not os.path.isdir(ncFilePath.replace('nc','rdl')):
-                os.makedirs(ncFilePath.replace('nc','rdl'))
+                # Create the destination folder
+                if not os.path.isdir(ncFilePath.replace('nc','rdl')):
+                    os.makedirs(ncFilePath.replace('nc','rdl'))
+                    
+                # Save the rdl file
+                with open(ncFile.replace('nc','rdl'), 'wb') as rdlFile:
+                      pickle.dump(R, rdlFile) 
+                logger.info(ncFilename.replace('nc','rdl') + ' radial rdl file succesfully created and stored (' + vers + ').')
                 
-            # Save the rdl file
-            with open(ncFile.replace('nc','rdl'), 'wb') as rdlFile:
-                  pickle.dump(R, rdlFile) 
-            logger.info(ncFilename.replace('nc','rdl') + ' radial rdl file succesfully created and stored (' + vers + ').')
+            except Exception as err:
+                os.remove(ncFile)
+                logger.errro(ncFilename + ' radial netCDF file is corrupted and it is not stored (' + vers + ').')
             
         except Exception as err:
             dmErr = True
