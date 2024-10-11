@@ -566,6 +566,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,logger):
                 logger.info(ncFilename.replace('nc','ttl') + ' total ttl file succesfully created and stored (' + vers + ').')
                 
             except Exception as err:
+                dmErr = True
                 os.remove(ncFile)
                 logger.errro(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').')
             
@@ -881,6 +882,7 @@ def applyEHNradialDataModel(dmRad,networkData,radSiteData,vers,logger):
                 logger.info(ncFilename.replace('nc','rdl') + ' radial rdl file succesfully created and stored (' + vers + ').')
                 
             except Exception as err:
+                dmErr = True
                 os.remove(ncFile)
                 logger.errro(ncFilename + ' radial netCDF file is corrupted and it is not stored (' + vers + ').')
             
