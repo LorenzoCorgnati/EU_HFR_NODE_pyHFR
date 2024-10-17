@@ -153,6 +153,10 @@ def main(argv):
                 
                 # Build destination folder path
                 destFolder = srcFolder.replace(srcBaseFolder, destBaseFolder)
+                
+                # Create destination folder, if necessary
+                if not os.path.isdir(destFolder):
+                    os.makedirs(destFolder)
                     
                 # Execute rsync commands
                 os.system('rsync -rltvz ' + sshConfig['username'] + '@' + sshConfig['alias'] +':' + os.path.join(srcFolder,'') + ' ' + os.path.join(destFolder,'') + ' --log-file=' + logFilename)
