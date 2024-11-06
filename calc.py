@@ -223,7 +223,7 @@ def true2mathAngle(trueAngle, radians=False):
 def dms2dd(dms):
     """
     This function converts angles from DMS (degrees-minutes-seconds) to DD 
-    (deciml degrees).
+    (decimal degrees).
     
     INPUT:
         dms: tuple containing degree, minute and second values

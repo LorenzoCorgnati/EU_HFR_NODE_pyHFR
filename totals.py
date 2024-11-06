@@ -635,12 +635,22 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
             thisRadial['#'] = siteNum
             thisRadial['Name'] = Rindex
             if rad.is_wera:
-                thisRadial['Lon'] = dms2dd(list(map(int,rad.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-')))) 
-                if rad.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'W':
-                    thisRadial['Lon'] = -thisRadial['Lon']
-                thisRadial['Lat'] = dms2dd(list(map(int,rad.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-'))))            
-                if rad.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'S':
-                    thisRadial['Lat'] = -thisRadial['Lat']
+                if 'Longitude(dd)OfTheCenterOfTheReceiveArray' in rad.metadata.keys():
+                    thisRadial['Lon'] = float(rad.metadata['Longitude(dd)OfTheCenterOfTheReceiveArray'][:-1])
+                    if rad.metadata['Longitude(dd)OfTheCenterOfTheReceiveArray'][-1] == 'W':
+                        thisRadial['Lon'] = -thisRadial['Lon']
+                elif 'Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray' in rad.metadata.keys():
+                    thisRadial['Lon'] = dms2dd(list(map(int,rad.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-')))) 
+                    if rad.metadata['Longitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'W':
+                        thisRadial['Lon'] = -thisRadial['Lon']
+                if 'Latitude(dd)OfTheCenterOfTheReceiveArray' in rad.metadata.keys():
+                    thisRadial['Lat'] = float(rad.metadata['Latitude(dd)OfTheCenterOfTheReceiveArray'][:-1])
+                    if rad.metadata['Latitude(dd)OfTheCenterOfTheReceiveArray'][-1] == 'S':
+                        thisRadial['Lat'] = -thisRadial['Lat']
+                elif 'Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray' in rad.metadata.keys():
+                    thisRadial['Lat'] = dms2dd(list(map(int,rad.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][:-2].split('-'))))            
+                    if rad.metadata['Latitude(deg-min-sec)OfTheCenterOfTheReceiveArray'][-1] == 'S':
+                        thisRadial['Lat'] = -thisRadial['Lat']
                 thisRadial['Coverage(s)'] = float(rad.metadata['ChirpRate'].replace('S','')) * int(rad.metadata['Samples'])
                 thisRadial['RngStep(km)'] = float(rad.metadata['Range'].split()[0])
                 thisRadial['Pattern'] = 'Internal'
