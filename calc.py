@@ -3,6 +3,36 @@ import math
 from pyproj import Geod
 from shapely.geometry import Point
 from geopandas import GeoSeries
+import pandas as pd
+import datetime as dt
+
+
+def roundToNearest20(dT):
+    """
+    This function rounds teh input datetime to the closest 20-minute time. 
+    
+    INPUT:
+        dT: datetime as datetime object or string
+        
+        
+    OUTPUT:
+        dT: datetime rounded to the closest 20-minutes time as datetime object
+    """
+    # Get the minutes from the timestamp
+    if not hasattr(dT,'minute'):
+        # Convert dT to datetime if needeed
+        dT = dt.datetime.strptime(dT,'%Y-%m-%d %H:%M:%S')
+    minute = dT.minute
+        
+    # Round the datetime
+    if minute <= 10:
+        return dT.replace(minute=0, second=0, microsecond=0)
+    elif minute <= 30:
+        return dT.replace(minute=20, second=0, microsecond=0)
+    elif minute <= 50:
+        return dT.replace(minute=40, second=0, microsecond=0)
+    else:
+        return (dT + pd.Timedelta(minutes=20)).replace(minute=0, second=0, microsecond=0)
 
 
 def createLonLatGridFromTopLeftPointWera(topLeftLon, topLeftLat, cellSize, nx, ny):

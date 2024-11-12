@@ -40,7 +40,7 @@ import sqlalchemy
 from dateutil.relativedelta import relativedelta
 from radials import Radial, buildEHNradialFolder, buildEHNradialFilename, convertEHNtoINSTACradialDatamodel, buildINSTACradialFolder, buildINSTACradialFilename
 from totals import Total, buildEHNtotalFolder, buildEHNtotalFilename, combineRadials, convertEHNtoINSTACtotalDatamodel, buildINSTACtotalFolder, buildINSTACtotalFilename, buildUStotal
-from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
+from calc import createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera, roundToNearest20
 from common import addBoundingBoxMetadata
 import pickle
 from concurrent import futures
@@ -1695,6 +1695,9 @@ def processNetwork(networkID,startDate,endDate,dataFolder,instacFolder,sqlConfig
             pass
         else:            
             logger.info('Radial processing started for ' + networkID + ' network') 
+            if networkID == 'HFR-COSYNA':
+                # Round datetime according to temporal resolution(i.e. to the closest 20-minute time) 
+                radialsToBeProcessed['datetime'] = radialsToBeProcessed['datetime'].apply(roundToNearest20)
             radialsToBeProcessed.groupby('datetime', group_keys=False).apply(lambda x:processRadials(x,networkID,networkData,stationData,instacFolder,vers,logger))
         
         # Process totals
