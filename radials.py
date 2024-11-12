@@ -16,13 +16,19 @@ from common import fileParser
 from calc import dms2dd, createLonLatGridFromBB, createLonLatGridFromBBwera, createLonLatGridFromTopLeftPointWera
 import json
 import warnings
-from mpl_toolkits.basemap import Basemap
+try:
+    from mpl_toolkits.basemap import Basemap
+except Exception as err:
+    pass
 import matplotlib.pyplot as plt
 from matplotlib import colors
-import cartopy
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import cartopy.io.img_tiles as cimgt
+try:    
+    import cartopy
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import cartopy.io.img_tiles as cimgt
+except Exception as err:
+    pass
 from scipy.spatial import ConvexHull
 import geopy.distance
 
@@ -554,7 +560,7 @@ class Radial(fileParser):
         else:
             return waterIndex
         
-    def plotOLD(self, lon_min=None, lon_max=None, lat_min=None, lat_max=None, shade=False, show=True):
+    def plot_Basemap(self, lon_min=None, lon_max=None, lat_min=None, lat_max=None, shade=False, show=True):
         """
         This function plots the current radial velocity field (i.e. VELU and VELV components) on a 
         Cartesian grid. The grid is defined either from the input values or from the Radial object
