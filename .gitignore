@@ -2,6 +2,9 @@
 *test*
 *TEST*
 
+# VSCode
+*launch*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
