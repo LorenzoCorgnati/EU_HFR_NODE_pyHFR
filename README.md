@@ -44,7 +44,7 @@ The guidelines on how to synchronize the providers' HFR radial and total data to
 Reyes, E., Rotllán, P., Rubio, A., Corgnati, L., Mader, J., & Mantovani, C. (2019). Guidelines on how to sync your High Frequency (HF) radar data with the European HF Radar node (Version 1.1). Balearic Islands Coastal Observing and Forecasting System, SOCIB . https://doi.org/10.25704/9XPF-76G7
 
 Cite as:
-Lorenzo Corgnati. (2022). EU_HFR_NODE_pyHFR. DOI to be assigned.
+Lorenzo Corgnati. (2022). EU_HFR_NODE_pyHFR. DOI: 10.5281/zenodo.15394196
 
 
 Author: Lorenzo Corgnati
