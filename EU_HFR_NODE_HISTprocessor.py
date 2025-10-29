@@ -317,6 +317,7 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,instacBuffer,vers,lo
         if len(hourlyFiles)>0:
             # Open all netCDF files in the current day folder
             dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME',join='override')
+            dailyDS = dailyDS.sortby('TIME')
             
     #####        
     # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
@@ -425,6 +426,7 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,instacBuffer,vers,l
         if len(hourlyFiles)>0:
             # Open all netCDF files in the current day folder
             dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME',coords='minimal',compat='override',join='override')
+            dailyDS = dailyDS.sortby('TIME')
                 
     #####        
     # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
@@ -568,7 +570,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,logger):
             except Exception as err:
                 dmErr = True
                 os.remove(ncFile)
-                logger.errro(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').')
+                logger.error(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').')
             
         except Exception as err:
             dmErr = True
@@ -581,7 +583,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,logger):
         
         if not dmErr:
             # Update the local DataFrame
-            dmTot['NRT_processed_flag'] = 1      
+            dmTot['NRT_processed_flag'] = 1
     
     return  dmTot
 

@@ -50,6 +50,100 @@ import netCDF4 as nc4
 # PROCESSING FUNCTIONS
 ######################
 
+def createOGSgeoportalTotalDataset(ts,totalFolderPath,vers,logger):
+    """
+    This function creates a total netCDF dataset aggregated over the last 4 months for the OGS geoportal. 
+    The dataset is equipped with qualified EWCT_QCflag and NSCT_QCflag varialbes, i.e. they are filtered 
+    based on the QCflag variable (nan values are forced when QCflag=4).
+    The total netCDF dataset is stored in the dedicated folder.
+    
+    INPUT:
+        ts: timestamp as datetime object
+        totalFolderPath: path of the folder containing the total netCDF files for the network
+        vers: version of the data model
+        
+    OUTPUT:
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    oGErr = False
+    
+    try:
+    
+    #####
+    # Find and list the files to be aggregated
+    #####  
+
+        # Build the list of the folders to be scanned for gathering the files from the last 4 months
+        startDay = (ts - relativedelta(months=4)).replace(day=1).date()
+        endDay = ts.date()
+        dailyFolders = []
+
+        currentDay = startDay
+        while currentDay <= endDay:
+            dateStr = os.path.join(currentDay.strftime("%Y"),currentDay.strftime("%Y_%m"),currentDay.strftime("%Y_%m_%d"))
+            fullPath = os.path.join(totalFolderPath,vers,dateStr)
+            dailyFolders.append(fullPath)
+            currentDay += dt.timedelta(days=1)
+        
+        # List all netCDF files in the selected folders
+        allFiles = []
+        for path in dailyFolders:
+            if os.path.isdir(path):
+                files = glob.glob(os.path.join(path,'**/*.nc'), recursive = True)
+                allFiles.extend(files)
+
+    #####
+    # Create the dedicated Total object
+    ##### 
+
+        # Open all netCDF files in the current day folder
+        if len(allFiles)>0:
+            aggrDS = xr.open_mfdataset(allFiles,combine='nested',concat_dim='TIME',join='override')
+            aggrDS = aggrDS.sortby('TIME')
+
+        # Create the variables EWCT_QCflag and NSCT_QCflag as copies of EWCT and NSCT
+        aggrDS["EWCT_QCflag"] = aggrDS["EWCT"].copy()
+        aggrDS["NSCT_QCflag"] = aggrDS["NSCT"].copy()
+        # Mask EWCT_QCflag and NSCT_QCflag variables using the QCFlag variable
+        aggrDS["EWCT_QCflag"] = aggrDS["EWCT_QCflag"].where(aggrDS["QCflag"] != 4, np.nan)
+        aggrDS["NSCT_QCflag"] = aggrDS["NSCT_QCflag"].where(aggrDS["QCflag"] != 4, np.nan)
+
+        # Create the destination folder for the OGS geoportal dataset
+        destFolder = os.path.join(totalFolderPath.replace('Totals_nc','Totals_nc_Last4Months_AGGR'),vers)
+        if not os.path.isdir(destFolder):
+            os.makedirs(destFolder)
+        
+        # Create the filename for the OGS geoportal dataset
+        ncFilename = 'HFR-NAdr-Total_Last4Months.nc'
+        ncFile = os.path.join(destFolder,ncFilename)
+
+        # Check if the netCDF file exists and remove it
+        if os.path.isfile(ncFile):
+            os.remove(ncFile)
+        
+        # Create netCDF from DataSet and save it
+        aggrDS.to_netcdf(ncFile, format=aggrDS.attrs['netcdf_format'],engine='netcdf4')
+
+        # Check if the file is corrupted
+        try:
+            TcheckOGS = xr.open_dataset(ncFile)
+            logger.info(ncFilename + ' total netCDF file for OGS geoportal succesfully created and stored (' + vers + ').')
+
+        except Exception as err:
+            dmErr = True
+            os.remove(ncFile)
+            logger.error(ncFilename + ' total netCDF file for OGS geoportal is corrupted and it is not stored (' + vers + ').')
+
+    except Exception as err:
+        oGErr = True
+        logger.error(err.args[0] + ' in creating the total netCDF file for the OGS geoportal at ' + ts.strftime('%Y-%m-%d %H:%M:%S') + 'timestamp')
+    
+    return
+
 def createTotalFromUStds(ts,pts,USxds,networkData,stationData,vers,logger):
     """
     This function creates a Total object for each timestamp from the input aggregated xarray dataset read
@@ -178,6 +272,7 @@ def applyINSTACtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             if len(hourlyFiles)>0:
                 # Open all netCDF files in the current day folder
                 dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME',join='override')
+                dailyDS = dailyDS.sortby('TIME')
                 
         #####        
         # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
@@ -312,6 +407,7 @@ def applyINSTACradialDataModel(dmRad,networkData,radSiteData,vers,eng,logger):
             if len(hourlyFiles)>0:
                 # Open all netCDF files in the current day folder
                 dailyDS = xr.open_mfdataset(hourlyFiles,combine='nested',concat_dim='TIME',coords='minimal',compat='override',join='override')
+                dailyDS = dailyDS.sortby('TIME')
                 
         #####        
         # Convert to Copernicus Marine Service In Situ TAC data format (daily aggregated netCDF)  
@@ -502,6 +598,13 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                 dmErr = True
                 os.remove(ncFile)
                 logger.errro(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').')
+
+            #####
+            # Create the qualified dataset (EWCT and NSCT masked by QCflag) for OGS geoportal
+            #####
+
+                if networkData.iloc[0]['network_id'] == 'HFR-NAdr':
+                    createOGSgeoportalTotalDataset(T.time,networkData.iloc[0]['total_HFRnetCDF_folder_path'],vers,logger) 
             
         except Exception as err:
             dmErr = True
