@@ -597,14 +597,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
             except Exception as err:
                 dmErr = True
                 os.remove(ncFile)
-                logger.errro(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').')
-
-            #####
-            # Create the qualified dataset (EWCT and NSCT masked by QCflag) for OGS geoportal
-            #####
-
-                if networkData.iloc[0]['network_id'] == 'HFR-NAdr':
-                    createOGSgeoportalTotalDataset(T.time,networkData.iloc[0]['total_HFRnetCDF_folder_path'],vers,logger) 
+                logger.error(ncFilename + ' total netCDF file is corrupted and it is not stored (' + vers + ').') 
             
         except Exception as err:
             dmErr = True
@@ -626,7 +619,14 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
                     eng.execute(totalUpdateQuery) 
                 except sqlalchemy.exc.DBAPIError as err:        
                     dMerr = True
-                    logger.error('MySQL error ' + err._message())        
+                    logger.error('MySQL error ' + err._message())     
+
+    #####
+    # Create the qualified dataset (EWCT and NSCT masked by QCflag) for OGS geoportal
+    #####
+
+        if networkData.iloc[0]['network_id'] == 'HFR-NAdr':
+            createOGSgeoportalTotalDataset(T.time,networkData.iloc[0]['total_HFRnetCDF_folder_path'],vers,logger)   
     
     return  dmTot
 
