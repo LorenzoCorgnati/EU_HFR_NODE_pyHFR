@@ -100,16 +100,17 @@ def cleanDataFolders(ntwDF, staDF, startDate, endDate, vers, logger):
         rmFolders = pd.concat([rmFolders, ncTotFolders, ttlFolders])
         
         # Generate the radial data folders
-        for st in range(len(staDF)):
-            if staDF.iloc[st]['radial_HFRnetCDF_folder_path']:
-                # Generate the radial netCDF folder paths
-                ncRadFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'],staDF.iloc[st]['station_id'],x,vers))
-                
-                # Generate the radial rdl folder paths
-                rdlFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'].replace('nc','rdl'),staDF.iloc[st]['station_id'],x,vers))
-                
-                # Insert total folder paths into the DataFrame used for removing folders
-                rmFolders = pd.concat([rmFolders, ncRadFolders, rdlFolders])
+        if ntwDF.iloc[0]['network_id'] != 'HFR-WesternItaly':
+            for st in range(len(staDF)):
+                if staDF.iloc[st]['radial_HFRnetCDF_folder_path']:
+                    # Generate the radial netCDF folder paths
+                    ncRadFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'],staDF.iloc[st]['station_id'],x,vers))
+                    
+                    # Generate the radial rdl folder paths
+                    rdlFolders = tsDF['datetime'].apply(lambda x: buildEHNradialFolder(staDF.iloc[st]['radial_HFRnetCDF_folder_path'].replace('nc','rdl'),staDF.iloc[st]['station_id'],x,vers))
+                    
+                    # Insert radial folder paths into the DataFrame used for removing folders
+                    rmFolders = pd.concat([rmFolders, ncRadFolders, rdlFolders])
             
     #####
     # Remove the data folders
