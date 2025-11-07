@@ -52,7 +52,7 @@ import netCDF4 as nc4
 
 def createOGSgeoportalTotalDataset(ts,totalFolderPath,vers,logger):
     """
-    This function creates a total netCDF dataset aggregated over the last 4 months for the OGS geoportal. 
+    This function creates a total netCDF dataset aggregated over the last 2 months for the OGS geoportal. 
     The dataset is equipped with qualified EWCT_QCflag and NSCT_QCflag varialbes, i.e. they are filtered 
     based on the QCflag variable (nan values are forced when QCflag=4).
     The total netCDF dataset is stored in the dedicated folder.
@@ -77,8 +77,8 @@ def createOGSgeoportalTotalDataset(ts,totalFolderPath,vers,logger):
     # Find and list the files to be aggregated
     #####  
 
-        # Build the list of the folders to be scanned for gathering the files from the last 4 months
-        startDay = (ts - relativedelta(months=4)).replace(day=1).date()
+        # Build the list of the folders to be scanned for gathering the files from the last 2 months
+        startDay = (ts - relativedelta(months=2)).replace(day=1).date()
         endDay = ts.date()
         dailyFolders = []
 
