@@ -128,6 +128,12 @@ def createOGSgeoportalTotalDataset(ts,totalFolderPath,vers,logger):
         # Create netCDF from DataSet and save it
         aggrDS.to_netcdf(ncFile, format=aggrDS.attrs['netcdf_format'],engine='netcdf4')
 
+        # Modify the standar_name attribute for variables EWCT_QCflag and NSCT_QCflag
+        ncf = nc4.Dataset(ncFile,'r+',format='NETCDF4_CLASSIC')
+        ncf.variables['EWCT_QCflag'].standard_name = 'surface_eastward_sea_water_velocity_qc'
+        ncf.variables['NSCT_QCflag'].standard_name = 'surface_northward_sea_water_velocity_qc'
+        ncf.close()
+
         # Check if the file is corrupted
         try:
             TcheckOGS = xr.open_dataset(ncFile)
