@@ -53,6 +53,70 @@ import shutil
 # PROCESSING FUNCTIONS
 ######################
 
+def createOGSgeoportalTotalDataset(Togs,ncFilePath,ncFile,totalFolderPath,vers,logger):
+    """
+    This function creates the total netCDF files to be used by the OGS geoportal. 
+    The total dataset files are created only for the last 4 months with qualified 
+    EWCT and NSCT varialbes, i.e. they are filtered based on the QCflag variable 
+    (nan values are forced when QCflag=4).
+    The total netCDF dataset is stored in the dedicated folder.
+    
+    INPUT:
+        Togs: Total object containing the HFR-NAdr network total data
+        ncFilePath: full path of the netCDF file
+        ncFile: netCDF filename
+        totalFolderPath: path of the folder containing the total netCDF files for the network
+        vers: version of the data model
+        
+    OUTPUT:
+    """
+    #####
+    # Setup
+    #####
+    
+    # Initialize error flag
+    oGErr = False
+    
+    try:
+    
+    #####
+    # Create the EWCT and NSCT qualified variables (i.e. masked by QCflag
+    #####  
+
+        Togs.xds["EWCT"] = Togs.xds["EWCT"].where(Togs.xds["QCflag"] != 4, np.nan)
+        Togs.xds["NSCT"] = Togs.xds["NSCT"].where(Togs.xds["QCflag"] != 4, np.nan)
+
+    #####
+    # Save the dedicated netCDF file from the Total object
+    ##### 
+
+        # Create the destination folder for the OGS geoportal
+        if not os.path.isdir(ncFilePath.replace('Totals_nc','Totals_nc_Last4Months')):
+            os.makedirs(ncFilePath.replace('Totals_nc','Totals_nc_Last4Months'))
+        
+        # Check if the netCDF file exists and remove it
+        if os.path.isfile(ncFile.replace('Totals_nc','Totals_nc_Last4Months')):
+            os.remove(ncFile.replace('Totals_nc','Totals_nc_Last4Months'))
+        
+        # Create netCDF from DataSet and save it
+        Togs.xds.to_netcdf(ncFile.replace('Totals_nc','Totals_nc_Last4Months'), format=Togs.xds.attrs['netcdf_format'])
+
+        # Check if the file is corrupted
+        try:
+            TcheckOGS = xr.open_dataset(ncFile.replace('Totals_nc','Totals_nc_Last4Months'))
+            logger.info(ncFile + ' total netCDF file for OGS geoportal succesfully created and stored (' + vers + ').')
+
+        except Exception as err:
+            dmErr = True
+            os.remove(ncFile)
+            logger.error(ncFile + ' total netCDF file for OGS geoportal is corrupted and it is not stored (' + vers + ').')
+
+    except Exception as err:
+        oGErr = True
+        logger.error(err.args[0] + ' in creating the total netCDF file for the OGS geoportal at ' + Togs.time.strftime('%Y-%m-%d %H:%M:%S') + 'timestamp')
+    
+    return
+
 def cleanDataFolders(ntwDF, staDF, startDate, endDate, vers, logger):
     """
     This function removes the data folders for radial rdl and netCDF data and
@@ -585,6 +649,14 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,logger):
         if not dmErr:
             # Update the local DataFrame
             dmTot['NRT_processed_flag'] = 1
+    
+    #####
+    # Create the qualified dataset (EWCT and NSCT masked by QCflag) for OGS geoportal
+    #####
+
+        if networkData.iloc[0]['network_id'] == 'HFR-NAdr':
+            if T.time > dt.datetime.utcnow() - relativedelta(months=4):
+                createOGSgeoportalTotalDataset(T,ncFilePath,ncFile,networkData.iloc[0]['total_HFRnetCDF_folder_path'],vers,logger)
     
     return  dmTot
 
