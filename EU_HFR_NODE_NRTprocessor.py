@@ -50,7 +50,7 @@ import netCDF4 as nc4
 # PROCESSING FUNCTIONS
 ######################
 
-def createOGSgeoportalTotalDataset(Togs,ncFilePath,ncFile,totalFolderPath,vers,logger):
+def createOGSgeoportalTotalDataset(Togs,ncFilePath,ncFile,vers,logger):
     """
     This function creates the total netCDF files to be used by the OGS geoportal. 
     The total dataset files are created only for the last 4 months with qualified 
@@ -62,8 +62,8 @@ def createOGSgeoportalTotalDataset(Togs,ncFilePath,ncFile,totalFolderPath,vers,l
         Togs: Total object containing the HFR-NAdr network total data
         ncFilePath: full path of the netCDF file
         ncFile: netCDF filename
-        totalFolderPath: path of the folder containing the total netCDF files for the network
         vers: version of the data model
+        logger: logger object of the current processing
         
     OUTPUT:
     """
@@ -77,11 +77,20 @@ def createOGSgeoportalTotalDataset(Togs,ncFilePath,ncFile,totalFolderPath,vers,l
     try:
     
     #####
-    # Create the EWCT and NSCT qualified variables (i.e. masked by QCflag
+    # Create the EWCT and NSCT qualified variables (i.e. masked by QCflag)
     #####  
 
+        # Copy encoding and dtype for EWCT and NSCT varialbles
+        EWCTencoding = Togs.xds['EWCT'].encoding
+        NSCTencoding = Togs.xds['NSCT'].encoding
+
+        # Apply QCflag as mask to EWCT and NSCT variables
         Togs.xds["EWCT"] = Togs.xds["EWCT"].where(Togs.xds["QCflag"] != 4, np.nan)
         Togs.xds["NSCT"] = Togs.xds["NSCT"].where(Togs.xds["QCflag"] != 4, np.nan)
+
+        # Apply encoding to the qualified EWCT and NSCT variables
+        Togs.xds['EWCT'].encoding = EWCTencoding
+        Togs.xds['NSCT'].encoding = NSCTencoding
 
     #####
     # Save the dedicated netCDF file from the Total object
@@ -610,7 +619,7 @@ def applyEHNtotalDataModel(dmTot,networkData,stationData,vers,eng,logger):
     #####
 
         if networkData.iloc[0]['network_id'] == 'HFR-NAdr':
-            createOGSgeoportalTotalDataset(T,ncFilePath,ncFile,networkData.iloc[0]['total_HFRnetCDF_folder_path'],vers,logger)   
+            createOGSgeoportalTotalDataset(T,ncFilePath,ncFile,vers,logger)   
     
     return  dmTot
 
