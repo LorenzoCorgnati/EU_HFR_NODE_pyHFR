@@ -630,9 +630,6 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
     # Create empty total with grid
     Tcomb = Total(grid=gridGS)
 
-    # Remove empty radials (i.e. radials without measurements at the current timestamp)
-    rDF = rDF[~rDF['Radial'].apply(lambda x: x.data.empty)]
-
     # Check if there are enough contributing radial sites
     if rDF.size >= minContrSites:
         # Fill site_source DataFrame with contributing radials information
@@ -693,9 +690,11 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
     
         # Figure out which radial bins are within the spatthresh of each grid cell
         for Rindex, Rrow in rDF.iterrows():
-            rad = Rrow['Radial']         
-            thisRadBins = Tcomb.data.loc[:,['LOND','LATD']].apply(lambda x: radBinsInSearchRadius(x,rad,sRad,g),axis=1)
-            combineRadBins.loc[Rindex] = thisRadBins
+            rad = Rrow['Radial']   
+            # Check if radial is empty
+            if not rad.data.empty:
+                thisRadBins = Tcomb.data.loc[:,['LOND','LATD']].apply(lambda x: radBinsInSearchRadius(x,rad,sRad,g),axis=1)
+                combineRadBins.loc[Rindex] = thisRadBins
     
         # Loop over grid points and pull out contributing radial vectors
         combineRadBins = combineRadBins.T
