@@ -630,6 +630,9 @@ def combineRadials(rDF,gridGS,sRad,gRes,tStp,minContrSites=2):
     # Create empty total with grid
     Tcomb = Total(grid=gridGS)
 
+    # Remove empty radials (i.e. radials without measurements at the current timestamp)
+    rDF = rDF[~rDF['Radial'].apply(lambda x: x.data.empty)]
+
     # Check if there are enough contributing radial sites
     if rDF.size >= minContrSites:
         # Fill site_source DataFrame with contributing radials information
