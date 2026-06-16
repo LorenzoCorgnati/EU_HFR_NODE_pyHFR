@@ -1789,6 +1789,8 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                                     radial = Radial(inputFile)
                                     timeStamp = radial.time.strftime("%Y %m %d %H %M %S")                    
                                     dateTime = radial.time.strftime("%Y-%m-%d %H:%M:%S")  
+                                    # Get the number of radial vectors in the file
+                                    numVectors = len(radial.data)
                                     # Get file size in Kbytes
                                     fileSize = os.path.getsize(inputFile)/1024 
     #####
@@ -1798,8 +1800,8 @@ def inputRadials(networkID,stationData,startDate,eng,logger):
                                     dataRadial = {'filename': [fileName], 'filepath': [filePath], 'network_id': [networkID], \
                                                   'station_id': [stationID], 'timestamp': [timeStamp], 'datetime': [dateTime], \
                                                   'reception_date': [dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")], \
-                                                  'filesize': [fileSize], 'extension': [fileExt], 'NRT_processed_flag': [0], \
-                                                  'NRT_processed_flag_integrated_network': [0], 'NRT_combined_flag': [0]}
+                                                  'filesize': [fileSize], 'extension': [fileExt], 'number_of_vectors': [numVectors], \
+                                                  'NRT_processed_flag': [0], 'NRT_processed_flag_integrated_network': [0], 'NRT_combined_flag': [0]}
                                     dfRadial = pd.DataFrame(dataRadial)
                                     
                                     # Insert data into EU HFR NODE database
