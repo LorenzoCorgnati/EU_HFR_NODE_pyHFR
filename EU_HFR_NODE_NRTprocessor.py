@@ -1139,17 +1139,18 @@ def updateLastCalibrationDate(lcdRad,radSiteData,eng,logger):
     # Check if the Radial object contains the last pattern date
         if not R.is_wera:
             # Get the last calibration date from Radial object metadata
-            lcdFromFile = dt.datetime.strptime(R.metadata['PatternDate'],'%Y %m %d %H %M %S').date()
-            # Check if the last calibration date is to be updated
-            if lcdFromFile > radSiteData.iloc[0]['last_calibration_date']:
-                # Update the station_tb table on the EU HFR NODE database
-                try:
-                    stationUpdateQuery = 'UPDATE station_tb SET last_calibration_date=\'' + lcdFromFile.strftime('%Y-%m-%d') + '\' WHERE station_id=\'' + radSiteData.iloc[0]['station_id'] + '\''
-                    eng.execute(stationUpdateQuery)
-                    logger.info('Last calibration date updated for station ' + radSiteData.iloc[0]['station_id'])
-                except sqlalchemy.exc.DBAPIError as err:        
-                    lcdErr = True
-                    logger.error('MySQL error ' + err._message())   
+            if 'PatternDate' in R.metadata:
+                lcdFromFile = dt.datetime.strptime(R.metadata['PatternDate'],'%Y %m %d %H %M %S').date()
+                # Check if the last calibration date is to be updated
+                if lcdFromFile > radSiteData.iloc[0]['last_calibration_date']:
+                    # Update the station_tb table on the EU HFR NODE database
+                    try:
+                        stationUpdateQuery = 'UPDATE station_tb SET last_calibration_date=\'' + lcdFromFile.strftime('%Y-%m-%d') + '\' WHERE station_id=\'' + radSiteData.iloc[0]['station_id'] + '\''
+                        eng.execute(stationUpdateQuery)
+                        logger.info('Last calibration date updated for station ' + radSiteData.iloc[0]['station_id'])
+                    except sqlalchemy.exc.DBAPIError as err:        
+                        lcdErr = True
+                        logger.error('MySQL error ' + err._message())   
                 
     except Exception as err:
         lcdErr = True
