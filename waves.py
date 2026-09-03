@@ -58,8 +58,8 @@ class Waves(fileParser):
         if self._iscorrupt:
             return
 
-        if self._tables[1]["data"]["DIST"].isnull().all():
-            df = self._tables[1]["data"]
+        if self._tables[str(1)]["data"]["DIST"].isnull().all():
+            df = self._tables[str(1)]["data"]
             self.data = df
             self.df_index = "time"  # define index so pd.to_xarray function will automatically assign dimension and coordinates
         else:

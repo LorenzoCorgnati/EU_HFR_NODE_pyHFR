@@ -149,12 +149,12 @@ class fileParser(object):
             self.full_file = os.path.realpath(fname)
             extension = os.path.splitext(fname)[1]
             
-            if (extension == '.ruv') or (extension == '.tuv'):
-                self.CTFparser()
-            elif extension == '.crad_ascii':
+            if extension == '.crad_ascii':
                 self.CRADparser()
             elif extension == '.cur_asc':
                 self.CURparser()  
+            else:
+                self.CTFparser()
     
     def CTFparser(self):
         """
