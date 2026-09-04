@@ -78,6 +78,11 @@ class Waves(fileParser):
             lambda s: dt.datetime(*s), axis=1
         )
 
+        # Add reference latitude and longitude (for usage as a wave buoy)
+        if not self.is_wera:
+            self.data["lat"] = float(self.metadata["Origin"].split()[0])
+            self.data["lon"] = float(self.metadata["Origin"].split()[1])
+
         if not self.data.empty:
             if replace_invalid:
                 self.replace_invalid_values()
@@ -108,8 +113,10 @@ class Waves(fileParser):
                 )
 
                 if distance is not None:
-                    distance = float(distance.split()[0])
-                    self.data = self.data[self.data['DIST'] == distance]     
+                    numDistance = float(distance.split()[0])
+                    self.data = self.data[self.data['DIST'] == numDistance]   
+                    self.metadata['Distance'] = distance
+                    self.metadata['RangeCell'] = str(rngcll)  
 
     def clean_header(self):
         """
