@@ -1,6 +1,7 @@
 import datetime as dt
 import pandas as pd
 import re
+from pyproj import Geod
 import xarray as xr
 from common import fileParser
 # from nc import make_encoding
@@ -78,11 +79,6 @@ class Waves(fileParser):
             lambda s: dt.datetime(*s), axis=1
         )
 
-        # Add reference latitude and longitude (for usage as a wave buoy)
-        if not self.is_wera:
-            self.data["lat"] = float(self.metadata["Origin"].split()[0])
-            self.data["lon"] = float(self.metadata["Origin"].split()[1])
-
         if not self.data.empty:
             if replace_invalid:
                 self.replace_invalid_values()
@@ -117,6 +113,49 @@ class Waves(fileParser):
                     self.data = self.data[self.data['DIST'] == numDistance]   
                     self.metadata['Distance'] = distance
                     self.metadata['RangeCell'] = str(rngcll)  
+
+    def set_reference_position(self, avgDistance=15000):
+        """
+        Evaluate reference latitude and longitude to refer all data to a single point(for usage as a wave buoy).
+        For Codar ranged wave files, the reference position is calculated using the distance of the selected range cell and
+        the antenna bearing of the HFR system.
+        For Codar averaged files, the reference position is calculated using a pre-defined distance and the antenna bearing 
+        of the HFR system.
+        For WERA files, the reference position is set to the center of the grid.
+
+        Args:
+            avgDistance (float, optional): average distance for Codar averaged files. Defaults to 15 km.
+        """
+
+        # Add reference latitude and longitude (for usage as a wave buoy)
+        if not self.is_wera:
+            if 'Distance' in self.metadata:
+                numDistance = float(self.metadata['Distance'].split()[0])
+                if 'km' in self.metadata['Distance']:
+                    numDistance *= 1000  # convert km to meters
+            else:
+                numDistance = avgDistance
+
+            siteLat = float(self.metadata["Origin"].split()[0])
+            siteLon = float(self.metadata["Origin"].split()[1])
+            siteBearing = float(self.metadata["AntennaBearing"].split()[0])
+            # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
+            if 'GreatCircle' in self.metadata:
+                g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
+            else:
+                g = Geod(ellps='WGS84')
+                self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
+            # Calculate the reference latitude and longitude using the Geod object
+            refLon, refLat, back_azimuth = g.fwd(siteLon, siteLat, siteBearing, numDistance)
+        
+            # Add reference latitude and longitude to data
+            self.data["LATD"] = refLat
+            self.data["LOND"] = refLon
+            # Add reference latitude and longitude to metadata
+            self.metadata["ReferenceLatitude"] = str(refLat) + ' deg'
+            self.metadata["ReferenceLongitude"] = str(refLon) + ' deg'
+        
+            ####  TO BE ADDED FOR WERA FILES  ####
 
     def clean_header(self):
         """
