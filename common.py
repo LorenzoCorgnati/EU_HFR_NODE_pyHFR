@@ -194,6 +194,11 @@ class fileParser(object):
                                 self._tables[str(table_count)] = OrderedDict()
                                 self._tables[str(table_count)][key] = value
                                 self._tables[str(table_count)]['_TableHeader'] = []
+                                if 'WAVL' in line:
+                                    if 'Distance' in self.metadata:
+                                        self._tables[str(table_count)]['Distance'] = self.metadata['Distance']
+                                    if 'RangeCell' in self.metadata:
+                                        self._tables[str(table_count)]['RangeCell'] = self.metadata['RangeCell']
                             elif 'Manufacturer' in line:
                                 if 'WERA' in value:
                                     self.is_wera = True

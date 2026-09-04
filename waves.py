@@ -40,8 +40,7 @@ class Waves(fileParser):
     """
     Waves Subclass.
 
-    This class should be used when loading a CODAR wave (.wls) file. This class utilizes the generic LLUV class from
-    ~/hfradarpy/common.py in order to load CODAR wave files
+    This class should be used when loading a CODAR wave (.wls) file. This class utilizes the generic LLUV class
     """
 
     def __init__(self, fname, replace_invalid=True):
@@ -69,6 +68,10 @@ class Waves(fileParser):
                 data_tables.append(df)
             self.data = pd.concat(data_tables, axis=0)
             self.df_index = ["time", "DIST"]  # define two indices for multidimensional indexing.
+
+            # Remove Distance and RangeCell from metadata since they are reported for each table in _tables
+            self.metadata.pop('Distance')
+            self.metadata.pop('RangeCell')
 
         # Use separate date and time columns to create atetime column and drop those columns.
         self.data["time"] = self.data[["TYRS", "TMON", "TDAY", "THRS", "TMIN", "TSEC"]].apply(
