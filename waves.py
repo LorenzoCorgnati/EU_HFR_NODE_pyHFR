@@ -91,6 +91,26 @@ class Waves(fileParser):
         """
         return "<Wave: {}>".format(self.file_name)
 
+    def select_range_cell(self, rngcll=3):
+            """
+            For ranged wave files, select a specific range cell to be used for analysis. 
+            This method will filter the data to only include the specified range cell.
+    
+            Args:
+                rngcll (int, optional): number of the Range Cell to be selected. Defaults to 3.
+            """
+
+            if len(self._tables) > 1:
+                distance = next(
+                    (d.get('Distance') for d in self._tables.values()
+                    if d.get('RangeCell') == str(rngcll) and 'WAVL' in d.get('TableType', '')),
+                    None
+                )
+
+                if distance is not None:
+                    distance = float(distance.split()[0])
+                    self.data = self.data[self.data['DIST'] == distance]     
+
     def clean_header(self):
         """
         Cleans the header data from the wave data for proper input into MySQL database
