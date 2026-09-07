@@ -1,3 +1,4 @@
+from calendar import EPOCH
 import datetime as dt
 import pandas as pd
 import re
@@ -8,6 +9,7 @@ from common import fileParser
 import numpy as np
 import os
 from pathlib import Path
+from collections import OrderedDict
 
 import logging
 
@@ -97,7 +99,7 @@ class Waves(fileParser):
             For ranged wave files, select a specific range cell to be used for analysis. 
             This method will filter the data to only include the specified range cell.
     
-            Args:
+            INPUT:
                 rngcll (int, optional): number of the Range Cell to be selected. Defaults to 3.
             """
 
@@ -123,7 +125,7 @@ class Waves(fileParser):
         of the HFR system.
         For WERA files, the reference position is set to the center of the grid.
 
-        Args:
+        INPUT:
             avgDistance (float, optional): average distance for Codar averaged files. Defaults to 15 km.
         """
 
@@ -156,6 +158,63 @@ class Waves(fileParser):
             self.metadata["ReferenceLongitude"] = str(refLon) + ' deg'
         
             ####  TO BE ADDED FOR WERA FILES  ####
+
+    def to_xarray_timeseries(self):
+            """
+            This function creates a dictionary of xarray DataArrays containing the variables
+            of the Waves object bidimensionally expanded along the coordinate axes (T,Z).  
+            The coordinate axes are set as (TIME, DEPTH) in order to represent the variables 
+            of the Waves object as a time-series. LATITUDE and LONGITUDE are set as separate,
+            time-independent DataArrays.
+            The LATITUDE and LONGITUDE values are taken from the Wave object metadata.
+            The generated dictionary is attached to the Total object, named as xts.
+    
+            """
+            # Initialize empty dictionary
+            xts = OrderedDict()
+
+            # Sort time values
+            df = self.data.sort_values('time')
+
+            # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
+            timeDelta = df['time'].values - np.datetime64("1950-01-01T00:00:00")
+            df['time'] = timeDelta / np.timedelta64(1, "D")
+
+            # Set coordinate axes
+            time = df['time'].values                      # TIME axis (length N)
+            depth = np.array([0], dtype=float)              # DEPTH axis (length 1)
+            coords = {"TIME": ("TIME", time), "DEPTH": ("DEPTH", depth)}
+
+            # Set the columns that become (TIME, DEPTH) variables
+            variable_cols = [c for c in df.columns if c not in ('TIME', 'time', 'LOND', 'LATD')]
+
+            for col in variable_cols:
+                data = df[col].values[:, np.newaxis]            # (N,) -> (N, 1)
+                xts[col] = xr.DataArray(
+                    data=data,
+                    dims=("TIME", "DEPTH"),
+                    coords=coords,
+                    name=col,
+                )
+
+            # Add DataArray for coordinate variables
+            xts['TIME'] = xr.DataArray(time,
+                                     dims={'TIME': len(time)},
+                                     coords={'TIME': len(time)})
+            xts['DEPTH'] = xr.DataArray(0,
+                                     dims={'DEPTH': 1},
+                                     coords={'DEPTH': [0]})
+            xts['LATITUDE'] = xr.DataArray(df['LATD'].iloc[0],
+                                           dims={'LATITUDE': df['LATD'].iloc[0]},
+                                           coords={'LATITUDE': df['LATD'].iloc[0]})
+            xts['LONGITUDE'] = xr.DataArray(df['LOND'].iloc[0],
+                                            dims={'LONGITUDE': df['LOND'].iloc[0]},
+                                            coords={'LONGITUDE': df['LOND'].iloc[0]})  
+            
+            # Attach the dictionary to the Total object
+            self.xts = xts
+            
+            return
 
     def clean_header(self):
         """

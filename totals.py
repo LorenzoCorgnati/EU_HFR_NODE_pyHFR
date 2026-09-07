@@ -776,7 +776,7 @@ class Total(fileParser):
             siteLon = self.site_source['Lon'].values.tolist()
             siteLat = self.site_source['Lat'].values.tolist()  
             # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
-            if self.metadata['GreatCircle']:
+            if 'GreatCircle' in self.metadata:
                 g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
             else:
                 g = Geod(ellps='WGS84')
