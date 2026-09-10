@@ -96,29 +96,32 @@ class Waves(fileParser):
 
     def select_range_cell(self, rngcll=3):
             """
-            For ranged wave files, select a specific range cell to be used for analysis. 
+            For Codar ranged wave files, select a specific range cell to be used for analysis. 
             This method will filter the data to only include the specified range cell.
     
             INPUT:
                 rngcll (int, optional): number of the Range Cell to be selected. Defaults to 3.
             """
 
-            if len(self._tables) > 1:
-                distance = next(
-                    (d.get('Distance') for d in self._tables.values()
-                    if d.get('RangeCell') == str(rngcll) and 'WAVL' in d.get('TableType', '')),
-                    None
-                )
+            if not self.is_wera:
+                if len(self._tables) > 1:
+                    distance = next(
+                        (d.get('Distance') for d in self._tables.values()
+                        if d.get('RangeCell') == str(rngcll) and 'WAVL' in d.get('TableType', '')),
+                        None
+                    )
 
-                if distance is not None:
-                    numDistance = float(distance.split()[0])
-                    self.data = self.data[self.data['DIST'] == numDistance]   
-                    self.metadata['Distance'] = distance
-                    self.metadata['RangeCell'] = str(rngcll)  
+                    if distance is not None:
+                        numDistance = float(distance.split()[0])
+                        self.data = self.data[self.data['DIST'] == numDistance]   
+                        self.metadata['Distance'] = distance
+                        self.metadata['RangeCell'] = str(rngcll)  
 
-    def set_reference_position(self, avgDistance=15000):
+    def set_reference_position(self, prefLon=None, prefLat=None, avgDistance=15000):
         """
-        Evaluate reference latitude and longitude to refer all data to a single point(for usage as a wave buoy).
+        Set the reference latitude and longitude to refer all data to a single point(for usage as a wave buoy).
+        If the latitude/longitude pair of the preferred reference position are given in input, the reference position 
+        will be set to those values. Otherwise, the reference position will be calculated based on the type of wave file.
         For Codar ranged wave files, the reference position is calculated using the distance of the selected range cell and
         the antenna bearing of the HFR system.
         For Codar averaged files, the reference position is calculated using a pre-defined distance and the antenna bearing 
@@ -126,18 +129,32 @@ class Waves(fileParser):
         For WERA files, the reference position is set to the center of the grid.
 
         INPUT:
+            prefLon (float, optional): preferred longitude for the reference position. Defaults to None.
+            prefLat (float, optional): preferred latitude for the reference position. Defaults to None.
             avgDistance (float, optional): average distance for Codar averaged files. Defaults to 15 km.
         """
 
-        # Add reference latitude and longitude (for usage as a wave buoy)
-        if not self.is_wera:
+        # Assign the preferred reference position if given in input
+        if prefLon is not None and prefLat is not None:
+            # Add reference latitude and longitude to data
+            self.data["LATD"] = prefLat
+            self.data["LOND"] = prefLon
+            # Add reference latitude and longitude to metadata
+            self.metadata["ReferenceLatitude"] = str(prefLat) + ' deg'
+            self.metadata["ReferenceLongitude"] = str(prefLon) + ' deg'
+            return
+        # Otherwise, calculate the reference position based on the type of wave file
+        elif not self.is_wera:
+            # Codar wave ranged files have a distance value in the metadata while Codar wave averaged files do not.
             if 'Distance' in self.metadata:
                 numDistance = float(self.metadata['Distance'].split()[0])
                 if 'km' in self.metadata['Distance']:
                     numDistance *= 1000  # convert km to meters
             else:
+                # For Codar wave averaged files, a pre-defined distance value is used.
                 numDistance = avgDistance
 
+            # Get the site latitude, longitude and antenna bearing from the metadata
             siteLat = float(self.metadata["Origin"].split()[0])
             siteLon = float(self.metadata["Origin"].split()[1])
             siteBearing = float(self.metadata["AntennaBearing"].split()[0])
@@ -156,8 +173,10 @@ class Waves(fileParser):
             # Add reference latitude and longitude to metadata
             self.metadata["ReferenceLatitude"] = str(refLat) + ' deg'
             self.metadata["ReferenceLongitude"] = str(refLon) + ' deg'
-        
+            return
+        else:        
             ####  TO BE ADDED FOR WERA FILES  ####
+            return
 
     def to_xarray_timeseries(self):
             """
