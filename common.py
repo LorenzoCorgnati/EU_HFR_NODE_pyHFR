@@ -149,13 +149,19 @@ class fileParser(object):
             self.full_file = os.path.realpath(fname)
             extension = os.path.splitext(fname)[1]
             
-            if extension == '.crad_ascii':
+            if (extension == '.ruv') or (extension == '.tuv') or (extension == '.wls'):
+                self.CTFparser()
+            elif extension == '.crad_ascii':
                 self.CRADparser()
             elif extension == '.cur_asc':
                 self.CURparser()  
-            else:
-                self.CTFparser()
-    
+            elif extension == '.nc':
+                self.WAVNCparser()  
+            elif extension == '.wav_asc':
+                self.WAVASCparser()
+            elif extension == '.wrad_asc':
+                 self.WRADparser()
+
     def CTFparser(self):
         """
         Return an fileParser object obtained by parsing CTF-LLUV files

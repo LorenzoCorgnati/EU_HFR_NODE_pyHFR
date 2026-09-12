@@ -10,6 +10,7 @@ import numpy as np
 import os
 from pathlib import Path
 from collections import OrderedDict
+import geopandas as gpd
 
 import logging
 
@@ -43,47 +44,92 @@ class Waves(fileParser):
     """
     Waves Subclass.
 
-    This class should be used when loading a CODAR wave (.wls) file. This class utilizes the generic LLUV class
+    This class should be used when loading a CODAR wave (.wls) and WERA (.nc, .wav, .wrad_asc) wave file.
+    This class utilizes the generic LLUV, WAVASC, WAVNC and WRAD classes.
     """
 
-    def __init__(self, fname, replace_invalid=True):
+    def __init__(self, fname='', replace_invalid=True, grid=gpd.GeoSeries(), empty_wave=False):
         """
         Initalize a Wave object from a CTF wave file.
 
         Args:
             fname (str or path.Path): Filename to be loaded
             replace_invalid (bool, optional): Replace invalid values to np.nan. Defaults to True.
+            grid (geopandas.GeoSeries, optional): GeoSeries containing the grid of the WERA wave file. Defaults to empty GeoSeries.
+            empty_wave (bool, optional): Create an empty Wave object. Defaults to False.
         """
         logging.info("Loading wave file: {}".format(fname))
+
+        if not fname:
+            empty_wave = True
+            replace_invalid = False
+
         super().__init__(fname)
+
+        if self._tables:
+            # Codar wave file
+            if 'CTF' in self.metadata:
+                if self._tables[str(1)]["data"]["DIST"].isnull().all():
+                    # Averaged wave file
+                    df = self._tables[str(1)]["data"]
+                    self.data = df
+                    self.df_index = "time"  # define index so pd.to_xarray function will automatically assign dimension and coordinates
+                else:
+                    # Ranged wave file
+                    data_tables = []
+                    for Rkey in self._tables.keys():
+                        df = self._tables[Rkey]["data"]
+                        data_tables.append(df)
+                    self.data = pd.concat(data_tables, axis=0)
+                    self.df_index = ["time", "DIST"]  # define two indices for multidimensional indexing.
+
+                    # Remove Distance and RangeCell from metadata since they are reported for each table in _tables
+                    self.metadata.pop('Distance')
+                    self.metadata.pop('RangeCell')
+
+                # Use separate date and time columns to create atetime column and drop those columns.
+                self.data["time"] = self.data[["TYRS", "TMON", "TDAY", "THRS", "TMIN", "TSEC"]].apply(
+                    lambda s: dt.datetime(*s), axis=1
+                )
+
+        if empty_wave:
+            self.empty_wave()
 
         if self._iscorrupt:
             return
 
-        if self._tables[str(1)]["data"]["DIST"].isnull().all():
-            df = self._tables[str(1)]["data"]
-            self.data = df
-            self.df_index = "time"  # define index so pd.to_xarray function will automatically assign dimension and coordinates
-        else:
-            data_tables = []
-            for key in self._tables.keys():
-                df = self._tables[key]["data"]
-                data_tables.append(df)
-            self.data = pd.concat(data_tables, axis=0)
-            self.df_index = ["time", "DIST"]  # define two indices for multidimensional indexing.
-
-            # Remove Distance and RangeCell from metadata since they are reported for each table in _tables
-            self.metadata.pop('Distance')
-            self.metadata.pop('RangeCell')
-
-        # Use separate date and time columns to create atetime column and drop those columns.
-        self.data["time"] = self.data[["TYRS", "TMON", "TDAY", "THRS", "TMIN", "TSEC"]].apply(
-            lambda s: dt.datetime(*s), axis=1
-        )
-
         if not self.data.empty:
             if replace_invalid:
                 self.replace_invalid_values()
+
+    def empty_wave(self):
+            """
+            Create an empty Wave object. The empty Wave object can be created by setting 
+            the geographical grid.
+            """
+    
+            self.file_path = ''
+            self.file_name = ''
+            self.full_file = ''
+            self.metadata = OrderedDict()
+            self._iscorrupt = False
+            self.time = []
+    
+            for key in self._tables.keys():
+                table = self._tables[key]
+                self._tables[key]['TableRows'] = '0'
+                if 'WAVL' in table['TableType']:
+                    self.data.drop(self.data.index[:], inplace=True)
+                    self._tables[key]['data'] = self.data
+                elif 'WAV' in table['TableType']:
+                    self.wav_data.drop(self.wav_data.index[:], inplace=True)
+                    self._tables[key]['data'] = self.wav_data
+                elif 'WRAD' in table['TableType']:
+                    self.wrad_data.drop(self.wrad_data.index[:], inplace=True)
+                    self._tables[key]['data'] = self.wrad_data
+                    
+            if not hasattr(self, 'data'):
+                self.data = pd.DataFrame()
 
     def __repr__(self):
         """
