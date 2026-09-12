@@ -92,15 +92,20 @@ class Waves(fileParser):
                     lambda s: dt.datetime(*s), axis=1
                 )
 
+        if not self.data.empty:
+            if replace_invalid:
+                self.replace_invalid_values()
+
         if empty_wave:
             self.empty_wave()
+
+        if not grid.empty:
+            self.initialize_grid(grid)
 
         if self._iscorrupt:
             return
 
-        if not self.data.empty:
-            if replace_invalid:
-                self.replace_invalid_values()
+        
 
     def empty_wave(self):
             """
@@ -130,6 +135,33 @@ class Waves(fileParser):
                     
             if not hasattr(self, 'data'):
                 self.data = pd.DataFrame()
+
+    def initialize_grid(self, gridGS):
+        """
+        Initialize the geogprahic grid for filling the LOND and LATD columns of the 
+        Wave object data DataFrame.
+        
+        INPUT:
+            gridGS: GeoPandas GeoSeries containing the longitude/latitude pairs of all
+                the points in the grid
+                
+        OUTPUT:
+            DataFrame with filled LOND and LATD columns.
+        """
+        
+        # initialize data DataFrame with column names
+        self.data = pd.DataFrame(columns=['LOND', 'LATD', 'GDPX, GDPY, MVHT, WDTO, TAVG, TNRG, QUAL'])
+        
+        # extract longitudes and latitude from grid GeoSeries and insert them into data DataFrame
+        self.data['LOND'] = gridGS.x
+        self.data['LATD'] = gridGS.y
+        
+        # add metadata about datum and CRS
+        self.metadata = OrderedDict()
+        self.metadata['GreatCircle'] = ''.join(gridGS.crs.ellipsoid.name.split()) + ' ' + str(gridGS.crs.ellipsoid.semi_major_metre) + '  ' + str(gridGS.crs.ellipsoid.inverse_flattening)
+
+        # add attribute to indicate that this is a WERA wave file (since it has a grid)
+        self.is_wera = True
 
     def __repr__(self):
         """
