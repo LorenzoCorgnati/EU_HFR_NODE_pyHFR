@@ -91,9 +91,35 @@ class Waves(fileParser):
                 self.data["time"] = self.data[["TYRS", "TMON", "TDAY", "THRS", "TMIN", "TSEC"]].apply(
                     lambda s: dt.datetime(*s), axis=1
                 )
+            elif 'WAVCNC' in self._tables[str(1)]["TableType"]:
+                self.data = self._tables[str(1)]["data"]
+            elif 'WAVSNC' in self._tables[str(1)]["TableType"]:
+                self.data = self._tables[str(1)]["data"]
+            elif 'WAVCASC' in self._tables[str(1)]["TableType"]:
+                self.wavc_data = self._tables[str(1)]["data"]
+                self.data = self._tables[str(1)]["data"]
+            elif 'WAVSASC' in self._tables[str(1)]["TableType"]:
+                self.wavs_data = self._tables[str(1)]["data"]
+                self.data = self._tables[str(1)]["data"]
 
-        if not self.data.empty:
-            if replace_invalid:
+        if replace_invalid:
+            if 'WAVCNC' in self.metadata['FileType'] or 'WAVSNC' in self.metadata['FileType']:
+                # Open the netCDF file and store it into an xarray DataSet
+                wavDS=xr.open_dataset(self.full_file,decode_times=True,decode_coords='all')  
+                # Get the _FillValue attribute for each variable in the dataset
+                fill_values = []
+                for varName in wavDS.variables:
+                    var = wavDS[varName]
+                    fv = var.attrs.get('_FillValue', var.encoding.get('_FillValue'))
+                    if fv is not None:
+                        fill_values.append(fv)
+                # Reduce to the unique fill values across all variables
+                values = list(set(fill_values))
+                self.replace_invalid_values(list(values))
+                # Drop any rows that contain NaN values for all variables (except LOND and LATD)in self.data
+                self.data.dropna(subset=[col for col in self.data.columns if col not in ['LOND', 'LATD', 'GDPX', 'GDPY']], how='all', inplace=True)
+
+            else:
                 self.replace_invalid_values()
 
         if empty_wave:
@@ -104,8 +130,6 @@ class Waves(fileParser):
 
         if self._iscorrupt:
             return
-
-        
 
     def empty_wave(self):
             """
@@ -123,15 +147,15 @@ class Waves(fileParser):
             for key in self._tables.keys():
                 table = self._tables[key]
                 self._tables[key]['TableRows'] = '0'
-                if 'WAVL' in table['TableType']:
+                if 'WAVL' in table['TableType'] or 'WAVCNC' in table['TableType'] or 'WAVSNC' in table['TableType']:
                     self.data.drop(self.data.index[:], inplace=True)
                     self._tables[key]['data'] = self.data
-                elif 'WAV' in table['TableType']:
-                    self.wav_data.drop(self.wav_data.index[:], inplace=True)
-                    self._tables[key]['data'] = self.wav_data
-                elif 'WRAD' in table['TableType']:
-                    self.wrad_data.drop(self.wrad_data.index[:], inplace=True)
-                    self._tables[key]['data'] = self.wrad_data
+                elif 'WAVCASC' in table['TableType']:
+                    self.wavc_data.drop(self.wavc_data.index[:], inplace=True)
+                    self._tables[key]['data'] = self.wavc_data
+                elif 'WAVSASC' in table['TableType']:
+                    self.wavs_data.drop(self.wavs_data.index[:], inplace=True)
+                    self._tables[key]['data'] = self.wavs_data
                     
             if not hasattr(self, 'data'):
                 self.data = pd.DataFrame()

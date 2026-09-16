@@ -10,10 +10,12 @@ from collections import OrderedDict
 from calc import dms2dd, createLonLatGridFromTopLeftPointWera, createLonLatGridFromBB
 from pyproj import Geod
 import math
-
+import geopandas as gpd
+from shapely.geometry import Point
 import numpy as np
 import pandas as pd
 import xarray as xr
+import cf_xarray
 
 logger = logging.getLogger(__name__)
 
@@ -156,11 +158,16 @@ class fileParser(object):
             elif extension == '.cur_asc':
                 self.CURparser()  
             elif extension == '.nc':
-                self.WAVNCparser()  
+                # Open the netCDF file and store it into an xarray DataSet
+                wavDS=xr.open_dataset(self.full_file,decode_times=True,decode_coords='all')        
+                # Check if the file contains direction data (i.e. it is a combined wave file) or not (i.e. it is a single site wave file)
+                if 'Wdir' in wavDS:
+                    self.WAVCNCparser()  
+                else:
+                    self.WAVSNCparser()
             elif extension == '.wav_asc':
-                self.WAVASCparser()
-            elif extension == '.wrad_asc':
-                 self.WRADparser()
+                #### DISCIRIMINARE TRA COMBINED WAV (-> WAVCASCparser) E SINGLE WAV FILES (-> WAVSASCparser)
+                self.WAVCASCparser()
 
     def CTFparser(self):
         """
@@ -373,7 +380,7 @@ class fileParser(object):
             open_crad = [i.lstrip() for i in open_crad]
             # Parse header
             numStation = int(open_crad[0])
-            header= open_crad[0 : numStation+7]
+            header = open_crad[0 : numStation+7]
             header = [elem for elem in header if elem.strip()]
             self.metadata,self.site_source = self._parse_cur_header(header)
             # Read data content
@@ -430,6 +437,70 @@ class fileParser(object):
     
         try:
             self.time = dt.datetime.strptime(self.site_source['DateOfMeasurement'][0], '%d-%b-%Y %H:%M %Z')
+        except KeyError:
+            pass
+
+    def WAVCNCparser(self):
+        """
+        Return a fileParser object obtained by parsing WERA WAV combined wave files in netCDF format (WERA native)
+        """
+        table_count = 0
+        self.is_wera = True  
+        self.is_combined = True 
+        self.metadata['FileType'] = 'WAVCNC'
+
+        # Open the netCDF file and store it into an xarray DataSet
+        wavDS=xr.open_dataset(self.full_file,decode_times=True,decode_coords='all')    
+
+        table = True  # we found a table
+        table_count = table_count + 1  # this is the nth table
+        # table_data = u''
+        self._tables[str(table_count)] = OrderedDict()
+        self._tables[str(table_count)]['TableType'] = 'WAVCNC'
+        self._tables[str(table_count)]['_TableHeader'] = ['Longitude','Latitude','Longitudinal dilution of precision','Latitudinal dilution of precision','Significant wave height [m]','Mean wave direction (to) [deg]','Wave mean period [s]','Wave energy period [s]','WERA quality number']
+        self._tables[str(table_count)]['TableColumnTypes'] = 'LOND LATD GDPX GDPY MVHT WDTO TAVG TNRG QUAL'
+
+        # Get longitude and latitude values of the input data geographical grid
+        lonDim = wavDS.cf['longitude'].to_numpy()
+        latDim = wavDS.cf['latitude'].to_numpy()
+
+        # Get the longitude/latitude couples
+        Lon, Lat = np.meshgrid(lonDim, latDim)
+        # Create grid
+        Lonc = Lon.flatten()
+        Latc = Lat.flatten()
+    
+        # Now convert these points to geo-data
+        positions = gpd.GeoSeries([Point(x, y) for x, y in zip(Lonc, Latc)])
+        positions = positions.set_crs('epsg:4326')  
+
+        # initialize data DataFrame with column names
+        self._tables[str(table_count)]['data'] = pd.DataFrame(columns=self._tables[str(table_count)]['TableColumnTypes'].split())
+        
+        # extract longitudes and latitude from grid GeoSeries and insert them into data DataFrame
+        self._tables[str(table_count)]['data']['LOND'] = positions.x
+        self._tables[str(table_count)]['data']['LATD'] = positions.y
+        
+        # add metadata about datum and CRS
+        self.metadata['GreatCircle'] = ''.join(positions.crs.ellipsoid.name.split()) + ' ' + str(positions.crs.ellipsoid.semi_major_metre) + '  ' + str(positions.crs.ellipsoid.inverse_flattening)
+        self._tables[str(table_count)]['GreatCircle'] = ''.join(positions.crs.ellipsoid.name.split()) + ' ' + str(positions.crs.ellipsoid.semi_major_metre) + '  ' + str(positions.crs.ellipsoid.inverse_flattening)
+
+        # Read data content
+        self._tables[str(table_count)]['data']['GDPX'] = wavDS.gdopx.values[:,:].flatten() 
+        self._tables[str(table_count)]['data']['GDPY'] = wavDS.gdopy.values[:,:].flatten() 
+        self._tables[str(table_count)]['data']['MVHT'] = wavDS.Hs.values[:,:].flatten() 
+        self._tables[str(table_count)]['data']['WDTO'] = wavDS.Wdir.values[:,:].flatten()
+        self._tables[str(table_count)]['data']['TAVG'] = wavDS.Tmean.values[:,:].flatten()
+        self._tables[str(table_count)]['data']['TNRG'] = wavDS.Tenergy.values[:,:].flatten()
+        self._tables[str(table_count)]['data']['QUAL'] = wavDS.qual.values[:,:].flatten()
+
+        self._iscorrupt = False
+    
+        try:
+            # Assign the time of the measurement as datetime
+            self.time = pd.Timestamp(wavDS['time'].values[0]).to_pydatetime()
+            self.metadata['TimeStamp'] = self.time.strftime('%Y %m %d %H %M %S')
+            
         except KeyError:
             pass
 
