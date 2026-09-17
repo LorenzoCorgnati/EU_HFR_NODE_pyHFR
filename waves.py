@@ -228,7 +228,8 @@ class Waves(fileParser):
         the antenna bearing of the HFR system.
         For Codar averaged files, the reference position is calculated using a pre-defined distance and the antenna bearing 
         of the HFR system.
-        For WERA files, the reference position is set to the center of the grid.
+        For WERA files, the reference position is set to the center of the grid and only data of the closest grid point to the reference position is kept.
+        The reference longitude and latitude are stored in the metadata of the Wave object.
 
         INPUT:
             prefLon (float, optional): preferred longitude for the reference position. Defaults to None.
@@ -238,47 +239,103 @@ class Waves(fileParser):
 
         # Assign the preferred reference position if given in input
         if prefLon is not None and prefLat is not None:
-            # Add reference latitude and longitude to data
-            self.data["LATD"] = prefLat
-            self.data["LOND"] = prefLon
-            # Add reference latitude and longitude to metadata
-            self.metadata["ReferenceLatitude"] = str(prefLat) + ' deg'
-            self.metadata["ReferenceLongitude"] = str(prefLon) + ' deg'
-            return
+            if not self.is_wera:        # Codar data
+                # Add reference latitude and longitude to data
+                self.data["LATD"] = prefLat
+                self.data["LOND"] = prefLon
+                # Add reference latitude and longitude to metadata
+                self.metadata["ReferenceLatitude"] = str(prefLat) + ' deg'
+                self.metadata["ReferenceLongitude"] = str(prefLon) + ' deg'
+                return
+            else:                       # WERA data
+                # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
+                if 'GreatCircle' in self.metadata:
+                    g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
+                else:
+                    g = Geod(ellps='WGS84')
+                    self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
+                # Find the closest grid point to the preferred reference position
+                _, _, dist = g.inv(np.full(self.data["LOND"].shape, prefLon), np.full(self.data["LATD"].shape, prefLat), self.data["LOND"], self.data["LATD"])
+                idx = dist.argmin()
+                closestLon = self.data["LOND"].iloc[idx]
+                closestLat = self.data["LATD"].iloc[idx]
+                # Keep only the data of the closest grid point
+                self.data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
+                # Add reference latitude and longitude to metadata
+                self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
+                self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
+                return
         # Otherwise, calculate the reference position based on the type of wave file
-        elif not self.is_wera:
-            # Codar wave ranged files have a distance value in the metadata while Codar wave averaged files do not.
-            if 'Distance' in self.metadata:
-                numDistance = float(self.metadata['Distance'].split()[0])
-                if 'km' in self.metadata['Distance']:
-                    numDistance *= 1000  # convert km to meters
-            else:
-                # For Codar wave averaged files, a pre-defined distance value is used.
-                numDistance = avgDistance
+        else:
+            if not self.is_wera:        # Codar data
+                # Codar wave ranged files have a distance value in the metadata while Codar wave averaged files do not.
+                if 'Distance' in self.metadata:
+                    numDistance = float(self.metadata['Distance'].split()[0])
+                    if 'km' in self.metadata['Distance']:
+                        numDistance *= 1000  # convert km to meters
+                else:
+                    # For Codar wave averaged files, a pre-defined distance value is used.
+                    numDistance = avgDistance
 
-            # Get the site latitude, longitude and antenna bearing from the metadata
-            siteLat = float(self.metadata["Origin"].split()[0])
-            siteLon = float(self.metadata["Origin"].split()[1])
-            siteBearing = float(self.metadata["AntennaBearing"].split()[0])
-            # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
-            if 'GreatCircle' in self.metadata:
-                g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
-            else:
-                g = Geod(ellps='WGS84')
-                self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
-            # Calculate the reference latitude and longitude using the Geod object
-            refLon, refLat, back_azimuth = g.fwd(siteLon, siteLat, siteBearing, numDistance)
-        
-            # Add reference latitude and longitude to data
-            self.data["LATD"] = refLat
-            self.data["LOND"] = refLon
-            # Add reference latitude and longitude to metadata
-            self.metadata["ReferenceLatitude"] = str(refLat) + ' deg'
-            self.metadata["ReferenceLongitude"] = str(refLon) + ' deg'
-            return
-        else:        
-            ####  TO BE ADDED FOR WERA FILES  ####
-            return
+                # Get the site latitude, longitude and antenna bearing from the metadata
+                siteLat = float(self.metadata["Origin"].split()[0])
+                siteLon = float(self.metadata["Origin"].split()[1])
+                siteBearing = float(self.metadata["AntennaBearing"].split()[0])
+                # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
+                if 'GreatCircle' in self.metadata:
+                    g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
+                else:
+                    g = Geod(ellps='WGS84')
+                    self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
+                # Calculate the reference latitude and longitude using the Geod object
+                refLon, refLat, back_azimuth = g.fwd(siteLon, siteLat, siteBearing, numDistance)
+            
+                # Add reference latitude and longitude to data
+                self.data["LATD"] = refLat
+                self.data["LOND"] = refLon
+                # Add reference latitude and longitude to metadata
+                self.metadata["ReferenceLatitude"] = str(refLat) + ' deg'
+                self.metadata["ReferenceLongitude"] = str(refLon) + ' deg'
+                return
+            else:                       # WERA data
+                # Get longitude limits   
+                if 'BBminLongitude' in self.metadata:
+                    lonMin = float(self.metadata['BBminLongitude'].split()[0])
+                else:
+                    lonMin = self.data.LOND.min()
+                if 'BBmaxLongitude' in self.metadata:
+                    lonMax = float(self.metadata['BBmaxLongitude'].split()[0])
+                else:
+                    lonMax = self.data.LOND.max()
+                # Get latitude limits   
+                if 'BBminLatitude' in self.metadata:
+                    latMin = float(self.metadata['BBminLatitude'].split()[0])
+                else:
+                    latMin = self.data.LATD.min()
+                if 'BBmaxLatitude' in self.metadata:
+                    latMax = float(self.metadata['BBmaxLatitude'].split()[0])
+                else:
+                    latMax = self.data.LATD.max()   
+                # Evaluate the center of the grid as the reference position
+                centerLon = (lonMin + lonMax) / 2
+                centerLat = (latMin + latMax) / 2
+                # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
+                if 'GreatCircle' in self.metadata:
+                    g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
+                else:
+                    g = Geod(ellps='WGS84')
+                    self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
+                # Find the closest grid point to the center grid position
+                _, _, dist = g.inv(np.full(self.data["LOND"].shape, centerLon), np.full(self.data["LATD"].shape, centerLat), self.data["LOND"], self.data["LATD"])
+                idx = dist.argmin()
+                closestLon = self.data["LOND"].iloc[idx]
+                closestLat = self.data["LATD"].iloc[idx]
+                # Keep only the data of the closest grid point
+                self.data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
+                # Add reference latitude and longitude to metadata
+                self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
+                self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
+                return
 
     def to_xarray_timeseries(self):
             """
