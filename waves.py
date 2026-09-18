@@ -198,15 +198,18 @@ class Waves(fileParser):
 
     def select_range_cell(self, rngcll=3):
             """
+            This method is meant for preparing wave data as timeseries (i.e. to refer all data to a single pointfor usage as a wave buoy).
+            For this reason, the method creates the field self.timeseries_data, which is a DataFrame containing only the data of the selected range cell.
             For Codar ranged wave files, select a specific range cell to be used for analysis. 
-            This method will filter the data to only include the specified range cell.
+            This method filters the data to only include the specified range cell and stores the selection in self.timeseries_data.
+            The method is specific for Codar wave files, it has no effect on WERA wave files.
     
             INPUT:
                 rngcll (int, optional): number of the Range Cell to be selected. Defaults to 3.
             """
 
             if not self.is_wera:
-                if len(self._tables) > 1:
+                if len(self._tables) > 1:       # Codar ranged data
                     distance = next(
                         (d.get('Distance') for d in self._tables.values()
                         if d.get('RangeCell') == str(rngcll) and 'WAVL' in d.get('TableType', '')),
@@ -215,13 +218,18 @@ class Waves(fileParser):
 
                     if distance is not None:
                         numDistance = float(distance.split()[0])
-                        self.data = self.data[self.data['DIST'] == numDistance]   
+                        self.timeseries_data = self.data[self.data['DIST'] == numDistance]   
                         self.metadata['Distance'] = distance
                         self.metadata['RangeCell'] = str(rngcll)  
+                else:                           # Codar averaged data
+                    self.timeseries_data = self.data
 
     def set_reference_position(self, prefLon=None, prefLat=None, avgDistance=15000):
         """
         Set the reference latitude and longitude to refer all data to a single point(for usage as a wave buoy).
+        This method is meant for preparing wave data as timeseries (i.e. to refer all data to a single pointfor usage as a wave buoy).
+        For this reason, the method works on the field self.timeseries_data, which is a DataFrame containing only the data of the 
+        selected range cell for Codar data or the closest grid point to the center of the grid for WERA data.
         If the latitude/longitude pair of the preferred reference position are given in input, the reference position 
         will be set to those values. Otherwise, the reference position will be calculated based on the type of wave file.
         For Codar ranged wave files, the reference position is calculated using the distance of the selected range cell and
@@ -240,13 +248,14 @@ class Waves(fileParser):
         # Assign the preferred reference position if given in input
         if prefLon is not None and prefLat is not None:
             if not self.is_wera:        # Codar data
-                # Add reference latitude and longitude to data
-                self.data["LATD"] = prefLat
-                self.data["LOND"] = prefLon
-                # Add reference latitude and longitude to metadata
-                self.metadata["ReferenceLatitude"] = str(prefLat) + ' deg'
-                self.metadata["ReferenceLongitude"] = str(prefLon) + ' deg'
-                return
+                if hasattr(self, 'timeseries_data'):
+                    # Add reference latitude and longitude to data
+                    self.timeseries_data["LATD"] = prefLat
+                    self.timeseries_data["LOND"] = prefLon
+                    # Add reference latitude and longitude to metadata
+                    self.metadata["ReferenceLatitude"] = str(prefLat) + ' deg'
+                    self.metadata["ReferenceLongitude"] = str(prefLon) + ' deg'
+                    return
             else:                       # WERA data
                 # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
                 if 'GreatCircle' in self.metadata:
@@ -260,7 +269,7 @@ class Waves(fileParser):
                 closestLon = self.data["LOND"].iloc[idx]
                 closestLat = self.data["LATD"].iloc[idx]
                 # Keep only the data of the closest grid point
-                self.data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
+                self.timeseries_data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
                 # Add reference latitude and longitude to metadata
                 self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
                 self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
@@ -268,35 +277,36 @@ class Waves(fileParser):
         # Otherwise, calculate the reference position based on the type of wave file
         else:
             if not self.is_wera:        # Codar data
-                # Codar wave ranged files have a distance value in the metadata while Codar wave averaged files do not.
-                if 'Distance' in self.metadata:
-                    numDistance = float(self.metadata['Distance'].split()[0])
-                    if 'km' in self.metadata['Distance']:
-                        numDistance *= 1000  # convert km to meters
-                else:
-                    # For Codar wave averaged files, a pre-defined distance value is used.
-                    numDistance = avgDistance
+                if hasattr(self, 'timeseries_data'):
+                    # Codar wave ranged files have a distance value in the metadata while Codar wave averaged files do not.
+                    if 'Distance' in self.metadata:
+                        numDistance = float(self.metadata['Distance'].split()[0])
+                        if 'km' in self.metadata['Distance']:
+                            numDistance *= 1000  # convert km to meters
+                    else:
+                        # For Codar wave averaged files, a pre-defined distance value is used.
+                        numDistance = avgDistance
 
-                # Get the site latitude, longitude and antenna bearing from the metadata
-                siteLat = float(self.metadata["Origin"].split()[0])
-                siteLon = float(self.metadata["Origin"].split()[1])
-                siteBearing = float(self.metadata["AntennaBearing"].split()[0])
-                # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
-                if 'GreatCircle' in self.metadata:
-                    g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
-                else:
-                    g = Geod(ellps='WGS84')
-                    self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
-                # Calculate the reference latitude and longitude using the Geod object
-                refLon, refLat, back_azimuth = g.fwd(siteLon, siteLat, siteBearing, numDistance)
-            
-                # Add reference latitude and longitude to data
-                self.data["LATD"] = refLat
-                self.data["LOND"] = refLon
-                # Add reference latitude and longitude to metadata
-                self.metadata["ReferenceLatitude"] = str(refLat) + ' deg'
-                self.metadata["ReferenceLongitude"] = str(refLon) + ' deg'
-                return
+                    # Get the site latitude, longitude and antenna bearing from the metadata
+                    siteLat = float(self.metadata["Origin"].split()[0])
+                    siteLon = float(self.metadata["Origin"].split()[1])
+                    siteBearing = float(self.metadata["AntennaBearing"].split()[0])
+                    # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
+                    if 'GreatCircle' in self.metadata:
+                        g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
+                    else:
+                        g = Geod(ellps='WGS84')
+                        self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
+                    # Calculate the reference latitude and longitude using the Geod object
+                    refLon, refLat, back_azimuth = g.fwd(siteLon, siteLat, siteBearing, numDistance)
+                
+                    # Add reference latitude and longitude to data
+                    self.timeseries_data["LATD"] = refLat
+                    self.timeseries_data["LOND"] = refLon
+                    # Add reference latitude and longitude to metadata
+                    self.metadata["ReferenceLatitude"] = str(refLat) + ' deg'
+                    self.metadata["ReferenceLongitude"] = str(refLon) + ' deg'
+                    return
             else:                       # WERA data
                 # Get longitude limits   
                 if 'BBminLongitude' in self.metadata:
@@ -331,7 +341,7 @@ class Waves(fileParser):
                 closestLon = self.data["LOND"].iloc[idx]
                 closestLat = self.data["LATD"].iloc[idx]
                 # Keep only the data of the closest grid point
-                self.data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
+                self.timeseries_data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
                 # Add reference latitude and longitude to metadata
                 self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
                 self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
@@ -351,20 +361,22 @@ class Waves(fileParser):
             # Initialize empty dictionary
             xts = OrderedDict()
 
-            # Sort time values
-            df = self.data.sort_values('time')
+            # Process Codar data
+            if not self.is_wera:
+                # Sort time values
+                df = self.timeseries_data.sort_values('time')
 
-            # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
-            timeDelta = df['time'].values - np.datetime64("1950-01-01T00:00:00")
-            df['time'] = timeDelta / np.timedelta64(1, "D")
+                # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
+                timeDelta = df['time'].values - np.datetime64("1950-01-01T00:00:00")
+                df['time'] = timeDelta / np.timedelta64(1, "D")
 
-            # Set coordinate axes
-            time = df['time'].values                      # TIME axis (length N)
-            depth = np.array([0], dtype=float)              # DEPTH axis (length 1)
-            coords = {"TIME": ("TIME", time), "DEPTH": ("DEPTH", depth)}
+                # Set coordinate axes
+                time = df['time'].values                      # TIME axis (length N)
+                depth = np.array([0], dtype=float)              # DEPTH axis (length 1)
+                coords = {"TIME": ("TIME", time), "DEPTH": ("DEPTH", depth)}
 
-            # Set the columns that become (TIME, DEPTH) variables
-            variable_cols = [c for c in df.columns if c not in ('TIME', 'time', 'LOND', 'LATD')]
+                # Set the columns that become (TIME, DEPTH) variables
+                variable_cols = [c for c in df.columns if c not in ('TIME', 'time', 'LOND', 'LATD')]
 
             for col in variable_cols:
                 data = df[col].values[:, np.newaxis]            # (N,) -> (N, 1)
