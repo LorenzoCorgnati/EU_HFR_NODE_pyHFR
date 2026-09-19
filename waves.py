@@ -3,6 +3,7 @@ import datetime as dt
 import pandas as pd
 import re
 from pyproj import Geod
+from shapely.geometry import Point
 import xarray as xr
 from common import fileParser
 # from nc import make_encoding
@@ -416,6 +417,69 @@ class Waves(fileParser):
             self.xts = xts
             
             return
+
+    def mask_over_land(self, timeseries=False, subset=False, res='high'):
+        """
+        This function masks the wave data lying on land.        
+        Wave data coordinates are checked against a reference file containing information 
+        about which locations are over land or in an unmeasurable area (for example, behind an 
+        island or point of land). 
+        The Natural Earth public domain maps are used as reference.
+        If "res" option is set to "high", the map with 10 m resolution is used, otherwise the map with 110 m resolution is used.
+        The EPSG:4326 CRS is used for distance calculations.
+        If "subset" option is set to True, the wave data lying on land are removed.
+        Based on the input option "timeseries", the method is applied either to all data entries or only to the timeseries data.
+        
+        INPUT:
+            timeseries: option enabling the application of the method to the timeseries_data DataFrame (if set to True) or
+                        to the data DataFrame (if set to False). Defaults to False.
+            subset: option enabling the removal of wave data on land (if set to True)
+            res: resolution of the www.naturalearthdata.com dataset used to perform the masking; None or 'low' or 'high'. Defaults to 'high'.
+            
+        OUTPUT:
+            waterIndex: list containing the indices of wave data lying on water.
+        """
+        # Check the DataFrame to be masked
+        if timeseries:
+            if hasattr(self, 'timeseries_data'):
+                df = self.timeseries_data
+            else:
+                return
+        else:
+            df = self.data
+
+        # Check if the selected DataFrame has LOND and LATD columns
+        if 'LOND' in df.columns and 'LATD' in df.columns:        
+            # Load the reference file (GeoPandas "naturalearth_lowres")
+            mask_dir = '.hfradarpy'
+            if (res == 'high'):
+                maskfile = os.path.join(mask_dir, 'ne_10m_admin_0_countries.shp')
+            else:
+                maskfile = os.path.join(mask_dir, 'ne_110m_admin_0_countries.shp')
+            land = gpd.read_file(maskfile)
+
+            # Build the GeoDataFrame containing wave position points
+            geodata = gpd.GeoDataFrame(
+                df[['LOND', 'LATD']],
+                crs="EPSG:4326",
+                geometry=[
+                    Point(xy) for xy in zip(df.LOND.values, df.LATD.values)
+                ]
+            )
+            # Join the GeoDataFrame containing wave position points with GeoDataFrame containing leasing areas
+            geodata = gpd.sjoin(geodata.to_crs(4326), land.to_crs(4326), how="left", predicate="intersects")
+
+            # All data in the continent column that lies over water should be nan.
+            waterIndex = geodata['CONTINENT'].isna()
+
+            if subset:
+                # Subset the data to water only
+                if timeseries:
+                    self.timeseries_data = self.timeseries_data.loc[waterIndex].reset_index()
+                else:
+                    self.data = self.data.loc[waterIndex].reset_index()
+            else:
+                return waterIndex
 
     def initialize_qc(self):
         """
