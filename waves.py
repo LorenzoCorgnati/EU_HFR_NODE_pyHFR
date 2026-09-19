@@ -487,6 +487,35 @@ class Waves(fileParser):
         """
         # Initialize dictionary entry for QC metadta
         self.metadata['QCTest'] = {}
+
+    def qc_ehn_over_water(self):
+        """
+        This test labels wave data that lie on water with a good data” flag.
+        Otherwise the wave data are labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        Wave data coordinates are checked against a reference file containing information 
+        about which locations are over land or in an unmeasurable area (for example, behind an 
+        island or point of land). 
+        The Natural Earth public domain maps are used as reference.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team.
+        """
+        # Set the test name
+        testName = 'OWTR_QC'
+        
+        # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+        self.data.loc[:,testName] = 1
+        if hasattr(self, 'timeseries_data'):
+            self.timeseries_data.loc[:,testName] = 1
+        
+        # Set bad flag where land is flagged (mask_over_land method)
+        if 'LOND' in self.data.columns and 'LATD' in self.data.columns: 
+            self.data.loc[~self.mask_over_land(subset=False), testName] = 4
+        if hasattr(self, 'timeseries_data'):
+            self.timeseries_data.loc[~self.mask_over_land(timeseries=True, subset=False), testName] = 4
+            
+        self.metadata['QCTest'][testName] = 'Over Water QC Test - Thresholds=[' + 'GeoPandas "naturalearth_lowres"]'
         
         
     def qc_instac_global_range(self):
