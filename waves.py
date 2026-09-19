@@ -91,6 +91,7 @@ class Waves(fileParser):
                 self.data["time"] = self.data[["TYRS", "TMON", "TDAY", "THRS", "TMIN", "TSEC"]].apply(
                     lambda s: dt.datetime(*s), axis=1
                 )
+            # WERA wave file
             elif 'WAVCNC' in self._tables[str(1)]["TableType"]:
                 self.data = self._tables[str(1)]["data"]
             elif 'WAVSNC' in self._tables[str(1)]["TableType"]:
@@ -101,6 +102,16 @@ class Waves(fileParser):
             elif 'WAVSASC' in self._tables[str(1)]["TableType"]:
                 self.wavs_data = self._tables[str(1)]["data"]
                 self.data = self._tables[str(1)]["data"]
+
+            # Remove impossible times (before 1970 or in the future)
+            epoch = dt.datetime(1970, 1, 1)
+            now = dt.datetime.now()
+            if not epoch <= self.time <= now:
+                self.data = pd.DataFrame()
+
+            # Remove impossible positions (only for WERA data, Codar data position is evaluated based on Distance and AntennaBearing)
+            if self.is_wera:
+                self.data = self.data[self.data['LOND'].between(-180, 180) & self.data['LATD'].between(-90, 90)]
 
         if replace_invalid:
             if 'WAVCNC' in self.metadata['FileType'] or 'WAVSNC' in self.metadata['FileType']:
@@ -405,6 +416,54 @@ class Waves(fileParser):
             self.xts = xts
             
             return
+
+    def initialize_qc(self):
+        """
+        Initialize dictionary entry for QC metadata.
+        """
+        # Initialize dictionary entry for QC metadta
+        self.metadata['QCTest'] = {}
+        
+        
+    def qc_instac_global_range(self):
+        """
+        This test applies a gross filter on observed values for waves. It needs to accommodate all the expected extremes encountered in the oceans.
+        The applied ranges are:
+        - Significant and mean wave height in range 0m to 25m.
+        - Mean wave period in range 1s to 25s.
+        - Peak period in range 1s to 30s.
+        - Wave directions and angular spreading in range 0º to 360º.
+        This test applies to wave data wave data as timeseries (i.e. all data are referred to a single point
+        for usage as a wave buoy). Thus, the method works on the field self.timeseries_data.
+        For each timestamp and position, if all the interested variables have values falling within the specified
+        ranges, the data is labeled with a "good data" flag.
+        Otherwise the data is labeled with a “bad data” flag.
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the Copernicus Marine Serrvice In Situ TAC and described
+        in Copernicus In Situ TAC, Real Time Quality Control for WAVES, https://doi.org/10.13155/46607
+        
+        """
+        # Set the test name
+        testName = 'GRNG_QC'
+
+        # Set the range limits for the data variables
+        HsLim = 25
+        TpkLim = 30
+        
+        # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+        self.data.loc[:,testName] = 1
+
+        ##### DA COMPLETARE #####
+        
+        # set bad flag for velocities not passing the test
+        if self.is_wera:
+            self.timeseries_data.loc[(self.timeseries_data['VELO'].abs() > totMaxSpeed), testName] = 4          # velocity in m/s (CRAD)
+        else:
+            self.data.loc[(self.data['VELO'].abs() > totMaxSpeed*100), testName] = 4      # velocity in cm/s (LLUV)
+        
+        self.metadata['QCTest'][testName] = 'Global Range QC Test - Test applies to each timestamp and position. ' \
+            + 'Thresholds=[' + f'distance limit={str(dLim)} (km) ' + f'velocity-median difference threshold={str(curLim)} (m/s)]'
 
     def clean_header(self):
         """
