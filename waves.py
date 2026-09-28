@@ -444,6 +444,30 @@ class Waves(fileParser):
                 
                 return
 
+    def check_ehn_mandatory_variables(self):
+        """
+        This function checks if the Waves object contains all the mandatory data variables
+        (i.e. not coordinate variables) required by the European standard data model developed in the framework of the 
+        EuroGOOS HFR Task Team.
+        Missing variables are appended to the DataFrame containing data, filled with NaNs.
+        
+        INPUT:            
+            
+        OUTPUT:
+        """
+        # Set mandatory variables based on the HFR manufacturer
+        if self.is_wera:
+            chkVars = ['MWHT', 'WDTO', 'TAVG', 'QUAL']
+        else:
+            chkVars = ['MWHT', 'WAVB']
+            
+        # Check variables and add missing ones
+        for vv in chkVars:
+            if vv not in self.data.columns:
+                self.data[vv] = np.nan
+                
+        return
+    
     def mask_over_land(self, timeseries=False, subset=False, res='high'):
         """
         This function masks the wave data lying on land.        
