@@ -458,7 +458,7 @@ class fileParser(object):
         self._tables[str(table_count)] = OrderedDict()
         self._tables[str(table_count)]['TableType'] = 'WAVCNC'
         self._tables[str(table_count)]['_TableHeader'] = ['Longitude','Latitude','Longitudinal dilution of precision','Latitudinal dilution of precision','Significant wave height [m]','Mean wave direction (to) [deg]','Wave mean period [s]','Wave energy period [s]','WERA quality number']
-        self._tables[str(table_count)]['TableColumnTypes'] = 'LOND LATD GDPX GDPY MVHT WDTO TAVG TNRG QUAL'
+        self._tables[str(table_count)]['TableColumnTypes'] = 'LOND LATD GDPX GDPY MWHT WDTO TAVG TNRG QUAL'
 
         # Get longitude and latitude values of the input data geographical grid
         lonDim = wavDS.cf['longitude'].to_numpy()
@@ -488,7 +488,7 @@ class fileParser(object):
         # Read data content
         self._tables[str(table_count)]['data']['GDPX'] = wavDS.gdopx.values[:,:].flatten() 
         self._tables[str(table_count)]['data']['GDPY'] = wavDS.gdopy.values[:,:].flatten() 
-        self._tables[str(table_count)]['data']['MVHT'] = wavDS.Hs.values[:,:].flatten() 
+        self._tables[str(table_count)]['data']['MWHT'] = wavDS.Hs.values[:,:].flatten() 
         self._tables[str(table_count)]['data']['WDTO'] = wavDS.Wdir.values[:,:].flatten()
         self._tables[str(table_count)]['data']['TAVG'] = wavDS.Tmean.values[:,:].flatten()
         self._tables[str(table_count)]['data']['TNRG'] = wavDS.Tenergy.values[:,:].flatten()

@@ -505,7 +505,8 @@ class Waves(fileParser):
         testName = 'OWTR_QC'
         
         # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
-        self.data.loc[:,testName] = 1
+        if 'LOND' in self.data.columns and 'LATD' in self.data.columns:
+            self.data.loc[:,testName] = 1
         if hasattr(self, 'timeseries_data'):
             self.timeseries_data.loc[:,testName] = 1
         
@@ -526,14 +527,14 @@ class Waves(fileParser):
         - Mean wave period in range 1s to 25s.
         - Peak period in range 1s to 30s.
         - Wave directions and angular spreading in range 0º to 360º.
-        This test applies to wave data wave data as timeseries (i.e. all data are referred to a single point
+        This test applies to wave data as timeseries (i.e. all data are referred to a single point
         for usage as a wave buoy). Thus, the method works on the field self.timeseries_data.
         For each timestamp and position, if all the interested variables have values falling within the specified
         ranges, the data is labeled with a "good data" flag.
         Otherwise the data is labeled with a “bad data” flag.
         The ARGO QC flagging scale is used.
         
-        This test was defined in the framework of the Copernicus Marine Serrvice In Situ TAC and described
+        This test was defined in the framework of the Copernicus Marine Service In Situ TAC and described
         in Copernicus In Situ TAC, Real Time Quality Control for WAVES, https://doi.org/10.13155/46607
         
         """
@@ -541,22 +542,36 @@ class Waves(fileParser):
         testName = 'GRNG_QC'
 
         # Set the range limits for the data variables
-        HsLim = 25
-        TpkLim = 30
+        HsLim = 25      # meters
+        TmnLim = 25     # seconds
+        TpkLim = 30     # seconds
         
         # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
-        self.data.loc[:,testName] = 1
+        self.timeseries_data.loc[:,testName] = 1
 
-        ##### DA COMPLETARE #####
+        # set bad flag for significant wave heights out of range
+        self.timeseries_data.loc[(self.timeseries_data['MWHT'] < 0), testName] = 4
+        self.timeseries_data.loc[(self.timeseries_data['MWHT'] > HsLim), testName] = 4
+        self.timeseries_data.loc[self.timeseries_data["MWHT"].isna(), testName] = np.nan
         
-        # set bad flag for velocities not passing the test
+        # set bad flag for wave period out of range
         if self.is_wera:
-            self.timeseries_data.loc[(self.timeseries_data['VELO'].abs() > totMaxSpeed), testName] = 4          # velocity in m/s (CRAD)
+            self.timeseries_data.loc[(self.timeseries_data['TAVG'] < 1), testName] = 4
+            self.timeseries_data.loc[(self.timeseries_data['TAVG'] > TmnLim), testName] = 4
+            self.timeseries_data.loc[self.timeseries_data["TAVG"].isna(), testName] = np.nan
+
+        # set bad flag for wave direction out of range
+        if self.is_wera:
+            self.timeseries_data.loc[(self.timeseries_data['WDTO'] < 0), testName] = 4
+            self.timeseries_data.loc[(self.timeseries_data['WDTO'] > 360), testName] = 4
+            self.timeseries_data.loc[self.timeseries_data["WDTO"].isna(), testName] = np.nan
         else:
-            self.data.loc[(self.data['VELO'].abs() > totMaxSpeed*100), testName] = 4      # velocity in cm/s (LLUV)
+            self.timeseries_data.loc[(self.timeseries_data['WAVB'] < 0), testName] = 4
+            self.timeseries_data.loc[(self.timeseries_data['WAVB'] > 360), testName] = 4
+            self.timeseries_data.loc[self.timeseries_data["WAVB"].isna(), testName] = np.nan
         
         self.metadata['QCTest'][testName] = 'Global Range QC Test - Test applies to each timestamp and position. ' \
-            + 'Thresholds=[' + f'distance limit={str(dLim)} (km) ' + f'velocity-median difference threshold={str(curLim)} (m/s)]'
+            + 'Thresholds=[' + f'Significant wave height limit={str(HsLim)} (m) ' + f'Mean wave period limit={str(TmnLim)} (s)]'
 
     def clean_header(self):
         """
