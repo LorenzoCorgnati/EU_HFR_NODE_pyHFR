@@ -366,57 +366,83 @@ class Waves(fileParser):
             The coordinate axes are set as (TIME, DEPTH) in order to represent the variables 
             of the Waves object as a time-series. LATITUDE and LONGITUDE are set as separate,
             time-independent DataArrays.
-            The LATITUDE and LONGITUDE values are taken from the Wave object metadata.
+            The LATITUDE and LONGITUDE values are taken from the Wave object timeseries DataFrame.
             The generated dictionary is attached to the Total object, named as xts.
     
             """
-            # Initialize empty dictionary
-            xts = OrderedDict()
+            if hasattr(self, 'timeseries_data'):
+                # Initialize empty dictionary
+                xts = OrderedDict()
 
-            # Process Codar data
-            if not self.is_wera:
-                # Sort time values
-                df = self.timeseries_data.sort_values('time')
+                # Process Codar data
+                if not self.is_wera:
+                    # Sort time values
+                    df = self.timeseries_data.sort_values('time')
 
-                # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
-                timeDelta = df['time'].values - np.datetime64("1950-01-01T00:00:00")
-                df['time'] = timeDelta / np.timedelta64(1, "D")
+                    # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
+                    timeDelta = df['time'].values - np.datetime64("1950-01-01T00:00:00")
+                    df['time'] = timeDelta / np.timedelta64(1, "D")
 
-                # Set coordinate axes
-                time = df['time'].values                      # TIME axis (length N)
-                depth = np.array([0], dtype=float)              # DEPTH axis (length 1)
-                coords = {"TIME": ("TIME", time), "DEPTH": ("DEPTH", depth)}
+                    # Set coordinate axes
+                    time = (df['time'].values).astype(np.float64)                      # TIME axis (length N)
+                    depth = np.array([0], dtype=float)                                  # DEPTH axis (length 1)
+                    coords = {"TIME": ("TIME", time), "DEPTH": ("DEPTH", depth)}
 
-                # Set the columns that become (TIME, DEPTH) variables
-                variable_cols = [c for c in df.columns if c not in ('TIME', 'time', 'LOND', 'LATD')]
+                    # Set the columns that become (TIME, DEPTH) variables
+                    variable_cols = [c for c in df.columns if c not in ('TIME', 'time', 'LOND', 'LATD', 'TYRS', 'TMON', 'TDAY', 'THRS', 'TMIN', 'TSEC')]
+                else:
+                    # Evaluate timestamp as number of days since 1950-01-01T00:00:00Z
+                    timeDelta = self.time - dt.datetime.strptime('1950-01-01T00:00:00Z','%Y-%m-%dT%H:%M:%SZ')
+                    ncTime = timeDelta.days + timeDelta.seconds / (60*60*24)
 
-            for col in variable_cols:
-                data = df[col].values[:, np.newaxis]            # (N,) -> (N, 1)
-                xts[col] = xr.DataArray(
-                    data=data,
-                    dims=("TIME", "DEPTH"),
-                    coords=coords,
-                    name=col,
-                )
+                    # Set coordinate axes
+                    time = np.array([ncTime], dtype=np.float64)                 # TIME axis (length 1)
+                    depth = np.array([0], dtype=float)                          # DEPTH axis (length 1)
+                    coords = {"TIME": ("TIME", time), "DEPTH": ("DEPTH", depth)}
 
-            # Add DataArray for coordinate variables
-            xts['TIME'] = xr.DataArray(time,
-                                     dims={'TIME': len(time)},
-                                     coords={'TIME': len(time)})
-            xts['DEPTH'] = xr.DataArray(0,
-                                     dims={'DEPTH': 1},
-                                     coords={'DEPTH': [0]})
-            xts['LATITUDE'] = xr.DataArray(df['LATD'].iloc[0],
-                                           dims={'LATITUDE': df['LATD'].iloc[0]},
-                                           coords={'LATITUDE': df['LATD'].iloc[0]})
-            xts['LONGITUDE'] = xr.DataArray(df['LOND'].iloc[0],
-                                            dims={'LONGITUDE': df['LOND'].iloc[0]},
-                                            coords={'LONGITUDE': df['LOND'].iloc[0]})  
-            
-            # Attach the dictionary to the Total object
-            self.xts = xts
-            
-            return
+                    # Set the columns that become (TIME, DEPTH) variables
+                    df = self.timeseries_data
+                    variable_cols = [c for c in df.columns if c not in ('LOND', 'LATD')]
+
+                # Add DataArray for data variables
+                for col in variable_cols:
+                    data = df[col].values[:, np.newaxis]            # (N,) -> (N, 1)
+                    xts[col] = xr.DataArray(
+                        data=data,
+                        dims=("TIME", "DEPTH"),
+                        coords=coords,
+                        name=col,
+                    )
+
+                data = df['LOND'].values[:,np.newaxis]
+                xts['LONGITUDE'] = xr.DataArray(
+                                        data=data,
+                                        name='LONGITUDE',
+                                    )
+                data = df['LATD'].values[:,np.newaxis]
+                xts['LATITUDE'] = xr.DataArray(
+                                        data=data,
+                                        name='LATITUDE',
+                                    )
+
+                # Add DataArray for coordinate variables
+                xts['TIME'] = xr.DataArray(time,
+                                        dims={'TIME': len(time)},
+                                        coords={'TIME': len(time)})
+                xts['DEPTH'] = xr.DataArray(0,
+                                        dims={'DEPTH': 1},
+                                        coords={'DEPTH': [0]})
+                # xts['LATITUDE'] = xr.DataArray(df['LATD'].iloc[0],
+                #                             dims={'LATITUDE': df['LATD'].iloc[0]},
+                #                             coords={'LATITUDE': df['LATD'].iloc[0]})
+                # xts['LONGITUDE'] = xr.DataArray(df['LOND'].iloc[0],
+                #                                 dims={'LONGITUDE': df['LOND'].iloc[0]},
+                #                                 coords={'LONGITUDE': df['LOND'].iloc[0]})  
+                
+                # Attach the dictionary to the Total object
+                self.xts = xts
+                
+                return
 
     def mask_over_land(self, timeseries=False, subset=False, res='high'):
         """
