@@ -1,0 +1,289 @@
+{
+    "TIME": {
+        "axis": "T",
+        "long_name": "Time",
+        "standard_name": "time",   
+        "units": "days since 1950-01-01T00:00:00Z",  
+        "calendar": "standard",  
+        "valid_min": -90000.0,
+        "valid_max": 90000.0,
+        "sdn_parameter_name": "Elapsed time (since 1950-01-01T00:00:00Z)",
+        "sdn_parameter_urn": "SDN:P01::ELTJLD01",
+        "sdn_uom_name": "Days",
+        "sdn_uom_urn": "SDN:P06::UTAA",
+        "ancillary_variables": "TIME_QC"
+    },
+    "DEPTH": {
+    },
+    "DEPH": {
+        "axis": "Z",
+        "long_name": "Depth",
+        "standard_name": "depth",
+        "units": "m",        
+        "positive": "down",
+        "reference": "sea_level",
+        "valid_min": -12000.0,
+        "valid_max": 12000.0,
+        "sdn_parameter_name": "Depth below surface of the water body",
+        "sdn_parameter_urn": "SDN:P01::ADEPZZ01",
+        "sdn_uom_name": "Metres",
+        "sdn_uom_urn": "SDN:P06::ULAA",
+        "ancillary_variables": "DEPH_QC",
+        "data_mode": "R"
+    },
+    "LATITUDE": {
+        "axis": "Y",
+        "standard_name": "latitude",
+        "long_name": "Latitude of each location",
+        "units": "degree_north",
+        "valid_min": -90.0,
+        "valid_max": 90.0,
+        "sdn_parameter_name": "Latitude north",
+        "sdn_parameter_urn": "SDN:P01::ALATZZ01",
+        "sdn_uom_name": "Degrees north",
+        "sdn_uom_urn": "SDN:P06::DEGN",
+        "grid_mapping": "crs",
+        "ancillary_variables": "POSITION_QC"
+    },
+    "LONGITUDE": {
+        "axis": "X",
+        "standard_name": "longitude",
+        "long_name": "Longitude of each location",
+        "units": "degree_east",
+        "valid_min": -180.0,
+        "valid_max": 180.0,
+        "sdn_parameter_name": "Longitude east",
+        "sdn_parameter_urn": "SDN:P01::ALONZZ01",
+        "sdn_uom_name": "Degrees east",
+        "sdn_uom_urn": "SDN:P06::DEGE",
+        "grid_mapping": "crs",
+        "ancillary_variables": "POSITION_QC"
+    },
+    "crs": {
+        "grid_mapping_name": "latitude_longitude",
+        "epsg_code": "EPSG:4326",
+        "semi_major_axis": 6378137.0,
+        "inverse_flattening": 298.257223563
+    },
+    "VHM0": {
+        "valid_min": 0.0,
+        "valid_max": 100.0,
+        "standard_name": "sea_surface_wave_significant_height",
+        "long_name": "Spectral significant wave height (Hm0)",
+        "units": "m",
+        "sdn_parameter_name": "Spectral significant wave height of waves {Hm0} on the water body",
+        "sdn_parameter_urn": "SDN:P01::HMZEZZ01",
+        "sdn_uom_name": "Metres",
+        "sdn_uom_urn": "SDN:P06::ULAA",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE",
+        "ancillary_variables": "VHM0_QC",        
+        "type_of_analysis": "spectral analysis",
+        "data_mode": "R"
+    },
+    "VM01": {
+        "valid_min": 1.0,
+        "valid_max": 100.0,
+        "standard_name": "sea_surface_wave_mean_period_from_variance_spectral_density_first_frequency_moment",
+        "long_name": "Spectral moments (0,1) wave period (Tm01)",
+        "units": "s",
+        "sdn_parameter_name": "Period at first spectral moment of waves on the water body",
+        "sdn_parameter_urn": "SDN:P01::GTZAM1ZZ",
+        "sdn_uom_name": "Seconds",
+        "sdn_uom_urn": "SDN:P06::UTBB",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE",
+        "ancillary_variables": "VM01_QC",
+        "type_of_analysis": "spectral analysis",
+        "data_mode": "R"
+    },
+    "VMDR": {
+        "valid_min": 0.0,
+        "valid_max":360.0,
+        "long_name": "Mean wave direction from (Mdir)",
+        "standard_name": "sea_surface_wave_from_direction",
+        "units": "degree_true",
+        "sdn_parameter_name": "Direction (from) mean of waves {mean wave direction} on the water body by computation from 1st order Fourier coefficients of directional distribution of energy, A1 and B1",
+        "sdn_parameter_urn": "SDN:P01::GMWDZZ01",
+        "sdn_uom_name": "Degrees True",
+        "sdn_uom_urn": "SDN:P06::UABB",
+        "coordinates" : "TIME DEPH LATITUDE LONGITUDE",
+        "ancillary_variables": "VMDR_QC",
+        "type_of_analysis": "spectral analysis",
+        "data_mode": "R"
+    },
+    "SDN_CRUISE": {
+        "long_name": "Grid grouping label"
+    },
+    "SDN_STATION": {
+        "long_name": "Grid label"
+    },
+    "SDN_LOCAL_CDI_ID": {
+        "long_name": "SeaDataNet CDI identifier",
+        "cf_role": "grid_id"
+    },
+    "SDN_EDMO_CODE": {
+        "long_name": "European Directory of Marine Organisations code for the CDI partner",
+        "units": "1"
+    },
+    "SDN_REFERENCES": {
+        "long_name": "Usage metadata reference"
+    },
+    "SDN_XLINK": {
+        "long_name": "External resource linkages"
+    },
+    "STATION": {
+        "long_name": "station"
+    },
+    "NARX": {
+        "long_name": "Number of receive antennas",
+        "standard_name": " ",
+        "valid_min": 0,
+        "valid_max": 127,
+        "units": "1" ,
+        "sdn_parameter_name": "" ,
+        "sdn_parameter_urn": "" ,
+        "sdn_uom_name": "Dimensionless" ,
+        "sdn_uom_urn": "SDN:P06::UUUU" ,
+        "data_mode": "R"
+    },
+    "NATX": {
+        "long_name": "Number of transmit antennas",
+        "standard_name": " ",
+        "valid_min": 0,
+        "valid_max": 127,
+        "units": "1" ,
+        "sdn_parameter_name": "" ,
+        "sdn_parameter_urn": "" ,
+        "sdn_uom_name": "Dimensionless" ,
+        "sdn_uom_urn": "SDN:P06::UUUU" ,
+        "data_mode": "R"
+    },
+    "SLTR": {
+        "long_name": "Receive antenna latitudes",
+        "standard_name" : "latitude",
+        "valid_min": -90.0,
+        "valid_max": 90.0,
+        "units": "degree_north" ,
+        "sdn_parameter_name": "Latitude north" ,
+        "sdn_parameter_urn": "SDN:P01::ALATZZ01" ,
+        "sdn_uom_name": "Degrees north" ,
+        "sdn_uom_urn": "SDN:P06::DEGN",
+        "coordinates": "TIME MAXSITE",
+        "data_mode": "R"
+    },
+    "SLNR": {
+        "long_name": "Receive antenna longitudes",
+        "standard_name" : "longitude",
+        "valid_min": -180.0,
+        "valid_max": 180.0,
+        "units": "degree_east" ,
+        "sdn_parameter_name": "Longitude east" ,
+        "sdn_parameter_urn": "SDN:P01::ALONZZ01" ,
+        "sdn_uom_name": "Degrees east" ,
+        "sdn_uom_urn": "SDN:P06::DEGE",
+        "coordinates": "TIME MAXSITE",
+        "data_mode": "R"
+    },
+    "SLTT": {
+        "long_name": "Transmit antenna latitudes",
+        "standard_name" : "latitude",
+        "valid_min": -90.0,
+        "valid_max": 90.0,
+        "units": "degree_north" ,
+        "sdn_parameter_name": "Latitude north" ,
+        "sdn_parameter_urn": "SDN:P01::ALATZZ01" ,
+        "sdn_uom_name": "Degrees north" ,
+        "sdn_uom_urn": "SDN:P06::DEGN",
+        "coordinates": "TIME MAXSITE",
+        "data_mode": "R"
+    },
+    "SLNT": {
+        "long_name": "Transmit antenna longitudes",
+        "standard_name" : "longitude",
+        "valid_min": -180.0,
+        "valid_max": 180.0,
+        "units": "degree_east" ,
+        "sdn_parameter_name": "Longitude east" ,
+        "sdn_parameter_urn": "SDN:P01::ALONZZ01" ,
+        "sdn_uom_name": "Degrees east" ,
+        "sdn_uom_urn": "SDN:P06::DEGE",
+        "coordinates": "TIME MAXSITE",
+        "data_mode": "R"
+    },
+    "SCDR": {
+        "long_name": "Receive antenna codes",
+        "standard_name": " ",
+        "units": 1,
+        "sdn_parameter_name": " " ,
+        "sdn_parameter_urn": " " ,
+        "sdn_uom_name": "Dimensionless" ,
+        "sdn_uom_urn": "SDN:P06::UUUU" ,
+        "data_mode": "R"
+    },
+    "SCDT": {
+        "long_name": "Transmit antenna codes",
+        "standard_name": " ",
+        "units": 1,
+        "sdn_parameter_name": " " ,
+        "sdn_parameter_urn": " " ,
+        "sdn_uom_name": "Dimensionless" ,
+        "sdn_uom_urn": "SDN:P06::UUUU" ,
+        "data_mode": "R"
+    },
+    "TIME_QC": {
+        "long_name": "Time quality flag",
+        "valid_min": 0,
+        "valid_max": 9,
+        "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
+        "comment" : "OceanSITES quality flagging for temporal coordinate",
+        "units": "1" 
+    },
+    "POSITION_QC": {
+        "long_name": "Position quality flag",
+        "valid_min": 0,
+        "valid_max": 9,
+        "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
+        "comment" : "OceanSITES quality flagging for position coordinates",
+        "units": "1"
+    },
+    "DEPH_QC": {
+        "long_name": "Depth quality flag",
+        "valid_min": 0,
+        "valid_max": 9,
+        "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
+        "comment" : "OceanSITES quality flagging for depth coordinate",
+        "units": "1" 
+    },
+    "VHM0_QC": {
+        "long_name": "Spectral significant wave height (Hm0) quality flag",
+        "valid_min": 0,
+        "valid_max": 9,
+        "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
+        "comment" : "OceanSITES quality flagging for significant wave height",
+        "units": "1",
+        "coordinates" : "TIME LATITUDE LONGITUDE DEPH STATION"
+    },
+    "VM01_QC": {
+        "long_name": "Spectral moments (0,1) wave period (Tm01) quality flag",
+        "valid_min": 0,
+        "valid_max": 9,
+        "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
+        "comment" : "OceanSITES quality flagging for spectral wave period.",
+        "units": "1",
+        "coordinates" : "TIME LATITUDE LONGITUDE DEPH STATION"
+    },
+    "VMDR_QC": {
+        "long_name": "Mean wave direction from (Mdir) quality flag",
+        "valid_min": 0,
+        "valid_max": 9,
+        "flag_values" : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "flag_meanings" : "no_qc_performed good_data probably_good_data bad_data_that_are_potentially_correctable bad_data value_changed value_below_detection nominal_value interpolated_value missing_value",
+        "comment" : "OceanSITES quality flagging for mean wave direction.",
+        "units": "1",
+        "coordinates" : "TIME LATITUDE LONGITUDE DEPH STATION"
+    }
+}

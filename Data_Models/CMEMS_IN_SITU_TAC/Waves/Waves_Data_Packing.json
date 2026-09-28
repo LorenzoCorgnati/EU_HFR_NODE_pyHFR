@@ -1,0 +1,101 @@
+{
+    "TIME": {
+        "dtype": "float64"
+    },
+    "DEPH": {
+        "dtype": "float32",
+        "fill_value": ""
+    },
+    "LATITUDE": {
+        "dtype": "float32"
+    },
+    "LONGITUDE": {
+        "dtype": "float32"
+    },
+    "crs": {
+        "dtype": "int16"
+    },
+    "STATION": {
+        "dtype": "S1"
+    },
+    "SDN_CRUISE": {
+    },
+    "SDN_STATION": {
+    },
+    "SDN_LOCAL_CDI_ID": {
+    },
+    "SDN_EDMO_CODE": {
+        "dtype": "int16",
+        "fill_value": ""
+    },
+    "SDN_REFERENCES": {
+    },
+    "SDN_XLINK": {
+    },
+    "VHM0": {
+        "dtype": "float32",
+        "fill_value": "" 
+    },
+    "VTM01": {
+        "dtype": "float32",
+        "fill_value": "" 
+    },
+    "VMDR": {
+        "dtype": "float32",
+        "fill_value": "" 
+    },  
+    "NARX": {
+        "dtype": "int8",
+        "fill_value": "" 
+    },
+    "NATX": {
+        "dtype": "int8",
+        "fill_value": "" 
+    },
+    "SLTR": {
+        "dtype": "float32",
+        "fill_value": "" 
+    },
+    "SLNR": {
+        "dtype": "float32",
+        "fill_value": "" 
+    },
+    "SLTT": {
+        "dtype": "float32",
+        "fill_value": "" 
+    },
+    "SLNT": {
+        "dtype": "float32",
+        "fill_value": "" 
+    },
+    "SCDR": {
+        "fill_value": "" 
+    },
+    "SCDT": {
+        "fill_value": "" 
+    },
+    "TIME_QC": {
+        "dtype": "int8",
+        "fill_value": "" 
+    },
+    "POSITION_QC": {
+        "dtype": "int8",
+        "fill_value": "" 
+    },
+    "DEPH_QC": {
+        "dtype": "int8",
+        "fill_value": "" 
+    },
+    "VHM0_QC": {
+        "dtype": "int8",
+        "fill_value": "" 
+    },
+    "VTM01_QC": {
+        "dtype": "int8",
+        "fill_value": "" 
+    },
+    "VMDR_QC": {
+        "dtype": "int8",
+        "fill_value": "" 
+    }
+}
