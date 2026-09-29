@@ -318,6 +318,11 @@ class Waves(fileParser):
                 # Add reference latitude and longitude to metadata
                 self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
                 self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
+                # Evaluate the distances in km from the reference point to every station
+                _, _, dist_m = g.inv(np.full(len(self.site_source), closestLon), np.full(len(self.site_source), closestLat), self.site_source["site_lon"].to_numpy(), self.site_source["site_lat"].to_numpy())
+                self.site_source['distance_from_reference_point'] = dist_m / 1000
+                # Add distance from antenna to metadata
+                self.metadata['Distance'] = ", ".join(f"{sid}: {d:.2f} km" for sid, d in zip(self.site_source["station_id"], self.site_source["distance_from_reference_point"]))
                 return
         # Otherwise, calculate the reference position based on the type of wave file
         else:
@@ -390,6 +395,11 @@ class Waves(fileParser):
                 # Add reference latitude and longitude to metadata
                 self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
                 self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
+                # Evaluate the distances in km from the reference point to every station
+                _, _, dist_m = g.inv(np.full(len(self.site_source), closestLon), np.full(len(self.site_source), closestLat), self.site_source["site_lon"].to_numpy(), self.site_source["site_lat"].to_numpy())
+                self.site_source['distance_from_reference_point'] = dist_m / 1000
+                # Add distance from antenna to metadata
+                self.metadata['Distance'] = ", ".join(f"{sid}: {d:.2f} km" for sid, d in zip(self.site_source["station_id"], self.site_source["distance_from_reference_point"]))
                 return
 
     def to_xarray_timeseries(self):
