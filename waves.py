@@ -256,7 +256,7 @@ class Waves(fileParser):
         INPUT:
             prefLon (float, optional): preferred longitude for the reference position. Defaults to None.
             prefLat (float, optional): preferred latitude for the reference position. Defaults to None.
-            avgDistance (float, optional): average distance for Codar averaged files. Defaults to 15 km.
+            avgDistance (float, optional): average distance in meters for Codar averaged files. Defaults to 15000 m (i.e. 15 km).
         """
 
         # Assign the preferred reference position if given in input
@@ -269,9 +269,22 @@ class Waves(fileParser):
                     # Add reference latitude and longitude to metadata
                     self.metadata["ReferenceLatitude"] = str(prefLat) + ' deg'
                     self.metadata["ReferenceLongitude"] = str(prefLon) + ' deg'
+                    # Create Geod object according to the Waves CRS, if defined. Otherwise use WGS84 ellipsoid
+                    if 'GreatCircle' in self.metadata:
+                        g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
+                    else:
+                        g = Geod(ellps='WGS84')
+                        self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
+                    # Get the site latitude, longitude and antenna bearing from the metadata
+                    siteLat = float(self.metadata["Origin"].split()[0])
+                    siteLon = float(self.metadata["Origin"].split()[1])
+                    # Evaluate distance from antenna
+                    _, _, dist = g.inv(prefLon, prefLat, siteLon, siteLat)
+                    # Add distance from antenna to metadata
+                    self.metadata['Distance'] = f"{dist / 1000:.2f} km"
                     return
             else:                       # WERA data
-                # Create Geod object according to the Total CRS, if defined. Otherwise use WGS84 ellipsoid
+                # Create Geod object according to the Waves CRS, if defined. Otherwise use WGS84 ellipsoid
                 if 'GreatCircle' in self.metadata:
                     g = Geod(ellps=self.metadata['GreatCircle'].split()[0].replace('"',''))                  
                 else:
@@ -300,6 +313,7 @@ class Waves(fileParser):
                     else:
                         # For Codar wave averaged files, a pre-defined distance value is used.
                         numDistance = avgDistance
+                        self.metadata['Distance'] = f"{numDistance / 1000:.2f} km"
 
                     # Get the site latitude, longitude and antenna bearing from the metadata
                     siteLat = float(self.metadata["Origin"].split()[0])
@@ -312,8 +326,7 @@ class Waves(fileParser):
                         g = Geod(ellps='WGS84')
                         self.metadata['GreatCircle'] = '"WGS84"' + ' ' + str(g.a) + '  ' + str(1/g.f)
                     # Calculate the reference latitude and longitude using the Geod object
-                    refLon, refLat, back_azimuth = g.fwd(siteLon, siteLat, siteBearing, numDistance)
-                
+                    refLon, refLat, back_azimuth = g.fwd(siteLon, siteLat, siteBearing, numDistance)                
                     # Add reference latitude and longitude to data
                     self.timeseries_data["LATD"] = refLat
                     self.timeseries_data["LOND"] = refLon
