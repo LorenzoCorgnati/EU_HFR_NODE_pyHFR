@@ -28,7 +28,7 @@ def addBoundingBoxMetadata(obj,lon_min,lon_max,lat_min,lat_max,grid_res=None):
     This function adds metadata related to the bounding box to the input Radial or Total object.
     
     INPUTS:
-        obj: Radial or Total object
+        obj: Radial or Total or Waves object
         lon_min: minimum longitude of the bounding box
         lon_max: maximum longitude of the bounding box
         lat_min: minimum latitude of the bounding box
@@ -37,7 +37,7 @@ def addBoundingBoxMetadata(obj,lon_min,lon_max,lat_min,lat_max,grid_res=None):
 
         
     OUTPUTS:
-        obj = Radial or Total object with metadata related to the bounding box
+        obj = Radial or Total or Waves object with metadata related to the bounding box
         
     """
     obj.metadata['BBminLongitude'] = str(lon_min) + ' deg'

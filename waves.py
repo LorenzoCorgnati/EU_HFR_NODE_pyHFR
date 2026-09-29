@@ -19,6 +19,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def addSiteSources(obj,stationData):
+    """
+    This function adds a DataFrame named site_source to the Waves object containing the codes and the
+    lon/lat position of the sites belonging to the network.
+    
+    INPUTS:
+        obj: Waves object
+        stationData: DataFrame containing the information of the radial sites that produced the wave data
+
+        
+    OUTPUTS:
+        obj = Wave object with DataFrame containing the information of the radial sites that produced the wave data
+        
+    """
+    obj.site_source = stationData[['station_id', 'network_id', 'site_lon', 'site_lat', 'transmit_central_frequency']].copy()
+    
+    return obj
+
 
 def concat(wave_list, enhance=False):
     """
