@@ -13,7 +13,7 @@ from pathlib import Path
 from collections import OrderedDict
 import geopandas as gpd
 import json
-
+from dateutil.relativedelta import relativedelta
 
 import logging
 
@@ -470,8 +470,8 @@ class Waves(fileParser):
 
                 # Add DataArray for coordinate variables
                 xts['TIME'] = xr.DataArray(time,
-                                        dims={'TIME': len(time)},
-                                        coords={'TIME': len(time)})
+                                        dims=('TIME',),
+                                        coords={'TIME': time})
                 xts['DEPTH'] = xr.DataArray(0,
                                         dims={'DEPTH': 1},
                                         coords={'DEPTH': [0]})
@@ -539,13 +539,6 @@ class Waves(fileParser):
         # Set the netCDF format
         ncFormat = 'NETCDF4_CLASSIC'
         
-        # Get bounding box limits and grid resolution from database
-        lonMin = network_data.iloc[0]['geospatial_lon_min']
-        lonMax = network_data.iloc[0]['geospatial_lon_max']
-        latMin = network_data.iloc[0]['geospatial_lat_min']
-        latMax = network_data.iloc[0]['geospatial_lat_max']
-        gridRes = network_data.iloc[0]['grid_resolution']*1000
-
         # Expand Waves object variables along the coordinate axes
         self.to_xarray_timeseries()
         
@@ -580,10 +573,6 @@ class Waves(fileParser):
             self.xts["VMDR"] = (self.xts["VMDR"] + 180) % 360
         
         # Drop unnecessary DataArrays from the DataSet
-        toDrop = ['GDPX', 'GDPY', 'TNRG', 'QUAL', 'MWPD','WNDB', 'PMWH', 'ACNT', 'DIST','RCLL', 'WDPT', 'MTHD', 'FLAG', 'WHNM', 'WHSD', 'TYRS', 'TMON', 'TDAY', 'THRS', 'TMIN', 'TSEC', 'time', 'LATD', 'LOND']
-        for t in toDrop:
-            if t in self.xts:
-                self.xts.pop(t)
         toDrop = []
         for vv in self.xts:
             if vv not in wavVariables.keys():
@@ -594,88 +583,125 @@ class Waves(fileParser):
         # Add coordinate reference system to the dictionary
         self.xts['crs'] = xr.DataArray(int(0), )       
         
+        # Number of time samples of the time series
+        nTime = self.xts['TIME'].size
+        
         # Add antenna related variables to the dictionary
-        # Number of antennas        
-        contributingSiteNrx = station_data.loc[station_data['station_id']]['number_of_receive_antennas'].to_numpy()
-        nRX = np.asfarray(contributingSiteNrx)
-        nRX = np.pad(nRX, (0, maxsiteSize - len(nRX)), 'constant',constant_values=(np.nan,np.nan))
-        contributingSiteNtx = station_data.loc[station_data['station_id']]['number_of_transmit_antennas'].to_numpy()
-        nTX = np.asfarray(contributingSiteNtx)
-        nTX = np.pad(nTX, (0, maxsiteSize - len(nTX)), 'constant',constant_values=(np.nan,np.nan))
-        self.xts['NARX'] = xr.DataArray([nRX], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
-        self.xts['NATX'] = xr.DataArray([nTX], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        # Number of antennas     
+        if self.is_combined:
+            contributingSiteNrx = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['number_of_receive_antennas'].to_numpy()
+            nRX = np.asfarray(contributingSiteNrx)
+            nRX = np.pad(nRX, (0, maxsiteSize - len(nRX)), 'constant',constant_values=(np.nan,np.nan))
+            contributingSiteNtx = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['number_of_transmit_antennas'].to_numpy()
+            nTX = np.asfarray(contributingSiteNtx)
+            nTX = np.pad(nTX, (0, maxsiteSize - len(nTX)), 'constant',constant_values=(np.nan,np.nan))
+            self.xts['NARX'] = xr.DataArray(np.tile(nRX, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['NATX'] = xr.DataArray(np.tile(nTX, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+        else:
+            self.xts['NARX'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['number_of_receive_antennas'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['NATX'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['number_of_transmit_antennas'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
         
         # Longitude and latitude of antennas
-        contributingSiteLat = station_data.loc[station_data['station_id']]['site_lat'].to_numpy()
-        siteLat = np.pad(contributingSiteLat, (0, maxsiteSize - len(contributingSiteLat)), 'constant',constant_values=(np.nan,np.nan))
-        contributingSiteLon = station_data.loc[station_data['station_id']]['site_lon'].to_numpy()
-        siteLon = np.pad(contributingSiteLon, (0, maxsiteSize - len(contributingSiteLon)), 'constant',constant_values=(np.nan,np.nan))
-        self.xts['SLTR'] = xr.DataArray([siteLat], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
-        self.xts['SLNR'] = xr.DataArray([siteLon], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
-        self.xts['SLTT'] = xr.DataArray([siteLat], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
-        self.xts['SLNT'] = xr.DataArray([siteLon], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
+        if self.is_combined:
+            contributingSiteLat = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['site_lat'].to_numpy()
+            siteLat = np.pad(contributingSiteLat, (0, maxsiteSize - len(contributingSiteLat)), 'constant',constant_values=(np.nan,np.nan))
+            contributingSiteLon = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['site_lon'].to_numpy()
+            siteLon = np.pad(contributingSiteLon, (0, maxsiteSize - len(contributingSiteLon)), 'constant',constant_values=(np.nan,np.nan))
+            self.xts['SLTR'] = xr.DataArray(np.tile(siteLat, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLNR'] = xr.DataArray(np.tile(siteLon, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLTT'] = xr.DataArray(np.tile(siteLat, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLNT'] = xr.DataArray(np.tile(siteLon, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+        else:
+            self.xts['SLTR'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lat'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLNR'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lon'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLTT'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lat'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLNT'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lon'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
         
         # Codes of antennas
-        contributingSiteCodeList = station_data.loc[station_data['station_id']]['station_id'].tolist()
-        antCode = np.array([site.encode() for site in contributingSiteCodeList])
-        antCode = np.pad(antCode, (0, maxsiteSize - len(contributingSiteCodeList)), 'constant',constant_values=('',''))
-        self.xts['SCDR'] = xr.DataArray(np.array([antCode]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
-        self.xts['SCDR'].encoding['char_dim_name'] = 'STRING' + str(len(station_data['station_id'].to_numpy()[0]))
-        self.xts['SCDT'] = xr.DataArray(np.array([antCode]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXSITE': maxsiteSize})
-        self.xts['SCDT'].encoding['char_dim_name'] = 'STRING' + str(len(station_data['station_id'].to_numpy()[0]))
+        if self.is_combined:
+            contributingSiteCodeList = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['station_id'].tolist()
+            antCode = np.array([site.encode() for site in contributingSiteCodeList])
+            antCode = np.pad(antCode, (0, maxsiteSize - len(contributingSiteCodeList)), 'constant',constant_values=('',''))
+            self.xts['SCDR'] = xr.DataArray(np.tile(antCode, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDR'].encoding['char_dim_name'] = 'STRING' + str(len(station_data['station_id'].to_numpy()[0]))
+            self.xts['SCDT'] = xr.DataArray(np.tile(antCode, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDT'].encoding['char_dim_name'] = 'STRING' + str(len(station_data['station_id'].to_numpy()[0]))
+        else:
+            antCode = ('%s' % station_data.iloc[0]['station_id']).encode()
+            self.xts['SCDR'] = xr.DataArray(np.full((nTime, 1), antCode), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDR'].encoding['char_dim_name'] = 'STRING' + str(len(antCode))
+            self.xts['SCDT'] = xr.DataArray(np.full((nTime, 1), antCode), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDT'].encoding['char_dim_name'] = 'STRING' + str(len(antCode))
                 
         # Add SDN namespace variables to the dictionary
-        siteCode = ('%s' % network_data.iloc[0]['network_id']).encode()
-        self.xts['SDN_CRUISE'] = xr.DataArray([siteCode], dims={'TIME': len(pd.date_range(self.time, periods=1))})
-        self.xts['SDN_CRUISE'].encoding['char_dim_name'] = 'STRING' + str(len(siteCode))
-        platformCode = ('%s' % network_data.iloc[0]['network_id'] + '-Total').encode()
-        self.xts['SDN_STATION'] = xr.DataArray([platformCode], dims={'TIME': len(pd.date_range(self.time, periods=1))})
-        self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
-        ID = ('%s' % platformCode.decode() + '_' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ')).encode()
-        self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray([ID], dims={'TIME': len(pd.date_range(self.time, periods=1))})
-        self.xts['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
-        sdnEDMO = np.asfarray(pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique())
-        sdnEDMO = np.pad(sdnEDMO, (0, maxinstSize - len(sdnEDMO)), 'constant',constant_values=(np.nan,np.nan))
-        self.xts['SDN_EDMO_CODE'] = xr.DataArray([sdnEDMO], dims={'TIME': len(pd.date_range(self.time, periods=1)), 'MAXINST': maxinstSize})
-        sdnRef = ('%s' % network_data.iloc[0]['metadata_page']).encode()
-        self.xts['SDN_REFERENCES'] = xr.DataArray([sdnRef], dims={'TIME': len(pd.date_range(self.time, periods=1))})
-        self.xts['SDN_REFERENCES'].encoding['char_dim_name'] = 'STRING' + str(len(sdnRef))
-        sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + sdnRef.decode() + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
-        self.xts['SDN_XLINK'] = xr.DataArray(np.array([[sdnXlink]]), dims={'TIME': len(pd.date_range(self.time, periods=1)), 'REFMAX': refmaxSize})
-        self.xts['SDN_XLINK'].encoding['char_dim_name'] = 'STRING' + str(len(sdnXlink))
+        if self.is_combined:
+            siteCode = ('%s' % network_data.iloc[0]['network_id']).encode()
+            self.xts['SDN_CRUISE'] = xr.DataArray(np.full(nTime, siteCode), dims=('TIME',))
+            self.xts['SDN_CRUISE'].encoding['char_dim_name'] = 'STRING' + str(len(siteCode))
+            platformCode = ('%s' % network_data.iloc[0]['network_id'] + '-Total').encode()
+            self.xts['SDN_STATION'] = xr.DataArray(np.full(nTime, platformCode), dims=('TIME',))
+            self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
+            ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ')).encode()
+            self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(np.full(nTime, ID), dims=('TIME',))
+            self.xts['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
+            sdnEDMO = np.asfarray(pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique())
+            sdnEDMO = np.pad(sdnEDMO, (0, maxinstSize - len(sdnEDMO)), 'constant',constant_values=(np.nan,np.nan))
+            self.xts['SDN_EDMO_CODE'] = xr.DataArray(np.tile(sdnEDMO, (nTime, 1)), dims=('TIME', 'MAXINST'))
+            sdnRef = ('%s' % network_data.iloc[0]['metadata_page']).encode()
+            self.xts['SDN_REFERENCES'] = xr.DataArray(np.full(nTime, sdnRef), dims=('TIME',))
+            self.xts['SDN_REFERENCES'].encoding['char_dim_name'] = 'STRING' + str(len(sdnRef))
+            sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + sdnRef.decode() + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
+            self.xts['SDN_XLINK'] = xr.DataArray(np.full((nTime, 1), sdnXlink), dims=('TIME', 'REFMAX'))
+            self.xts['SDN_XLINK'].encoding['char_dim_name'] = 'STRING' + str(len(sdnXlink))
+        else:
+            siteCode = ('%s' % station_data.iloc[0]['network_id']).encode()
+            self.xts['SDN_CRUISE'] = xr.DataArray(np.full(nTime, siteCode), dims=('TIME',))
+            self.xts['SDN_CRUISE'].encoding['char_dim_name'] = 'STRING' + str(len(siteCode))
+            platformCode = ('%s' % station_data.iloc[0]['network_id'] + '-' + station_data.iloc[0]['station_id']).encode()
+            self.xts['SDN_STATION'] = xr.DataArray(np.full(nTime, platformCode), dims=('TIME',))
+            self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
+            ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ')).encode()
+            self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(np.full(nTime, ID), dims=('TIME',))
+            self.xts['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
+            self.xts['SDN_EDMO_CODE'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['EDMO_code'],axis=0), (nTime, 1)), dims=('TIME', 'MAXINST'))
+            sdnRef = ('%s' % network_data.iloc[0]['metadata_page']).encode()
+            self.xts['SDN_REFERENCES'] = xr.DataArray(np.full(nTime, sdnRef), dims=('TIME',))
+            self.xts['SDN_REFERENCES'].encoding['char_dim_name'] = 'STRING' + str(len(sdnRef))
+            sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + sdnRef.decode() + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
+            self.xts['SDN_XLINK'] = xr.DataArray(np.full((nTime, 1), sdnXlink), dims=('TIME', 'REFMAX'))
+            self.xts['SDN_XLINK'].encoding['char_dim_name'] = 'STRING' + str(len(sdnXlink))
         
         # Add spatial and temporal coordinate QC variables (set to good data due to the nature of HFR system)
-        self.xts['TIME_QC'] = xr.DataArray([1],dims={'TIME': len(pd.date_range(self.time, periods=1))})
-        self.xts['POSITION_QC'] = self.xts['OWTR_QC']
-        self.xts['DEPTH_QC'] = xr.DataArray([1],dims={'TIME': len(pd.date_range(self.time, periods=1))})
+        self.xts['TIME_QC'] = xr.DataArray(np.ones(nTime, dtype=int), dims=('TIME',))
+        self.xts['DEPH_QC'] = xr.DataArray(np.ones(nTime, dtype=int), dims=('TIME',))
             
         # Create DataSet from DataArrays
-        self.xds = xr.Dataset(self.xts)
+        self.xdsTS = xr.Dataset(self.xts)
         
         # Add data variable attributes to the DataSet
-        for vv in self.xds:
-            self.xds[vv].attrs = wavVariables[vv]
+        for vv in self.xdsTS:
+            self.xdsTS[vv].attrs = wavVariables[vv]
             
-        # Update QC variable attribute "comment" for inserting test thresholds and attribute "flag_values" for assigning the right data type
-        for qcv in self.metadata['QCTest']:
-            if qcv in self.xds:
-                self.xds[qcv].attrs['comment'] = self.xds[qcv].attrs['comment'] + ' ' + self.metadata['QCTest'][qcv]
-                self.xds[qcv].attrs['flag_values'] = list(np.int_(self.xds[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
-        for qcv in ['TIME_QC', 'POSITION_QC', 'DEPTH_QC']:
-            if qcv in self.xds:
-                self.xds[qcv].attrs['flag_values'] = list(np.int_(self.xds[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
+        # Update QC variable attribute "flag_values" for assigning the right data type
+        qcVars = [name for name in self.xdsTS.data_vars if "_QC" in name]
+        for qcv in qcVars:
+            self.xdsTS[qcv].attrs['flag_values'] = list(np.int_(self.xdsTS[qcv].attrs['flag_values']).astype(dataPacking[qcv]['dtype']))
                 
         # Add coordinate variable attributes to the DataSet
-        for cc in self.xds.coords:
-            self.xds[cc].attrs = wavVariables[cc]
+        for cc in self.xdsTS.coords:
+            self.xdsTS[cc].attrs = wavVariables[cc]
             
         # Evaluate measurement maximum depth
         vertMax = 3e8 / (8*np.pi * station_data['transmit_central_frequency'].to_numpy().min()*1e6)
         
         # Evaluate time coverage start, end, resolution and duration
-        timeCoverageStart = self.time - relativedelta(minutes=network_data.iloc[0]['temporal_resolution']/2)
-        timeCoverageEnd = self.time + relativedelta(minutes=network_data.iloc[0]['temporal_resolution']/2)
-        timeResRD = relativedelta(minutes=network_data.iloc[0]['temporal_resolution'])
+        timeDS = xr.decode_cf(self.xdsTS)
+        timeCoverageStart = pd.Timestamp(timeDS["TIME"].min().values).to_pydatetime()
+        timeCoverageEnd = pd.Timestamp(timeDS["TIME"].max().values).to_pydatetime()
+        if self.is_combined:
+            timeResRD = relativedelta(minutes=network_data.iloc[0]['temporal_resolution'])
+        else:
+            timeResRD = relativedelta(minutes=station_data.iloc[0]['temporal_resolution'])
         timeCoverageResolution = 'PT'
         if timeResRD.hours !=0:
             timeCoverageResolution += str(int(timeResRD.hours)) + 'H'
@@ -687,102 +713,115 @@ class Waves(fileParser):
         # Fill global attributes
         globalAttributes['site_code'] = siteCode.decode()
         globalAttributes['platform_code'] = platformCode.decode()
-        globalAttributes.pop('oceanops_ref')
-        globalAttributes.pop('wmo_platform_code')
-        globalAttributes.pop('wigos_id')
-        globalAttributes['doa_estimation_method'] = ', '.join(station_data[["station_id", "DoA_estimation_method"]].apply(": ".join, axis=1))
-        globalAttributes['calibration_type'] = ', '.join(station_data[["station_id", "calibration_type"]].apply(": ".join, axis=1))
-        if 'HFR-US' in network_data.iloc[0]['network_id']:
-            station_data['last_calibration_date'] = 'N/A'
-            globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date']],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
+        if self.is_combined:
+            globalAttributes['doa_estimation_method'] = ', '.join(station_data[["station_id", "DoA_estimation_method"]].apply(": ".join, axis=1))
+            globalAttributes['calibration_type'] = ', '.join(station_data[["station_id", "calibration_type"]].apply(": ".join, axis=1))
+            if 'HFR-US' in network_data.iloc[0]['network_id']:
+                station_data['last_calibration_date'] = 'N/A'
+                globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date']],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
+            else:
+                globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date'].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%SZ'))],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
+                globalAttributes['last_calibration_date'] = globalAttributes['last_calibration_date'].replace('1-01-01T00:00:00Z', 'N/A')
+            globalAttributes['calibration_link'] = ', '.join(station_data[["station_id", "calibration_link"]].apply(": ".join, axis=1))
         else:
-            globalAttributes['last_calibration_date'] = ', '.join(pd.concat([station_data['station_id'],station_data['last_calibration_date'].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%SZ'))],axis=1)[["station_id", "last_calibration_date"]].apply(": ".join, axis=1))
-            globalAttributes['last_calibration_date'] = globalAttributes['last_calibration_date'].replace('1-01-01T00:00:00Z', 'N/A')
-        globalAttributes['calibration_link'] = ', '.join(station_data[["station_id", "calibration_link"]].apply(": ".join, axis=1))
+            globalAttributes['doa_estimation_method'] = station_data.iloc[0]['DoA_estimation_method']
+            globalAttributes['calibration_type'] = station_data.iloc[0]['calibration_type']
+            globalAttributes['last_calibration_date'] = station_data.iloc[0]['last_calibration_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
+            globalAttributes['calibration_link'] = station_data.iloc[0]['calibration_link']
         # globalAttributes['title'] = network_data.iloc[0]['title']
         globalAttributes['title'] = 'Near Real Time Ocean Wave parameters by ' + globalAttributes['platform_code']
-        globalAttributes['summary'] = network_data.iloc[0]['summary']
-        globalAttributes['institution'] = ', '.join(pd.concat([network_data['institution_name'],station_data['institution_name']]).unique().tolist())
-        globalAttributes['institution_edmo_code'] = ', '.join([str(x) for x in pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique().tolist()])
-        globalAttributes['institution_references'] = ', '.join(pd.concat([network_data['institution_website'],station_data['institution_website']]).unique().tolist())
+        if self.is_combined:
+            globalAttributes['summary'] = 'The data set is a timeseries of wave parameters measured by the ' + globalAttributes['site_code'] + ' HFR network. Wave parameters estimated by HF Radar are representative of the upper 0.3-2.5 meters of the ocean.'
+        else:
+            globalAttributes['summary'] = 'The data set is a timeseries of wave parameters measured by the ' + globalAttributes['platform_code'] + ' HFR system. Wave parameters estimated by HF Radar are representative of the upper 0.3-2.5 meters of the ocean.'
+        if self.is_combined:
+            globalAttributes['institution'] = ', '.join(pd.concat([network_data['institution_name'],station_data['institution_name']]).unique().tolist())
+            globalAttributes['institution_edmo_code'] = ', '.join([str(x) for x in pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique().tolist()])
+            globalAttributes['institution_references'] = ', '.join(pd.concat([network_data['institution_website'],station_data['institution_website']]).unique().tolist())
+        else:
+            globalAttributes['institution'] = station_data.iloc[0]['institution_name']
+            globalAttributes['institution_edmo_code'] = str(station_data.iloc[0]['EDMO_code'])
+            globalAttributes['institution_references'] = station_data.iloc[0]['institution_website']
         globalAttributes['id'] = ID.decode()
         globalAttributes['project'] = network_data.iloc[0]['project']
         globalAttributes['comment'] = network_data.iloc[0]['comment']
         globalAttributes['network'] = network_data.iloc[0]['network_name']
-        globalAttributes['data_type'] = globalAttributes['data_type'].replace('current data', 'total current data')
-        globalAttributes['geospatial_lat_min'] = str(network_data.iloc[0]['geospatial_lat_min'])
-        globalAttributes['geospatial_lat_max'] = str(network_data.iloc[0]['geospatial_lat_max'])
-        globalAttributes['geospatial_lat_resolution'] = str(network_data.iloc[0]['grid_resolution'])
-        globalAttributes['geospatial_lon_min'] = str(network_data.iloc[0]['geospatial_lon_min'])
-        globalAttributes['geospatial_lon_max'] = str(network_data.iloc[0]['geospatial_lon_max'])
-        globalAttributes['geospatial_lon_resolution'] = str(network_data.iloc[0]['grid_resolution'])        
+        globalAttributes['geospatial_lat_min'] = self.metadata["ReferenceLatitude"].split()[0]
+        globalAttributes['geospatial_lat_max'] = self.metadata["ReferenceLatitude"].split()[0]
+        globalAttributes['geospatial_lat_resolution'] = '0.0'
+        globalAttributes['geospatial_lon_min'] = self.metadata["ReferenceLongitude"].split()[0]
+        globalAttributes['geospatial_lon_max'] = self.metadata["ReferenceLongitude"].split()[0]
+        globalAttributes['geospatial_lon_resolution'] = '0.0'
         globalAttributes['geospatial_vertical_max'] = str(vertMax)
         globalAttributes['geospatial_vertical_resolution'] = str(vertMax)        
         globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['time_coverage_end'] = timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['time_coverage_resolution'] = timeCoverageResolution
-        globalAttributes['time_coverage_duration'] = timeCoverageResolution
+        globalAttributes['time_coverage_duration'] = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
         globalAttributes['area'] = network_data.iloc[0]['area']
         globalAttributes['format_version'] = version
         globalAttributes['netcdf_format'] = ncFormat
         globalAttributes['citation'] += network_data.iloc[0]['citation_statement']
         globalAttributes['license'] = network_data.iloc[0]['license']
         globalAttributes['acknowledgment'] = network_data.iloc[0]['acknowledgment']
-        globalAttributes['processing_level'] = '3B'
+        globalAttributes['processing_level'] = '2B'
         globalAttributes['contributor_name'] = network_data.iloc[0]['contributor_name']
         globalAttributes['contributor_role'] = network_data.iloc[0]['contributor_role']
         globalAttributes['contributor_email'] = network_data.iloc[0]['contributor_email']
-        globalAttributes['manufacturer'] = ', '.join(station_data[["station_id", "manufacturer"]].apply(": ".join, axis=1))
-        globalAttributes['sensor_model'] = ', '.join(station_data[["station_id", "manufacturer"]].apply(": ".join, axis=1))
-        globalAttributes['software_version'] = version
+        if self.is_combined:
+            globalAttributes['manufacturer'] = ', '.join(station_data[["station_id", "manufacturer"]].apply(": ".join, axis=1))
+            globalAttributes['sensor_model'] = ', '.join(station_data[["station_id", "manufacturer"]].apply(": ".join, axis=1))
+        else:
+            globalAttributes['manufacturer'] = station_data.iloc[0]['manufacturer']
+            globalAttributes['sensor_model'] = station_data.iloc[0]['manufacturer']
         
-        creationDate = dt.datetime.now(timezone.utc)
+        creationDate = dt.datetime.now(dt.timezone.utc)
         globalAttributes['metadata_date_stamp'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['date_created'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['date_modified'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
-        globalAttributes['history'] = 'Data collected at ' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
+        globalAttributes['history'] = 'Data collected between ' + timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ') + ' and ' + timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
                                     + creationDate.strftime('%Y-%m-%dT%H:%M:%SZ') + ' by the European HFR Node.'        
         
         # Add global attributes to the DataSet
-        self.xds.attrs = globalAttributes
+        self.xdsTS.attrs = globalAttributes
             
         # Encode data types, data packing and _FillValue for the data variables of the DataSet
-        for vv in self.xds:
+        for vv in self.xdsTS:
             if vv in dataPacking:
                 if 'dtype' in dataPacking[vv]:
-                    self.xds[vv].encoding['dtype'] = dataPacking[vv]['dtype']
+                    self.xdsTS[vv].encoding['dtype'] = dataPacking[vv]['dtype']
                 if 'scale_factor' in dataPacking[vv]:
-                    self.xds[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']                
+                    self.xdsTS[vv].encoding['scale_factor'] = dataPacking[vv]['scale_factor']                
                 if 'add_offset' in dataPacking[vv]:
-                    self.xds[vv].encoding['add_offset'] = dataPacking[vv]['add_offset']
+                    self.xdsTS[vv].encoding['add_offset'] = dataPacking[vv]['add_offset']
                 if 'fill_value' in dataPacking[vv]:
-                    self.xds[vv].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[vv]['dtype']).kind + str(np.dtype(dataPacking[vv]['dtype']).itemsize)]
+                    self.xdsTS[vv].encoding['_FillValue'] = netCDF4.default_fillvals[np.dtype(dataPacking[vv]['dtype']).kind + str(np.dtype(dataPacking[vv]['dtype']).itemsize)]
                 else:
-                    self.xds[vv].encoding['_FillValue'] = None
+                    self.xdsTS[vv].encoding['_FillValue'] = None
                     
         # Update valid_min and valid_max variable attributes according to data packing
-        for vv in self.xds:
+        for vv in self.xdsTS:
             if 'valid_min' in wavVariables[vv]:
                 if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
-                    self.xds[vv].attrs['valid_min'] = np.float_(((wavVariables[vv]['valid_min'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+                    self.xdsTS[vv].attrs['valid_min'] = np.float_(((wavVariables[vv]['valid_min'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
                 else:
-                    self.xds[vv].attrs['valid_min'] = np.float_(wavVariables[vv]['valid_min']).astype(dataPacking[vv]['dtype'])
+                    self.xdsTS[vv].attrs['valid_min'] = np.float_(wavVariables[vv]['valid_min']).astype(dataPacking[vv]['dtype'])
             if 'valid_max' in wavVariables[vv]:             
                 if ('scale_factor' in dataPacking[vv]) and ('add_offset' in dataPacking[vv]):
-                    self.xds[vv].attrs['valid_max'] = np.float_(((wavVariables[vv]['valid_max'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
+                    self.xdsTS[vv].attrs['valid_max'] = np.float_(((wavVariables[vv]['valid_max'] - dataPacking[vv]['add_offset']) / dataPacking[vv]['scale_factor'])).astype(dataPacking[vv]['dtype'])
                 else:
-                    self.xds[vv].attrs['valid_max'] = np.float_(wavVariables[vv]['valid_max']).astype(dataPacking[vv]['dtype'])
+                    self.xdsTS[vv].attrs['valid_max'] = np.float_(wavVariables[vv]['valid_max']).astype(dataPacking[vv]['dtype'])
             
         # Encode data types and avoid data packing, valid_min, valid_max and _FillValue for the coordinate variables of the DataSet
-        for cc in self.xds.coords:
+        for cc in self.xdsTS.coords:
             if cc in dataPacking:
                 if 'dtype' in dataPacking[cc]:
-                    self.xds[cc].encoding['dtype'] = dataPacking[cc]['dtype']
+                    self.xdsTS[cc].encoding['dtype'] = dataPacking[cc]['dtype']
                 if 'valid_min' in wavVariables[cc]:
-                    del self.xds[cc].attrs['valid_min']
+                    del self.xdsTS[cc].attrs['valid_min']
                 if 'valid_max' in wavVariables[cc]:
-                    del self.xds[cc].attrs['valid_max']
-                self.xds[cc].encoding['_FillValue'] = None
+                    del self.xdsTS[cc].attrs['valid_max']
+                self.xdsTS[cc].encoding['_FillValue'] = None
                 
         return
     
