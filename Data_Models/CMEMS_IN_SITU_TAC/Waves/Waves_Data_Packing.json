@@ -36,7 +36,7 @@
         "dtype": "float32",
         "fill_value": "" 
     },
-    "VTM01": {
+    "VM01": {
         "dtype": "float32",
         "fill_value": "" 
     },
@@ -88,7 +88,7 @@
         "dtype": "int8",
         "fill_value": "" 
     },
-    "VTM01_QC": {
+    "VM01_QC": {
         "dtype": "int8",
         "fill_value": "" 
     },

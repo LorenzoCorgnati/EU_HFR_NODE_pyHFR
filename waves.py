@@ -458,14 +458,17 @@ class Waves(fileParser):
                         name=col,
                     )
 
-                data = df['LOND'].values[:,np.newaxis]
+                # Add scalar (dimensionless) DataArray for position variables
+                data = np.float32(df['LOND'].iloc[0])
                 xts['LONGITUDE'] = xr.DataArray(
                                         data=data,
+                                        dims=(),
                                         name='LONGITUDE',
                                     )
-                data = df['LATD'].values[:,np.newaxis]
+                data = np.float32(df['LATD'].iloc[0])
                 xts['LATITUDE'] = xr.DataArray(
                                         data=data,
+                                        dims=(),
                                         name='LATITUDE',
                                     )
 
@@ -590,10 +593,10 @@ class Waves(fileParser):
         # Add antenna related variables to the dictionary
         # Number of antennas     
         if self.is_combined:
-            contributingSiteNrx = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['number_of_receive_antennas'].to_numpy()
+            contributingSiteNrx = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['number_of_receive_antennas'].to_numpy()
             nRX = np.asfarray(contributingSiteNrx)
             nRX = np.pad(nRX, (0, maxsiteSize - len(nRX)), 'constant',constant_values=(np.nan,np.nan))
-            contributingSiteNtx = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['number_of_transmit_antennas'].to_numpy()
+            contributingSiteNtx = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['number_of_transmit_antennas'].to_numpy()
             nTX = np.asfarray(contributingSiteNtx)
             nTX = np.pad(nTX, (0, maxsiteSize - len(nTX)), 'constant',constant_values=(np.nan,np.nan))
             self.xts['NARX'] = xr.DataArray(np.tile(nRX, (nTime, 1)), dims=('TIME', 'MAXSITE'))
@@ -604,9 +607,9 @@ class Waves(fileParser):
         
         # Longitude and latitude of antennas
         if self.is_combined:
-            contributingSiteLat = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['site_lat'].to_numpy()
+            contributingSiteLat = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['site_lat'].to_numpy()
             siteLat = np.pad(contributingSiteLat, (0, maxsiteSize - len(contributingSiteLat)), 'constant',constant_values=(np.nan,np.nan))
-            contributingSiteLon = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['site_lon'].to_numpy()
+            contributingSiteLon = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['site_lon'].to_numpy()
             siteLon = np.pad(contributingSiteLon, (0, maxsiteSize - len(contributingSiteLon)), 'constant',constant_values=(np.nan,np.nan))
             self.xts['SLTR'] = xr.DataArray(np.tile(siteLat, (nTime, 1)), dims=('TIME', 'MAXSITE'))
             self.xts['SLNR'] = xr.DataArray(np.tile(siteLon, (nTime, 1)), dims=('TIME', 'MAXSITE'))
@@ -620,7 +623,7 @@ class Waves(fileParser):
         
         # Codes of antennas
         if self.is_combined:
-            contributingSiteCodeList = station_data.loc[station_data['station_id'].isin(self.site_source.Name.tolist())]['station_id'].tolist()
+            contributingSiteCodeList = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['station_id'].tolist()
             antCode = np.array([site.encode() for site in contributingSiteCodeList])
             antCode = np.pad(antCode, (0, maxsiteSize - len(contributingSiteCodeList)), 'constant',constant_values=('',''))
             self.xts['SCDR'] = xr.DataArray(np.tile(antCode, (nTime, 1)), dims=('TIME', 'MAXSITE'))
@@ -727,7 +730,8 @@ class Waves(fileParser):
         else:
             globalAttributes['doa_estimation_method'] = station_data.iloc[0]['DoA_estimation_method']
             globalAttributes['calibration_type'] = station_data.iloc[0]['calibration_type']
-            globalAttributes['last_calibration_date'] = station_data.iloc[0]['last_calibration_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
+            if station_data.iloc[0]['last_calibration_date']:
+                globalAttributes['last_calibration_date'] = station_data.iloc[0]['last_calibration_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
             globalAttributes['calibration_link'] = station_data.iloc[0]['calibration_link']
         # globalAttributes['title'] = network_data.iloc[0]['title']
         globalAttributes['title'] = 'Near Real Time Ocean Wave parameters by ' + globalAttributes['platform_code']
