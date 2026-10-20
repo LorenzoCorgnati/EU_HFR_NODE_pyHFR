@@ -818,10 +818,6 @@ class Waves(fileParser):
             if cc in dataPacking:
                 if 'dtype' in dataPacking[cc]:
                     self.xdsTS[cc].encoding['dtype'] = dataPacking[cc]['dtype']
-                if 'valid_min' in wavVariables[cc]:
-                    del self.xdsTS[cc].attrs['valid_min']
-                if 'valid_max' in wavVariables[cc]:
-                    del self.xdsTS[cc].attrs['valid_max']
                 self.xdsTS[cc].encoding['_FillValue'] = None
                 
         return
