@@ -764,7 +764,7 @@ class Waves(fileParser):
         globalAttributes['time_coverage_resolution'] = timeCoverageResolution
         globalAttributes['time_coverage_duration'] = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
         globalAttributes['area'] = network_data.iloc[0]['area']
-        globalAttributes['format_version'] = version
+        # globalAttributes['format_version'] = version
         globalAttributes['netcdf_format'] = ncFormat
         globalAttributes['citation'] += network_data.iloc[0]['citation_statement']
         globalAttributes['license'] = network_data.iloc[0]['license']
