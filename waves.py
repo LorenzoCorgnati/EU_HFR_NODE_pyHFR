@@ -14,6 +14,7 @@ from collections import OrderedDict
 import geopandas as gpd
 import json
 from dateutil.relativedelta import relativedelta
+import netCDF4
 
 import logging
 
@@ -562,9 +563,9 @@ class Waves(fileParser):
         globalAttributes = json.loads(f.read())
         f.close()
         
-        # Rename significatn wave height, wave period and wave direction variables
+        # Rename significant wave height, wave period and wave direction variables
         self.xts['VHM0'] = self.xts.pop('MWHT')
-        if 'TAVG' in self.xts:                          # Only for WERA files
+        if 'TAVG' in self.xts:                          # Period, only for WERA files
             self.xts['VM01'] = self.xts.pop('TAVG')
         if 'WAVB' in self.xts:                          # Wave direction from (Codar)
             self.xts['VMDR'] = self.xts.pop('WAVB')
@@ -928,7 +929,8 @@ class Waves(fileParser):
         
     def qc_instac_global_range(self):
         """
-        This test applies a gross filter on observed values for waves. It needs to accommodate all the expected extremes encountered in the oceans.
+        This test applies a gross filter on observed values for waves. It needs to accommodate all the expected extremes 
+        encountered in the oceans.
         The applied ranges are:
         - Significant and mean wave height in range 0m to 25m.
         - Mean wave period in range 1s to 25s.

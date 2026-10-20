@@ -69,10 +69,8 @@
         "fill_value": "" 
     },
     "SCDR": {
-        "fill_value": "" 
     },
     "SCDT": {
-        "fill_value": "" 
     },
     "TIME_QC": {
         "dtype": "int8",
