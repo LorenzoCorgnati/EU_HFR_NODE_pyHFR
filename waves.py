@@ -131,6 +131,14 @@ class Waves(fileParser):
             if not epoch <= self.time <= now:
                 self.data = pd.DataFrame()
 
+            # Add metadata related to the initial and final timestamps of the wave data
+            if not self.is_wera:
+                self.metadata['TimeStart'] = self.data["time"].min().strftime('%Y-%m-%dT%H:%M:%SZ')
+                self.metadata['TimeEnd'] = self.data["time"].max().strftime('%Y-%m-%dT%H:%M:%SZ')
+            else:
+                self.metadata['TimeStart'] = self.time.strftime('%Y-%m-%dT%H:%M:%SZ')
+                self.metadata['TimeEnd'] = self.time.strftime('%Y-%m-%dT%H:%M:%SZ')
+
             # Remove impossible positions (only for WERA data, Codar data position is evaluated based on Distance and AntennaBearing)
             if self.is_wera:
                 self.data = self.data[self.data['LOND'].between(-180, 180) & self.data['LATD'].between(-90, 90)]
@@ -645,7 +653,10 @@ class Waves(fileParser):
             platformCode = ('%s' % network_data.iloc[0]['network_id'] + '-Total').encode()
             self.xts['SDN_STATION'] = xr.DataArray(np.full(nTime, platformCode), dims=('TIME',))
             self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
-            ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ')).encode()
+            if nTime == 1:
+                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart']).encode()
+            else:
+                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart'] + '_' + self.metadata['TimeEnd']).encode()
             self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(np.full(nTime, ID), dims=('TIME',))
             self.xts['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
             sdnEDMO = np.asfarray(pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique())
@@ -664,7 +675,10 @@ class Waves(fileParser):
             platformCode = ('%s' % station_data.iloc[0]['network_id'] + '-' + station_data.iloc[0]['station_id']).encode()
             self.xts['SDN_STATION'] = xr.DataArray(np.full(nTime, platformCode), dims=('TIME',))
             self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
-            ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.time.strftime('%Y-%m-%dT%H:%M:%SZ')).encode()
+            if nTime == 1:
+                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart']).encode()
+            else:
+                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart'] + '_' + self.metadata['TimeEnd']).encode()
             self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(np.full(nTime, ID), dims=('TIME',))
             self.xts['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
             self.xts['SDN_EDMO_CODE'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['EDMO_code'],axis=0), (nTime, 1)), dims=('TIME', 'MAXINST'))
@@ -761,13 +775,13 @@ class Waves(fileParser):
         globalAttributes['geospatial_vertical_resolution'] = str(vertMax)        
         globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['time_coverage_end'] = timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ')
+        globalAttributes['last_date_observation'] = globalAttributes['time_coverage_end']
         globalAttributes['time_coverage_resolution'] = timeCoverageResolution
         globalAttributes['time_coverage_duration'] = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
         globalAttributes['area'] = network_data.iloc[0]['area']
         # globalAttributes['format_version'] = version
         globalAttributes['netcdf_format'] = ncFormat
         globalAttributes['citation'] += network_data.iloc[0]['citation_statement']
-        globalAttributes['license'] = network_data.iloc[0]['license']
         globalAttributes['acknowledgment'] = network_data.iloc[0]['acknowledgment']
         globalAttributes['processing_level'] = '2B'
         globalAttributes['contributor_name'] = network_data.iloc[0]['contributor_name']
