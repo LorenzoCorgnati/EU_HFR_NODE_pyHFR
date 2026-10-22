@@ -241,7 +241,7 @@ class Waves(fileParser):
             """
             This method is meant for preparing wave data as timeseries (i.e. to refer all data to a single pointfor usage as a wave buoy).
             For this reason, the method creates the field self.timeseries_data, which is a DataFrame containing only the data of the selected range cell.
-            For Codar ranged wave files, select a specific range cell to be used for analysis. 
+            For Codar ranged wave files, the method selects a specific range cell to be used for analysis. 
             This method filters the data to only include the specified range cell and stores the selection in self.timeseries_data.
             The method is specific for Codar wave files, it has no effect on WERA wave files.
     
@@ -259,18 +259,18 @@ class Waves(fileParser):
 
                     if distance is not None:
                         numDistance = float(distance.split()[0])
-                        self.timeseries_data = self.data[self.data['DIST'] == numDistance]   
+                        self.timeseries_data = self.data[self.data['DIST'] == numDistance].copy()
                         self.metadata['Distance'] = distance
                         self.metadata['RangeCell'] = str(rngcll)  
                 else:                           # Codar averaged data
-                    self.timeseries_data = self.data
+                    self.timeseries_data = self.data.copy()
 
     def set_reference_position(self, prefLon=None, prefLat=None, avgDistance=15000):
         """
         Set the reference latitude and longitude to refer all data to a single point(for usage as a wave buoy).
-        This method is meant for preparing wave data as timeseries (i.e. to refer all data to a single pointfor usage as a wave buoy).
+        This method is meant for preparing wave data as timeseries (i.e. to refer all data to a single point for usage as a wave buoy).
         For this reason, the method works on the field self.timeseries_data, which is a DataFrame containing only the data of the 
-        selected range cell for Codar data or the closest grid point to the center of the grid for WERA data.
+        selected range cell for Codar data. For WERA data the field self.timeseries_data is created by this function.
         If the latitude/longitude pair of the preferred reference position are given in input, the reference position 
         will be set to those values. Otherwise, the reference position will be calculated based on the type of wave file.
         For Codar ranged wave files, the reference position is calculated using the distance of the selected range cell and
@@ -410,6 +410,25 @@ class Waves(fileParser):
                 # Add distance from antenna to metadata
                 self.metadata['Distance'] = ", ".join(f"{sid}: {d:.2f} km" for sid, d in zip(self.site_source["station_id"], self.site_source["distance_from_reference_point"]))
                 return
+
+    def to_timeseries_data(self, refCell=3, refLon=None, refLat=None, refDistance=15000):
+            """
+            This method is meant for preparing wave data as timeseries (i.e. to refer all data to a single pointfor usage as a wave buoy).
+            For this reason, the method creates the field self.timeseries_data, which is a DataFrame only containing the data of the selected
+            point (i.e. the reference position).
+            The method set the reference latitude and longitude to refer all data to a single point(for usage as a wave buoy).
+
+            INPUT:
+                refCell (int, optional): number of the Range Cell to be selected. Defaults to 3.
+                refLon (float, optional): preferred longitude for the reference position. Defaults to None.
+                refLat (float, optional): preferred latitude for the reference position. Defaults to None.
+                refDistance (float, optional): reference distance in meters for Codar averaged files. Defaults to 15000 m (i.e. 15 km).
+            """
+
+            self.select_range_cell(refCell)
+            self.set_reference_position(refLon, refLat, refDistance)
+
+            return
 
     def to_xarray_timeseries(self):
             """
