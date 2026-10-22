@@ -748,7 +748,7 @@ class Waves(fileParser):
                 globalAttributes['last_calibration_date'] = station_data.iloc[0]['last_calibration_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
             globalAttributes['calibration_link'] = station_data.iloc[0]['calibration_link']
         # globalAttributes['title'] = network_data.iloc[0]['title']
-        globalAttributes['title'] = 'Near Real Time Ocean Wave parameters by ' + globalAttributes['platform_code']
+        # globalAttributes['title'] = 'Near Real Time Ocean Wave parameters by ' + globalAttributes['platform_code']
         if self.is_combined:
             globalAttributes['summary'] = 'The data set is a timeseries of wave parameters measured by the ' + globalAttributes['site_code'] + ' HFR network. Wave parameters estimated by HF Radar are representative of the upper 0.3-2.5 meters of the ocean.'
         else:
@@ -772,7 +772,10 @@ class Waves(fileParser):
         globalAttributes['geospatial_lon_max'] = self.metadata["ReferenceLongitude"].split()[0]
         globalAttributes['geospatial_lon_resolution'] = '0.0'
         globalAttributes['geospatial_vertical_max'] = str(vertMax)
-        globalAttributes['geospatial_vertical_resolution'] = str(vertMax)        
+        globalAttributes['geospatial_vertical_resolution'] = str(vertMax)    
+        globalAttributes['last_latitude_observation'] = self.metadata["ReferenceLatitude"].split()[0]
+        globalAttributes['last_longitude_observation'] = self.metadata["ReferenceLongitude"].split()[0]
+        globalAttributes['geospatial_lat_max'] = self.metadata["ReferenceLatitude"].split()[0]    
         globalAttributes['time_coverage_start'] = timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['time_coverage_end'] = timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['last_date_observation'] = globalAttributes['time_coverage_end']

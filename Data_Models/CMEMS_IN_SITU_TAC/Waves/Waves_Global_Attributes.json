@@ -46,6 +46,8 @@
     "time_coverage_resolution": "",    
     "time_coverage_duration": "",
     "last_date_observation": "",
+    "last_longitude_observation": "",
+    "last_latitude_observation": "",
     "area": "",
     "distance_to_antenna": "",
     "bottom_depth": "",

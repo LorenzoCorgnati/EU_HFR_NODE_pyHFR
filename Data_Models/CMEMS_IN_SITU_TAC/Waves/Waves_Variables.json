@@ -131,7 +131,8 @@
         "long_name": "External resource linkages"
     },
     "STATION": {
-        "long_name": "station"
+        "long_name": "station",
+        "cf_role": "timeseries_id"
     },
     "NARX": {
         "long_name": "Number of receive antennas",

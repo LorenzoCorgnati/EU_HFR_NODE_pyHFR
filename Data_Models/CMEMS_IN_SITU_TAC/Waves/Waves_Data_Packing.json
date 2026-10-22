@@ -16,7 +16,6 @@
         "dtype": "int16"
     },
     "STATION": {
-        "dtype": "S1"
     },
     "SDN_CRUISE": {
     },
