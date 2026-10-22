@@ -28,7 +28,6 @@
         "sdn_parameter_urn": "SDN:P01::ADEPZZ01",
         "sdn_uom_name": "Metres",
         "sdn_uom_urn": "SDN:P06::ULAA",
-        "ancillary_variables": "DEPH_QC",
         "data_mode": "R"
     },
     "LATITUDE": {
@@ -75,7 +74,7 @@
         "sdn_parameter_urn": "SDN:P01::HMZEZZ01",
         "sdn_uom_name": "Metres",
         "sdn_uom_urn": "SDN:P06::ULAA",
-        "coordinates" : "TIME DEPH LATITUDE LONGITUDE",
+        "coordinates" : "TIME LATITUDE LONGITUDE DEPH STATION",
         "ancillary_variables": "VHM0_QC",        
         "type_of_analysis": "spectral analysis",
         "data_mode": "R"
@@ -90,7 +89,7 @@
         "sdn_parameter_urn": "SDN:P01::GTZAM1ZZ",
         "sdn_uom_name": "Seconds",
         "sdn_uom_urn": "SDN:P06::UTBB",
-        "coordinates" : "TIME DEPH LATITUDE LONGITUDE",
+        "coordinates" : "TTIME LATITUDE LONGITUDE DEPH STATION",
         "ancillary_variables": "VM01_QC",
         "type_of_analysis": "spectral analysis",
         "data_mode": "R"
@@ -105,7 +104,7 @@
         "sdn_parameter_urn": "SDN:P01::GMWDZZ01",
         "sdn_uom_name": "Degrees True",
         "sdn_uom_urn": "SDN:P06::UABB",
-        "coordinates" : "TIME DEPH LATITUDE LONGITUDE",
+        "coordinates" : "TIME LATITUDE LONGITUDE DEPH STATION",
         "ancillary_variables": "VMDR_QC",
         "type_of_analysis": "spectral analysis",
         "data_mode": "R"

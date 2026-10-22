@@ -708,9 +708,24 @@ class Waves(fileParser):
             self.xts['SDN_XLINK'] = xr.DataArray(np.full((nTime, 1), sdnXlink), dims=('TIME', 'REFMAX'))
             self.xts['SDN_XLINK'].encoding['char_dim_name'] = 'STRING' + str(len(sdnXlink))
         
+        # Add STATION variable
+        self.xts['STATION'] = xr.DataArray(platformCode, dims=())
+        self.xts['STATION'].encoding['char_dim_name'] = 'STRLEN'
+
+        # Add DEPH variable
+        self.xts['DEPH'] = xr.DataArray(0,
+                                dims={'DEPTH': 1},
+                                coords={'DEPTH': [0]})
+        
+        # Remove DEPTH variable
+        self.xts.pop('DEPTH')
+        
         # Add spatial and temporal coordinate QC variables (set to good data due to the nature of HFR system)
         self.xts['TIME_QC'] = xr.DataArray(np.ones(nTime, dtype=int), dims=('TIME',))
         self.xts['DEPH_QC'] = xr.DataArray(np.ones(nTime, dtype=int), dims=('TIME',))
+
+        # Remove dependency on the coordinate DEPTH for POSITION_QC variable
+        self.xts['POSITION_QC'] = self.xts['POSITION_QC'].squeeze("DEPTH", drop=True)
             
         # Create DataSet from DataArrays
         self.xdsTS = xr.Dataset(self.xts)
