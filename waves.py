@@ -832,7 +832,7 @@ class Waves(fileParser):
             globalAttributes['sensor_model'] = station_data.iloc[0]['manufacturer']
         
         creationDate = dt.datetime.now(dt.timezone.utc)
-        globalAttributes['metadata_date_stamp'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
+        # globalAttributes['metadata_date_stamp'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['date_created'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['date_modified'] = creationDate.strftime('%Y-%m-%dT%H:%M:%SZ')
         globalAttributes['history'] = 'Data collected between ' + timeCoverageStart.strftime('%Y-%m-%dT%H:%M:%SZ') + ' and ' + timeCoverageEnd.strftime('%Y-%m-%dT%H:%M:%SZ') + '. netCDF file created at ' \
