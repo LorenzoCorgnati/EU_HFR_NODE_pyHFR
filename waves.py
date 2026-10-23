@@ -776,6 +776,7 @@ class Waves(fileParser):
                 globalAttributes['last_calibration_date'] = globalAttributes['last_calibration_date'].replace('1-01-01T00:00:00Z', 'N/A')
             globalAttributes['calibration_link'] = ', '.join(station_data[["station_id", "calibration_link"]].apply(": ".join, axis=1))
         else:
+            globalAttributes['wmo_platform_code'] = station_data.iloc[0]['wmo_code']
             globalAttributes['doa_estimation_method'] = station_data.iloc[0]['DoA_estimation_method']
             globalAttributes['calibration_type'] = station_data.iloc[0]['calibration_type']
             if station_data.iloc[0]['last_calibration_date']:
@@ -804,10 +805,8 @@ class Waves(fileParser):
         globalAttributes['network'] = network_data.iloc[0]['network_name']
         globalAttributes['geospatial_lat_min'] = self.metadata["ReferenceLatitude"].split()[0]
         globalAttributes['geospatial_lat_max'] = self.metadata["ReferenceLatitude"].split()[0]
-        globalAttributes['geospatial_lat_resolution'] = '0.0'
         globalAttributes['geospatial_lon_min'] = self.metadata["ReferenceLongitude"].split()[0]
         globalAttributes['geospatial_lon_max'] = self.metadata["ReferenceLongitude"].split()[0]
-        globalAttributes['geospatial_lon_resolution'] = '0.0'
         globalAttributes['geospatial_vertical_max'] = str(vertMax)
         globalAttributes['geospatial_vertical_resolution'] = str(vertMax)    
         globalAttributes['last_latitude_observation'] = self.metadata["ReferenceLatitude"].split()[0]
