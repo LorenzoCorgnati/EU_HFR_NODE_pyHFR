@@ -817,13 +817,13 @@ class Waves(fileParser):
         globalAttributes['time_coverage_duration'] = pd.Timedelta(timeCoverageEnd - timeCoverageStart).isoformat()
         globalAttributes['area'] = network_data.iloc[0]['area']
         # globalAttributes['format_version'] = version
-        globalAttributes['netcdf_format'] = ncFormat
+        # globalAttributes['netcdf_format'] = ncFormat
         globalAttributes['citation'] += network_data.iloc[0]['citation_statement']
-        globalAttributes['acknowledgment'] = network_data.iloc[0]['acknowledgment']
+        # globalAttributes['acknowledgment'] = network_data.iloc[0]['acknowledgment']
         globalAttributes['processing_level'] = '2B'
-        globalAttributes['contributor_name'] = network_data.iloc[0]['contributor_name']
-        globalAttributes['contributor_role'] = network_data.iloc[0]['contributor_role']
-        globalAttributes['contributor_email'] = network_data.iloc[0]['contributor_email']
+        # globalAttributes['contributor_name'] = network_data.iloc[0]['contributor_name']
+        # globalAttributes['contributor_role'] = network_data.iloc[0]['contributor_role']
+        # globalAttributes['contributor_email'] = network_data.iloc[0]['contributor_email']
         if self.is_combined:
             globalAttributes['manufacturer'] = ', '.join(station_data[["station_id", "manufacturer"]].apply(": ".join, axis=1))
             globalAttributes['sensor_model'] = ', '.join(station_data[["station_id", "manufacturer"]].apply(": ".join, axis=1))
