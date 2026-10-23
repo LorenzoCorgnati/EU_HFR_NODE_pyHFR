@@ -797,7 +797,10 @@ class Waves(fileParser):
             globalAttributes['institution_references'] = station_data.iloc[0]['institution_website']
         globalAttributes['id'] = ID.decode()
         globalAttributes['project'] = network_data.iloc[0]['project']
-        globalAttributes['comment'] = network_data.iloc[0]['comment']
+        if not self.is_wera:
+            globalAttributes['comment'] = 'Wave parameters are estimated from the second-order Doppler spectrum of the sea echo measured by a Direction Finding High Frequency Radar system. Since the second-order echo is not resolved in azimuth, processing is performed per station on range rings centered in the antenna, averaging over all bearings. Significant wave height, centroid period and direction are obtained by fitting a model wave spectrum (Pierson-Moskowitz) to the measured second-order spectrum, normalized by the first-order Bragg energy.'
+        else:
+            globalAttributes['comment'] = 'Wave parameters are estimated by inverting the integral equation relating the second-order Doppler spectrum of the sea echo measured by a Beam Forming High Frequency Radar system, to the ocean wave spectrum, or via empirical methods. Significant wave height and mean period can be calculated using only one station, while direction is only provided when data from two or more stations is available.'
         globalAttributes['network'] = network_data.iloc[0]['network_name']
         globalAttributes['geospatial_lat_min'] = self.metadata["ReferenceLatitude"].split()[0]
         globalAttributes['geospatial_lat_max'] = self.metadata["ReferenceLatitude"].split()[0]
