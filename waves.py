@@ -1018,19 +1018,16 @@ class Waves(fileParser):
         
         # set bad flag for wave period out of range
         if self.is_wera:
-            self.timeseries_data.loc[(self.timeseries_data['TAVG'] < 1), testName] = 4
-            self.timeseries_data.loc[(self.timeseries_data['TAVG'] > TmnLim), testName] = 4
-            self.timeseries_data.loc[self.timeseries_data["TAVG"].isna(), testName] = np.nan
+            self.timeseries_data.loc[(self.timeseries_data['TAVG'] < 1) & self.timeseries_data['TAVG'].notna(), testName] = 4
+            self.timeseries_data.loc[(self.timeseries_data['TAVG'] > TmnLim) & self.timeseries_data['TAVG'].notna(), testName] = 4
 
         # set bad flag for wave direction out of range
         if self.is_wera:
-            self.timeseries_data.loc[(self.timeseries_data['WDTO'] < 0), testName] = 4
-            self.timeseries_data.loc[(self.timeseries_data['WDTO'] > 360), testName] = 4
-            self.timeseries_data.loc[self.timeseries_data["WDTO"].isna(), testName] = np.nan
+            self.timeseries_data.loc[(self.timeseries_data['WDTO'] < 0) & self.timeseries_data['WDTO'].notna(), testName] = 4
+            self.timeseries_data.loc[(self.timeseries_data['WDTO'] > 360) & self.timeseries_data['WDTO'].notna(), testName] = 4
         else:
-            self.timeseries_data.loc[(self.timeseries_data['WAVB'] < 0), testName] = 4
-            self.timeseries_data.loc[(self.timeseries_data['WAVB'] > 360), testName] = 4
-            self.timeseries_data.loc[self.timeseries_data["WAVB"].isna(), testName] = np.nan
+            self.timeseries_data.loc[(self.timeseries_data['WAVB'] < 0) & self.timeseries_data['WAVB'].notna(), testName] = 4
+            self.timeseries_data.loc[(self.timeseries_data['WAVB'] > 360) & self.timeseries_data['WAVB'].notna(), testName] = 4
         
         self.metadata['QCTest'][testName] = 'Global Range QC Test - Test applies to each timestamp and position. ' \
             + 'Thresholds=[' + f'Significant wave height limit={str(HsLim)} (m) ' + f'Mean wave period limit={str(TmnLim)} (s)]'
