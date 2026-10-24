@@ -753,9 +753,9 @@ class Waves(fileParser):
         timeCoverageStart = pd.Timestamp(timeDS["TIME"].min().values).to_pydatetime()
         timeCoverageEnd = pd.Timestamp(timeDS["TIME"].max().values).to_pydatetime()
         if self.is_combined:
-            timeResRD = relativedelta(minutes=network_data.iloc[0]['temporal_resolution'])
+            timeResRD = relativedelta(minutes=network_data.iloc[0]['wave_temporal_resolution'])
         else:
-            timeResRD = relativedelta(minutes=station_data.iloc[0]['temporal_resolution'])
+            timeResRD = relativedelta(minutes=station_data.iloc[0]['wave_temporal_resolution'])
         timeCoverageResolution = 'PT'
         if timeResRD.hours !=0:
             timeCoverageResolution += str(int(timeResRD.hours)) + 'H'
@@ -768,6 +768,7 @@ class Waves(fileParser):
         globalAttributes['site_code'] = siteCode.decode()
         globalAttributes['platform_code'] = platformCode.decode()
         if self.is_combined:
+            globalAttributes['wmo_platform_code'] = ', '.join(station_data[["station_id", "wmo_code"]].apply(": ".join, axis=1))
             globalAttributes['doa_estimation_method'] = ', '.join(station_data[["station_id", "DoA_estimation_method"]].apply(": ".join, axis=1))
             globalAttributes['calibration_type'] = ', '.join(station_data[["station_id", "calibration_type"]].apply(": ".join, axis=1))
             if 'HFR-US' in network_data.iloc[0]['network_id']:
