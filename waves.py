@@ -323,7 +323,7 @@ class Waves(fileParser):
                 closestLon = self.data["LOND"].iloc[idx]
                 closestLat = self.data["LATD"].iloc[idx]
                 # Keep only the data of the closest grid point
-                self.timeseries_data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
+                self.timeseries_data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)].copy()
                 # Add reference latitude and longitude to metadata
                 self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
                 self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
@@ -400,7 +400,7 @@ class Waves(fileParser):
                 closestLon = self.data["LOND"].iloc[idx]
                 closestLat = self.data["LATD"].iloc[idx]
                 # Keep only the data of the closest grid point
-                self.timeseries_data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)]
+                self.timeseries_data = self.data[(self.data['LOND'] == closestLon) & (self.data['LATD'] == closestLat)].copy()
                 # Add reference latitude and longitude to metadata
                 self.metadata["ReferenceLatitude"] = str(closestLat) + ' deg'
                 self.metadata["ReferenceLongitude"] = str(closestLon) + ' deg'
