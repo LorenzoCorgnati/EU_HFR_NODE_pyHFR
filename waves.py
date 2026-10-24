@@ -1014,7 +1014,6 @@ class Waves(fileParser):
         # set bad flag for significant wave heights out of range
         self.timeseries_data.loc[(self.timeseries_data['MWHT'] < 0), testName] = 4
         self.timeseries_data.loc[(self.timeseries_data['MWHT'] > HsLim), testName] = 4
-        self.timeseries_data.loc[self.timeseries_data["MWHT"].isna(), testName] = np.nan
         
         # set bad flag for wave period out of range
         if self.is_wera:
