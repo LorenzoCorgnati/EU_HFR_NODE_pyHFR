@@ -249,6 +249,10 @@ class Waves(fileParser):
                 rngcll (int, optional): number of the Range Cell to be selected. Defaults to 3.
             """
 
+            # Skip if there is no data
+            if self.data is None or self.data.empty:
+                return
+
             if not self.is_wera:
                 if len(self._tables) > 1:       # Codar ranged data
                     distance = next(
@@ -285,6 +289,10 @@ class Waves(fileParser):
             prefLat (float, optional): preferred latitude for the reference position. Defaults to None.
             avgDistance (float, optional): average distance in meters for Codar averaged files. Defaults to 15000 m (i.e. 15 km).
         """
+
+        # Skip if there is no data
+        if self.data is None or self.data.empty:
+            return
 
         # Assign the preferred reference position if given in input
         if prefLon is not None and prefLat is not None:
@@ -426,6 +434,10 @@ class Waves(fileParser):
                 refLat (float, optional): preferred latitude for the reference position. Defaults to None.
                 refDistance (float, optional): reference distance in meters for Codar averaged files. Defaults to 15000 m (i.e. 15 km).
             """
+
+            # Skip if there is no data
+            if self.data is None or self.data.empty:
+                return
 
             self.select_range_cell(refCell)
             self.set_reference_position(refLon, refLat, refDistance)
@@ -628,11 +640,11 @@ class Waves(fileParser):
             contributingSiteNtx = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['number_of_transmit_antennas'].to_numpy()
             nTX = np.asfarray(contributingSiteNtx)
             nTX = np.pad(nTX, (0, maxsiteSize - len(nTX)), 'constant',constant_values=(np.nan,np.nan))
-            self.xts['NARX'] = xr.DataArray(np.tile(nRX, (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['NATX'] = xr.DataArray(np.tile(nTX, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['NARX'] = xr.DataArray(nRX, dims=('MAXSITE'))
+            self.xts['NATX'] = xr.DataArray(nTX, dims=('MAXSITE'))
         else:
-            self.xts['NARX'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['number_of_receive_antennas'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['NATX'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['number_of_transmit_antennas'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['NARX'] = xr.DataArray(np.expand_dims(station_data.iloc[0]['number_of_receive_antennas'],axis=0), dims=('MAXSITE'))
+            self.xts['NATX'] = xr.DataArray(np.expand_dims(station_data.iloc[0]['number_of_transmit_antennas'],axis=0), dims=('MAXSITE'))
         
         # Longitude and latitude of antennas
         if self.is_combined:
@@ -640,74 +652,74 @@ class Waves(fileParser):
             siteLat = np.pad(contributingSiteLat, (0, maxsiteSize - len(contributingSiteLat)), 'constant',constant_values=(np.nan,np.nan))
             contributingSiteLon = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['site_lon'].to_numpy()
             siteLon = np.pad(contributingSiteLon, (0, maxsiteSize - len(contributingSiteLon)), 'constant',constant_values=(np.nan,np.nan))
-            self.xts['SLTR'] = xr.DataArray(np.tile(siteLat, (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['SLNR'] = xr.DataArray(np.tile(siteLon, (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['SLTT'] = xr.DataArray(np.tile(siteLat, (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['SLNT'] = xr.DataArray(np.tile(siteLon, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLTR'] = xr.DataArray(siteLat, dims=('MAXSITE'))
+            self.xts['SLNR'] = xr.DataArray(siteLon, dims=('MAXSITE'))
+            self.xts['SLTT'] = xr.DataArray(siteLat, dims=('MAXSITE'))
+            self.xts['SLNT'] = xr.DataArray(siteLon, dims=('MAXSITE'))
         else:
-            self.xts['SLTR'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lat'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['SLNR'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lon'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['SLTT'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lat'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
-            self.xts['SLNT'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['site_lon'],axis=0), (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SLTR'] = xr.DataArray(np.expand_dims(station_data.iloc[0]['site_lat'],axis=0), dims=('MAXSITE'))
+            self.xts['SLNR'] = xr.DataArray(np.expand_dims(station_data.iloc[0]['site_lon'],axis=0), dims=('MAXSITE'))
+            self.xts['SLTT'] = xr.DataArray(np.expand_dims(station_data.iloc[0]['site_lat'],axis=0), dims=('MAXSITE'))
+            self.xts['SLNT'] = xr.DataArray(np.expand_dims(station_data.iloc[0]['site_lon'],axis=0), dims=('MAXSITE'))
         
         # Codes of antennas
         if self.is_combined:
             contributingSiteCodeList = station_data.loc[station_data['station_id'].isin(self.site_source.station_id.tolist())]['station_id'].tolist()
             antCode = np.array([site.encode() for site in contributingSiteCodeList])
             antCode = np.pad(antCode, (0, maxsiteSize - len(contributingSiteCodeList)), 'constant',constant_values=('',''))
-            self.xts['SCDR'] = xr.DataArray(np.tile(antCode, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDR'] = xr.DataArray(np.tile(antCode, (1)), dims=('MAXSITE'))
             self.xts['SCDR'].encoding['char_dim_name'] = 'STRING' + str(len(station_data['station_id'].to_numpy()[0]))
-            self.xts['SCDT'] = xr.DataArray(np.tile(antCode, (nTime, 1)), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDT'] = xr.DataArray(np.tile(antCode, (1)), dims=('MAXSITE'))
             self.xts['SCDT'].encoding['char_dim_name'] = 'STRING' + str(len(station_data['station_id'].to_numpy()[0]))
         else:
             antCode = ('%s' % station_data.iloc[0]['station_id']).encode()
-            self.xts['SCDR'] = xr.DataArray(np.full((nTime, 1), antCode), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDR'] = xr.DataArray(np.full((1), antCode), dims=('MAXSITE'))
             self.xts['SCDR'].encoding['char_dim_name'] = 'STRING' + str(len(antCode))
-            self.xts['SCDT'] = xr.DataArray(np.full((nTime, 1), antCode), dims=('TIME', 'MAXSITE'))
+            self.xts['SCDT'] = xr.DataArray(np.full((1), antCode), dims=('MAXSITE'))
             self.xts['SCDT'].encoding['char_dim_name'] = 'STRING' + str(len(antCode))
                 
         # Add SDN namespace variables to the dictionary
         if self.is_combined:
             siteCode = ('%s' % network_data.iloc[0]['network_id']).encode()
-            self.xts['SDN_CRUISE'] = xr.DataArray(np.full(nTime, siteCode), dims=('TIME',))
+            self.xts['SDN_CRUISE'] = xr.DataArray(siteCode, dims=())
             self.xts['SDN_CRUISE'].encoding['char_dim_name'] = 'STRING' + str(len(siteCode))
             platformCode = ('%s' % network_data.iloc[0]['network_id'] + '-Total').encode()
-            self.xts['SDN_STATION'] = xr.DataArray(np.full(nTime, platformCode), dims=('TIME',))
+            self.xts['SDN_STATION'] = xr.DataArray(platformCode, dims=())
             self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
             if nTime == 1:
                 ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart']).encode()
             else:
                 ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart'] + '_' + self.metadata['TimeEnd']).encode()
-            self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(np.full(nTime, ID), dims=('TIME',))
+            self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(ID, dims=())
             self.xts['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
             sdnEDMO = np.asfarray(pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique())
             sdnEDMO = np.pad(sdnEDMO, (0, maxinstSize - len(sdnEDMO)), 'constant',constant_values=(np.nan,np.nan))
-            self.xts['SDN_EDMO_CODE'] = xr.DataArray(np.tile(sdnEDMO, (nTime, 1)), dims=('TIME', 'MAXINST'))
+            self.xts['SDN_EDMO_CODE'] = xr.DataArray(np.tile(sdnEDMO, (1)), dims=('MAXINST'))
             sdnRef = ('%s' % network_data.iloc[0]['metadata_page']).encode()
-            self.xts['SDN_REFERENCES'] = xr.DataArray(np.full(nTime, sdnRef), dims=('TIME',))
+            self.xts['SDN_REFERENCES'] = xr.DataArray(sdnRef, dims=())
             self.xts['SDN_REFERENCES'].encoding['char_dim_name'] = 'STRING' + str(len(sdnRef))
             sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + sdnRef.decode() + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
-            self.xts['SDN_XLINK'] = xr.DataArray(np.full((nTime, 1), sdnXlink), dims=('TIME', 'REFMAX'))
+            self.xts['SDN_XLINK'] = xr.DataArray(np.full((1), sdnXlink), dims=('REFMAX'))
             self.xts['SDN_XLINK'].encoding['char_dim_name'] = 'STRING' + str(len(sdnXlink))
         else:
             siteCode = ('%s' % station_data.iloc[0]['network_id']).encode()
-            self.xts['SDN_CRUISE'] = xr.DataArray(np.full(nTime, siteCode), dims=('TIME',))
+            self.xts['SDN_CRUISE'] = xr.DataArray(siteCode, dims=())
             self.xts['SDN_CRUISE'].encoding['char_dim_name'] = 'STRING' + str(len(siteCode))
             platformCode = ('%s' % station_data.iloc[0]['network_id'] + '-' + station_data.iloc[0]['station_id']).encode()
-            self.xts['SDN_STATION'] = xr.DataArray(np.full(nTime, platformCode), dims=('TIME',))
+            self.xts['SDN_STATION'] = xr.DataArray(platformCode, dims=())
             self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
             if nTime == 1:
                 ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart']).encode()
             else:
                 ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart'] + '_' + self.metadata['TimeEnd']).encode()
-            self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(np.full(nTime, ID), dims=('TIME',))
+            self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(ID, dims=())
             self.xts['SDN_LOCAL_CDI_ID'].encoding['char_dim_name'] = 'STRING' + str(len(ID))
-            self.xts['SDN_EDMO_CODE'] = xr.DataArray(np.tile(np.expand_dims(station_data.iloc[0]['EDMO_code'],axis=0), (nTime, 1)), dims=('TIME', 'MAXINST'))
+            self.xts['SDN_EDMO_CODE'] = xr.DataArray(np.expand_dims(station_data.iloc[0]['EDMO_code'],axis=0), dims=('MAXINST'))
             sdnRef = ('%s' % network_data.iloc[0]['metadata_page']).encode()
-            self.xts['SDN_REFERENCES'] = xr.DataArray(np.full(nTime, sdnRef), dims=('TIME',))
+            self.xts['SDN_REFERENCES'] = xr.DataArray(sdnRef, dims=())
             self.xts['SDN_REFERENCES'].encoding['char_dim_name'] = 'STRING' + str(len(sdnRef))
             sdnXlink = ('%s' % '<sdn_reference xlink:href=\"' + sdnRef.decode() + '\" xlink:role=\"\" xlink:type=\"URL\"/>').encode()
-            self.xts['SDN_XLINK'] = xr.DataArray(np.full((nTime, 1), sdnXlink), dims=('TIME', 'REFMAX'))
+            self.xts['SDN_XLINK'] = xr.DataArray(np.full((1), sdnXlink), dims=('REFMAX'))
             self.xts['SDN_XLINK'].encoding['char_dim_name'] = 'STRING' + str(len(sdnXlink))
         
         # Add STATION variable

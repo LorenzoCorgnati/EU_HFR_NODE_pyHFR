@@ -89,7 +89,7 @@
         "sdn_parameter_urn": "SDN:P01::GTZAM1ZZ",
         "sdn_uom_name": "Seconds",
         "sdn_uom_urn": "SDN:P06::UTBB",
-        "coordinates" : "TTIME LATITUDE LONGITUDE DEPH STATION",
+        "coordinates" : "TIME LATITUDE LONGITUDE DEPH STATION",
         "ancillary_variables": "VM01_QC",
         "type_of_analysis": "spectral analysis",
         "data_mode": "R"
@@ -167,7 +167,7 @@
         "sdn_parameter_urn": "SDN:P01::ALATZZ01" ,
         "sdn_uom_name": "Degrees north" ,
         "sdn_uom_urn": "SDN:P06::DEGN",
-        "coordinates": "TIME MAXSITE",
+        "coordinates": "MAXSITE",
         "data_mode": "R"
     },
     "SLNR": {
@@ -180,7 +180,7 @@
         "sdn_parameter_urn": "SDN:P01::ALONZZ01" ,
         "sdn_uom_name": "Degrees east" ,
         "sdn_uom_urn": "SDN:P06::DEGE",
-        "coordinates": "TIME MAXSITE",
+        "coordinates": "MAXSITE",
         "data_mode": "R"
     },
     "SLTT": {
@@ -193,7 +193,7 @@
         "sdn_parameter_urn": "SDN:P01::ALATZZ01" ,
         "sdn_uom_name": "Degrees north" ,
         "sdn_uom_urn": "SDN:P06::DEGN",
-        "coordinates": "TIME MAXSITE",
+        "coordinates": "MAXSITE",
         "data_mode": "R"
     },
     "SLNT": {
@@ -206,7 +206,7 @@
         "sdn_parameter_urn": "SDN:P01::ALONZZ01" ,
         "sdn_uom_name": "Degrees east" ,
         "sdn_uom_urn": "SDN:P06::DEGE",
-        "coordinates": "TIME MAXSITE",
+        "coordinates": "MAXSITE",
         "data_mode": "R"
     },
     "SCDR": {
