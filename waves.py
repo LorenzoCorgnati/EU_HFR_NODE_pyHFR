@@ -687,7 +687,7 @@ class Waves(fileParser):
             self.xts['SDN_STATION'] = xr.DataArray(platformCode, dims=())
             self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
             if nTime == 1:
-                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart']).encode()
+                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.time.strftime('%Y%m%d')).encode()
             else:
                 ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart'] + '_' + self.metadata['TimeEnd']).encode()
             self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(ID, dims=())
@@ -709,7 +709,7 @@ class Waves(fileParser):
             self.xts['SDN_STATION'] = xr.DataArray(platformCode, dims=())
             self.xts['SDN_STATION'].encoding['char_dim_name'] = 'STRING' + str(len(platformCode))
             if nTime == 1:
-                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart']).encode()
+                ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.time.strftime('%Y%m%d')).encode()
             else:
                 ID = ('GL_TS_HF_' + '%s' % platformCode.decode() + '_' + self.metadata['TimeStart'] + '_' + self.metadata['TimeEnd']).encode()
             self.xts['SDN_LOCAL_CDI_ID'] = xr.DataArray(ID, dims=())
@@ -803,7 +803,7 @@ class Waves(fileParser):
             globalAttributes['summary'] = 'The data set is a timeseries of wave parameters measured by the ' + globalAttributes['platform_code'] + ' HFR system. Wave parameters estimated by HF Radar are representative of the upper 0.3-2.5 meters of the ocean.'
         if self.is_combined:
             globalAttributes['institution'] = ', '.join(pd.concat([network_data['institution_name'],station_data['institution_name']]).unique().tolist())
-            globalAttributes['institution_edmo_code'] = ', '.join([str(x) for x in pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique().tolist()])
+            globalAttributes['institution_edmo_code'] = ' '.join([str(x) for x in pd.concat([network_data['EDMO_code'],station_data['EDMO_code']]).unique().tolist()])
             globalAttributes['institution_references'] = ', '.join(pd.concat([network_data['institution_website'],station_data['institution_website']]).unique().tolist())
         else:
             globalAttributes['institution'] = station_data.iloc[0]['institution_name']
