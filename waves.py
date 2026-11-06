@@ -731,9 +731,6 @@ class Waves(fileParser):
                                 dims={'DEPTH': 1},
                                 coords={'DEPTH': [0]})
         
-        # Remove DEPTH variable
-        self.xts.pop('DEPTH')
-        
         # Add spatial and temporal coordinate QC variables (set to good data due to the nature of HFR system)
         self.xts['TIME_QC'] = xr.DataArray(np.ones(nTime, dtype=int), dims=('TIME',))
         self.xts['DEPH_QC'] = xr.DataArray(np.ones(nTime, dtype=int), dims=('TIME',))
@@ -743,7 +740,7 @@ class Waves(fileParser):
             
         # Create DataSet from DataArrays
         self.xdsTS = xr.Dataset(self.xts)
-        
+
         # Add data variable attributes to the DataSet
         for vv in self.xdsTS:
             self.xdsTS[vv].attrs = wavVariables[vv]
@@ -779,6 +776,7 @@ class Waves(fileParser):
         # Fill global attributes
         globalAttributes['site_code'] = siteCode.decode()
         globalAttributes['platform_code'] = platformCode.decode()
+        globalAttributes['platform_name'] = globalAttributes['platform_code']
         if self.is_combined:
             globalAttributes['wmo_platform_code'] = ', '.join(station_data[["station_id", "wmo_code"]].apply(": ".join, axis=1))
             globalAttributes['doa_estimation_method'] = ', '.join(station_data[["station_id", "DoA_estimation_method"]].apply(": ".join, axis=1))
