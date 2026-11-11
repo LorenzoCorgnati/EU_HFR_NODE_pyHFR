@@ -1150,6 +1150,39 @@ class Waves(fileParser):
                     self.metadata['QCTest'][testName] = 'Valid Points QC Test - Test applies to each timestamp and data value. ' \
                         + 'Threshold=[' + f'minimum valid points={minValidPoints}]'
 
+    def qc_ehn_time_domain_consistency(self, qualThreshold=3):
+                """
+                This test labels wave data whose time domain consisntecy quality indicator is lower than a maximum
+                threshold with a “good data” flag. Otherwise the data are labeled with a “bad data” flag.
+                This test only applies to WERA data.
+        
+                The ARGO QC flagging scale is used.
+                
+                This test was defined in the framework of the EuroGOOS HFR Task Team.
+                
+                INPUTS:
+                    qualThreshold: maximum quality threshold for the time domain consistency test. Defaults to 3.
+                """
+                # Set the test name
+                testName = 'TDCQ_QC'
+        
+                if self.is_wera:     
+                    if 'QUAL' in self.data.columns:   
+                        # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+                        self.data.loc[:,testName] = 1
+                        if hasattr(self, 'timeseries_data'):
+                            self.timeseries_data.loc[:,testName] = 1
+                    
+                        # Set bad flag for velocities not passing the test        
+                        self.data.loc[(self.data['QUAL'] > qualThreshold), testName] = 4
+                        self.data.loc[(self.data['QUAL'] == 0), testName] = 0
+                        if hasattr(self, 'timeseries_data'):
+                            self.timeseries_data.loc[(self.timeseries_data['QUAL'] > qualThreshold), testName] = 4
+                            self.timeseries_data.loc[(self.timeseries_data['QUAL'] == 0), testName] = 0
+                
+                        self.metadata['QCTest'][testName] = 'Time Domain Consistency QC Test - Test applies to each timestamp and data value. ' \
+                            + 'Threshold=[' + f'quality threshold={qualThreshold}]'
+
     def clean_header(self):
         """
         Cleans the header data from the wave data for proper input into MySQL database
