@@ -1045,6 +1045,111 @@ class Waves(fileParser):
         self.metadata['QCTest'][testName] = 'Global Range QC Test - Test applies to each timestamp and position. ' \
             + 'Thresholds=[' + f'Significant wave height limit={str(HsLim)} (m) ' + f'Mean wave period limit={str(TmnLim)} (s)]'
 
+    def qc_ehn_minimum_spectra_averaging_counts(self, minSpectraCount=5):
+        """
+        This test labels wave data whose averaged number of spectra used for the calculation is bigger than a 
+        minimum threshold with a “good data” flag. Otherwise the data are labeled with a “bad data” flag.
+        This test only applies to Codar data.
+
+        The ARGO QC flagging scale is used.
+        
+        This test was defined in the framework of the EuroGOOS HFR Task Team.
+        
+        INPUTS:
+            minSpectraCount: minimum number of spectra used for the calculation of the wave data. Defaults to 5.        
+        """
+        # Set the test name
+        testName = 'ACNT_QC'
+
+        if not self.is_wera:        
+            # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+            self.data.loc[:,testName] = 1
+            if hasattr(self, 'timeseries_data'):
+                self.timeseries_data.loc[:,testName] = 1
+        
+            # Set bad flag for velocities not passing the test        
+            self.data.loc[(self.data['ACNT'].abs() < minSpectraCount), testName] = 4
+            if hasattr(self, 'timeseries_data'):
+                self.timeseries_data.loc[(self.timeseries_data['ACNT'].abs() < minSpectraCount), testName] = 4
+    
+            self.metadata['QCTest'][testName] = 'Spectra Count QC Test - Test applies to each timestamp and data value. ' \
+                + 'Threshold=[' + f'minimum spectra count={minSpectraCount}]'
+
+    def qc_ehn_minimum_doppler_bins(self, minDopplerBins=10, maxDopplerBins=None):
+            """
+            This test labels wave data whose number of frequency bins in the second-order region used for the 
+            calculation is bigger than a minimum threshold with a “good data” flag. Otherwise the data are 
+            labeled with a “bad data” flag.
+            Optionally, a maximum threshold can be set to label wave data whose number of frequency bins in the
+            second-order region used for the calculation is smaller than a maximum threshold with a “good data” flag. 
+            Otherwise the data are labeled with a “bad data” flag.
+            This test only applies to Codar data.
+    
+            The ARGO QC flagging scale is used.
+            
+            This test was defined in the framework of the EuroGOOS HFR Task Team.
+            
+            INPUTS:
+                minDopplerBins: minimum number of Doppler bins used for the calculation of the wave data. Defaults to 10.
+                maxDopplerBins: maximum number of Doppler bins used for the calculation of the wave data (optional). Defaults to None.
+            """
+            # Set the test name
+            testName = 'WDPT_QC'
+    
+            if not self.is_wera:        
+                # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+                self.data.loc[:,testName] = 1
+                if hasattr(self, 'timeseries_data'):
+                    self.timeseries_data.loc[:,testName] = 1
+            
+                # Set bad flag for velocities not passing the test        
+                self.data.loc[(self.data['WDPT'].abs() < minDopplerBins), testName] = 4
+                if hasattr(self, 'timeseries_data'):
+                    self.timeseries_data.loc[(self.timeseries_data['WDPT'].abs() < minDopplerBins), testName] = 4
+                if maxDopplerBins is not None:
+                    self.data.loc[(self.data['WDPT'].abs() > maxDopplerBins), testName] = 4
+                    if hasattr(self, 'timeseries_data'):
+                        self.timeseries_data.loc[(self.timeseries_data['WDPT'].abs() > maxDopplerBins), testName] = 4
+        
+                if maxDopplerBins is not None:
+                    self.metadata['QCTest'][testName] = 'Doppler Bins QC Test - Test applies to each timestamp and data value. '\
+                        + 'Thresholds=[' + f'minimum Doppler bins={minDopplerBins}, maximum Doppler bins={maxDopplerBins}]'
+                else:
+                    self.metadata['QCTest'][testName] = 'Doppler Bins QC Test - Test applies to each timestamp and data value. ' \
+                        + 'Threshold=[' + f'minimum Doppler bins={minDopplerBins}]'
+
+    def qc_ehn_minimum_valid_points(self, minValidPoints=3):
+            """
+            This test labels wave data whose actual count of valid temporal and/or spatial source wave points
+            used for the calculation is bigger than a minimum threshold with a “good data” flag. 
+            Otherwise the data are labeled with a “bad data” flag.
+            This test only applies to Codar data.
+    
+            The ARGO QC flagging scale is used.
+            
+            This test was defined in the framework of the EuroGOOS HFR Task Team.
+            
+            INPUTS:
+                minValidPoints: minimum number of valid points used for the calculation of the wave data. Defaults to 3.        
+            """
+            # Set the test name
+            testName = 'WHNM_QC'
+    
+            if not self.is_wera:     
+                if 'WHNM' in self.data.columns:   
+                    # Add new column to the DataFrame for QC data by setting every row as passing the test (flag = 1)
+                    self.data.loc[:,testName] = 1
+                    if hasattr(self, 'timeseries_data'):
+                        self.timeseries_data.loc[:,testName] = 1
+                
+                    # Set bad flag for velocities not passing the test        
+                    self.data.loc[(self.data['WHNM'].abs() < minValidPoints), testName] = 4
+                    if hasattr(self, 'timeseries_data'):
+                        self.timeseries_data.loc[(self.timeseries_data['WHNM'].abs() < minValidPoints), testName] = 4
+            
+                    self.metadata['QCTest'][testName] = 'Valid Points QC Test - Test applies to each timestamp and data value. ' \
+                        + 'Threshold=[' + f'minimum valid points={minValidPoints}]'
+
     def clean_header(self):
         """
         Cleans the header data from the wave data for proper input into MySQL database
