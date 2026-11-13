@@ -23,6 +23,89 @@ desired_width = 320
 pd.set_option('display.width', desired_width)
 datetime_format = '%Y%m%dT%H%M%SZ'
 
+def cleanEncoding(*datasets):
+    """
+    This function builds a sanitized encoding dictionary for writing an xarray
+    Dataset to netCDF via .to_netcdf(encoding=...), starting from the encodings
+    of the variables of one or more source Datasets.
+
+    When netCDF files are opened with xarray, each variable carries an
+    .encoding dictionary inherited from its source file. It describes how the
+    variable was stored on disk (data type, fill value, packing, compression,
+    chunking, etc.). Some of these entries may be invalid or
+    inconsistent for the output file, especially after concatenating or
+    merging Datasets, and can make .to_netcdf() fail or write wrong metadata.
+
+    This function keeps only a whitelist of safe encoding keys for every
+    variable, so that the output file keeps the original data types, fill
+    values, scaling and compression settings. If the same variable appears in
+    more than one input Dataset, the encoding from the later Dataset overrides
+    the one from the earlier Datasets.
+
+    INPUT:
+        *datasets: one or more xarray Datasets whose variable encodings are used
+                   as reference
+
+    OUTPUT:
+        enc: dictionary {variable_name: encoding_dict} to be passed as the
+             encoding argument of ds.to_netcdf()
+    """
+    # Set of encoding keys that are safe to carry over to the output netCDF file:
+    #   dtype                      -> on-disk data type of the variable
+    #   _FillValue                 -> value used to flag missing data
+    #   scale_factor, add_offset   -> packing parameters (packed integers)
+    #   zlib, complevel, shuffle   -> compression settings
+    #   char_dim_name              -> name of the character dimension for string variables
+    KEEP_ENC = {"dtype", "_FillValue", "scale_factor", "add_offset",
+            "zlib", "complevel", "shuffle", "char_dim_name"}
+
+    # Initialize the output encoding dictionary
+    enc = {}
+
+    # Loop over the input Datasets (later ones override earlier ones)
+    for ds in datasets:
+        # Loop over all the variables of the Dataset (data and coordinate variables)
+        for name, var in ds.variables.items():
+            # Keep only the whitelisted keys from the variable's current encoding
+            e = {k: v for k, v in var.encoding.items() if k in KEEP_ENC}
+            # If the original variable had no _FillValue, set it explicitly to None,
+            # otherwise xarray would add a default _FillValue (e.g. NaN for floats)
+            e.setdefault("_FillValue", None)
+            # Store the cleaned encoding for the current variable (overwriting
+            # any encoding set for the same variable by a previous Dataset)
+            enc[name] = e
+
+    return enc
+
+def fixStringDims(ds, enc):
+    """
+    This function recomputes the names of the character dimensions (STRINGn)
+    of the string variables in an encoding dictionary, based on the actual
+    string lengths of the data to be written.
+
+    Only the char_dim_name key of variables following the STRINGn convention
+    is modified; all other encoding keys and variables are left untouched.
+
+    INPUT:
+        ds: xarray Dataset to be written
+        enc: encoding dictionary {variable_name: encoding_dict}
+
+    OUTPUT:
+        enc: the same encoding dictionary with updated STRINGn char_dim_name
+    """
+    for name, e in enc.items():
+        cdn = e.get("char_dim_name")
+        # Only touch the STRINGn convention (leave e.g. STATION's 'STRLEN' alone)
+        if cdn is None or not cdn.startswith("STRING") or name not in ds.variables:
+            continue
+        # Get the values of the string variable (computes dask arrays; these variables are tiny)
+        vals = np.asarray(ds[name].values).ravel()
+        # Get the maximum string length
+        n = max((len(v.decode() if isinstance(v, bytes) else str(v)) for v in vals), default=1)
+        e["char_dim_name"] = "STRING" + str(max(n, 1))
+
+    return enc
+
 def addBoundingBoxMetadata(obj,lon_min,lon_max,lat_min,lat_max,grid_res=None):
     """
     This function adds metadata related to the bounding box to the input Radial or Total object.
